@@ -1,0 +1,77 @@
+<?php
+/**
+ * Plugin Name:       Campaign Performance Dashboard
+ * Plugin URI:        https://example.com/
+ * Description:       A custom dashboard for clients to view their campaign performance and visitor data.
+ * Version:           1.0.0
+ * Author:            Your Name
+ * Author URI:        https://yourwebsite.com/
+ * License:           GPL-2.0+
+ * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
+ * Text Domain:       cpd-dashboard
+ * Domain Path:       /languages
+ */
+
+// Exit if accessed directly.
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+// Define plugin constants.
+define( 'CPD_DASHBOARD_VERSION', '1.0.0' );
+define( 'CPD_DASHBOARD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
+define( 'CPD_DASHBOARD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+
+/**
+ * The core plugin class that is used to define internationalization,
+ * admin-specific hooks, and public-facing site hooks.
+ */
+require CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-dashboard.php';
+
+/**
+ * Register activation and deactivation hooks.
+ * This is the activation hook for the plugin, which will create the database tables and roles.
+ */
+function cpd_dashboard_activate() {
+    require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-database.php';
+    $cpd_database = new CPD_Database();
+    $cpd_database->create_tables();
+    
+    // Register the custom client role on activation.
+    cpd_dashboard_register_roles();
+}
+
+/**
+ * Deactivation hook to remove custom roles and clean up.
+ */
+function cpd_dashboard_deactivate() {
+    // Remove the custom client role upon deactivation.
+    remove_role( 'client' );
+}
+
+register_activation_hook( __FILE__, 'cpd_dashboard_activate' );
+register_deactivation_hook( __FILE__, 'cpd_dashboard_deactivate' );
+
+/**
+ * Registers the custom 'client' role with specific capabilities.
+ */
+function cpd_dashboard_register_roles() {
+    add_role(
+        'client',
+        'Client',
+        array(
+            'read'         => true,   // Clients can read posts.
+            'upload_files' => false,  // Don't allow file uploads.
+            'edit_posts'   => false,  // Don't allow editing posts.
+        )
+    );
+}
+
+/**
+ * The main function responsible for initializing the plugin.
+ */
+function cpd_dashboard_run() {
+	$plugin = new CPD_Dashboard();
+	$plugin->run();
+}
+cpd_dashboard_run();

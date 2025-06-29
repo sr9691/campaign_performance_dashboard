@@ -1,0 +1,363 @@
+/*
+ * Final CSS for the Campaign Performance Dashboard Plugin
+ * * This file contains all styles for the Admin and Client dashboards.
+ * Do not add styles from other themes or plugins here.
+ */
+
+:root {
+    --primary-color: #2c435d;
+    --secondary-color: #4294cc;
+    --font-family: 'Montserrat', sans-serif;
+    --text-color-dark: #333;
+    --text-color-light: #555;
+    --line-color: #ddd;
+    --border-radius: 8px;
+    --bg-color: #eef2f6;
+    --card-bg: #fff;
+}
+
+/* --- Core Layout & Global Styles --- */
+html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 100% !important; /* Force height to 100% */
+    overflow: hidden !important; /* Hide scrollbar by default */
+    font-family: var(--font-family);
+    background-color: var(--bg-color);
+    color: var(--text-color-dark);
+}
+
+/* --- WordPress Admin UI Overrides for our Custom Page --- */
+/* The 'toplevel_page_cpd-dashboard' class is unique to our plugin's top-level menu page. */
+body.toplevel_page_cpd-dashboard {
+    background-color: var(--bg-color) !important;
+    overflow: hidden !important;
+}
+body.toplevel_page_cpd-dashboard #wpcontent {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    min-height: 100vh;
+}
+body.toplevel_page_cpd-dashboard #wpbody {
+    background-color: var(--bg-color) !important;
+}
+body.toplevel_page_cpd_dashboard #wpbody-content {
+    padding: 0 !important;
+    position: relative;
+}
+body.toplevel_page_cpd-dashboard .wrap {
+    margin: 0 !important;
+    display: flex !important;
+    width: 100% !important;
+    min-height: 100vh;
+    max-width: none !important;
+}
+/* Hide the default WordPress admin menu and toolbar on our custom page */
+body.toplevel_page_cpd-dashboard #adminmenumain,
+body.toplevel_page_cpd-dashboard #adminmenuwrap,
+body.toplevel_page_cpd-dashboard #adminmenuback,
+body.toplevel_page_cpd-dashboard #wpadminbar,
+body.toplevel_page_cpd-dashboard #wpfooter {
+    display: none !important;
+}
+
+/* --- Custom Admin Page Container --- */
+.admin-page-container {
+    display: flex;
+    min-height: 100vh;
+    width: 100%;
+}
+
+/* --- Admin Sidebar --- */
+.admin-sidebar {
+    width: 250px;
+    height: 100vh;
+    overflow-y: auto;
+    background-color: var(--primary-color);
+    color: #fff;
+    padding: 0 20px 30px 20px;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.admin-sidebar .logo-container {
+    padding: 30px 0;
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
+}
+.admin-sidebar .logo-container img {
+    max-width: 180px;
+    height: auto;
+}
+
+.admin-sidebar nav {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+.admin-sidebar nav ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.admin-sidebar nav li {
+    margin-bottom: 10px;
+}
+
+.admin-sidebar nav a {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px 20px;
+    color: rgba(255, 255, 255, 0.8);
+    text-decoration: none;
+    font-weight: 500;
+    border-radius: var(--border-radius);
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.admin-sidebar nav a.active {
+    background-color: var(--card-bg);
+    color: var(--primary-color);
+    font-weight: 700;
+}
+
+.admin-sidebar nav a:hover:not(.active) {
+    background-color: var(--secondary-color);
+    color: #fff;
+}
+
+/* --- Main Content Area --- */
+.admin-main-content {
+    flex-grow: 1;
+    padding: 40px;
+    display: none;
+    overflow-y: auto;
+}
+
+.admin-main-content.active {
+    display: block;
+}
+
+.admin-main-content h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin: 0 0 30px 0;
+    border-bottom: 2px solid var(--line-color);
+    padding-bottom: 15px;
+}
+
+/* --- Forms & Tables styling --- */
+.card {
+    background-color: var(--card-bg);
+    padding: 30px;
+    border-radius: var(--border-radius);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+    margin-bottom: 40px;
+}
+
+.card h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0 0 25px 0;
+    color: var(--primary-color);
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px 30px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-color-light);
+    margin-bottom: 8px;
+}
+
+.form-group input, .form-group select {
+    padding: 12px;
+    border: 1px solid var(--line-color);
+    border-radius: var(--border-radius);
+    font-family: var(--font-family);
+    font-size: 1rem;
+    color: var(--text-color-dark);
+    background-color: #f9f9f9;
+    transition: border-color 0.2s ease;
+}
+
+.form-group .searchable-input {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-search"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>');
+    background-repeat: no-repeat;
+    background-position: 95% center;
+    padding-right: 40px;
+}
+
+.form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--secondary-color);
+}
+
+.form-actions {
+    grid-column: span 2;
+    text-align: right;
+    margin-top: 10px;
+}
+
+.form-actions button {
+    background-color: var(--primary-color);
+    color: #fff;
+    border: none;
+    padding: 12px 25px;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.form-actions button:hover {
+    background-color: #1f3148;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.data-table th, .data-table td {
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--line-color);
+    font-weight: 500;
+}
+
+.data-table th {
+    font-weight: 600;
+    color: var(--text-color-light);
+    text-transform: uppercase;
+    font-size: 0.8rem;
+}
+
+.data-table tbody tr:hover {
+    background-color: #f9fbfd;
+}
+
+.data-table .actions-cell {
+    white-space: nowrap;
+}
+
+.data-table .action-button {
+    background: none;
+    border: none;
+    color: var(--secondary-color);
+    font-size: 1.1rem;
+    cursor: pointer;
+    margin-left: 10px;
+    transition: color 0.2s ease;
+}
+
+.data-table .action-button:hover {
+    color: var(--primary-color);
+}
+
+.client-logo-thumbnail {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--line-color);
+}
+
+/* --- Public Dashboard Styles --- */
+/* Force full viewport height and remove all margins/padding from the root elements */
+body.client-dashboard-page,
+body.client-dashboard-page #page,
+body.client-dashboard-page #content,
+body.client-dashboard-page .site-main,
+body.client-dashboard-page .wp-site-blocks,
+body.client-dashboard-page main {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: hidden !important;
+    position: static !important;
+}
+/* More specific selector for the main content area of Blocksy theme */
+body.client-dashboard-page .site-content {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Hide the WP toolbar for front-end users */
+body.admin-bar .site-header { margin-top: 0 !important; }
+#wpadminbar { display: none !important; }
+
+/* Main dashboard container layout */
+.dashboard-container {
+    display: flex !important;
+    flex-direction: row !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background-color: var(--bg-color) !important;
+    overflow-y: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: relative !important;
+}
+
+/* Sizing for the inner content areas */
+.dashboard-container .main-content {
+    flex-grow: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 30px !important;
+    overflow-y: auto !important;
+}
+
+/* Ensure images fit their containers */
+.dashboard-container .client-logo-container {
+    width: 60px !important;
+    height: 60px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    overflow: hidden !important;
+}
+.dashboard-container .client-logo-container img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+}
+.dashboard-container .visitor-logo {
+    width: 45px !important;
+    height: 45px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+}
+.dashboard-container .visitor-logo img {
+    width: 80% !important;
+    height: auto !important;
+    object-fit: contain !important;
+}
