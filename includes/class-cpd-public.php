@@ -81,29 +81,25 @@ class CPD_Public {
      * Enqueue the public-facing stylesheets and dequeue theme styles on our page.
      */
     public function enqueue_styles() {
-    global $post;
+        global $post;
 
-    // Check if the current page contains our shortcode.
-    if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
-        // Dequeue ALL theme styles
-        wp_dequeue_style( 'twentytwentyfive-style' );
-        wp_deregister_style( 'twentytwentyfive-style' );
-        wp_dequeue_style( 'blocksy-style' );
-        wp_deregister_style( 'blocksy-style' );
-        wp_dequeue_style( 'theme-style' );
-        wp_deregister_style( 'theme-style' );
+        if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
+            wp_dequeue_style( 'twentytwentyfive-style' );
+            wp_deregister_style( 'twentytwentyfive-style' );
+            wp_dequeue_style( 'blocksy-style' );
+            wp_deregister_style( 'blocksy-style' );
+            wp_dequeue_style( 'theme-style' );
+            wp_deregister_style( 'theme-style' );
 
-        // Enqueue our custom dashboard styles for the public page.
-        wp_enqueue_style( 'google-montserrat', 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap', array(), null );
-        wp_enqueue_style( 'font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', array(), '5.15.4', 'all' );
-        wp_enqueue_style( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-dashboard.css', array(), $this->version, 'all' );
-        
-        // Add inline styles to force override
-        wp_add_inline_style( $this->plugin_name . '-public', '
-            body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
-            #wpadminbar { display: none !important; }
-            .site-header, .site-footer { display: none !important; }
-        ' );
+            wp_enqueue_style( 'google-montserrat', 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap', array(), null );
+            wp_enqueue_style( 'font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', array(), '5.15.4', 'all' );
+            wp_enqueue_style( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-dashboard.css', array(), $this->version, 'all' );
+            
+            wp_add_inline_style( $this->plugin_name . '-public', '
+                body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
+                #wpadminbar { display: none !important; }
+                .site-header, .site-footer { display: none !important; }
+            ' );
         }
     }
 
@@ -113,26 +109,57 @@ class CPD_Public {
     public function enqueue_scripts() {
         global $post;
         if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
-            // Enqueue Chart.js library for the public dashboard.
             wp_enqueue_script( 'chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js', array(), '4.4.1', true );
-
-            // Enqueue scripts for the front-end dashboard.
             wp_enqueue_script( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-public-dashboard.js', array( 'jquery', 'chart-js' ), $this->version, true );
         }
     }
 
     /**
-     * Localize script with AJAX URL and nonce for public-facing dashboard.
+     * Localize script with AJAX URL, nonce, and dashboard data for public-facing dashboard.
      */
     public function enqueue_scripts_data() {
         global $post;
         if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
+            $client_account = null;
+            if ( is_user_logged_in() ) {
+                $current_user = wp_get_current_user();
+                $is_admin = current_user_can( 'manage_options' );
+                if ( $is_admin ) {
+                    // For admin, use the default account_id or implement admin's current client selection
+                    $client_account = $this->data_provider->get_client_by_account_id( '316578' ); 
+                } else {
+                    $account_id = $this->data_provider->get_account_id_by_user_id( $current_user->ID );
+                    if ( $account_id ) {
+                        $client_account = $this->data_provider->get_client_by_account_id( $account_id );
+                    }
+                }
+            }
+
+            $campaign_data_by_ad_group = [];
+            $campaign_data_by_date = [];
+            $summary_metrics = [];
+            $visitor_data = [];
+
+            if ($client_account) {
+                $start_date = '2025-01-01'; // Define your default/initial start date
+                $end_date = date('Y-m-d');   // Define your default/initial end date
+
+                $campaign_data_by_ad_group = $this->data_provider->get_campaign_data_by_ad_group( $client_account->account_id, $start_date, $end_date );
+                $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $client_account->account_id, $start_date, $end_date );
+                $summary_metrics = $this->data_provider->get_summary_metrics( $client_account->account_id, $start_date, $end_date );
+                $visitor_data = $this->data_provider->get_visitor_data( $client_account->account_id );
+            }
+
             wp_localize_script(
                 $this->plugin_name . '-public',
-                'ajax_object',
+                'cpd_dashboard_data',
                 array(
                     'ajax_url' => admin_url( 'admin-ajax.php' ),
                     'nonce'    => wp_create_nonce( 'cpd_visitor_nonce' ),
+                    'campaign_data_by_ad_group' => $campaign_data_by_ad_group, // Data for pie chart and table
+                    'campaign_data_by_date'     => $campaign_data_by_date,     // Data for line chart
+                    'summary_metrics'           => $summary_metrics,
+                    'visitor_data'              => $visitor_data,
                 )
             );
         }
@@ -143,13 +170,33 @@ class CPD_Public {
      */
     public function display_dashboard() {
         if ( ! is_user_logged_in() ) { return '<p>Please log in to view the dashboard.</p>'; }
-        $current_user = wp_get_current_user(); $is_admin = current_user_can( 'manage_options' ); $client_account = null; $client_data = null; $dashboard_data = null; $visitor_data = null;
-        if ( $is_admin ) { $client_account = $this->data_provider->get_client_by_account_id( '316578' ); } else { $account_id = $this->data_provider->get_account_id_by_user_id( $current_user->ID ); if ( $account_id ) { $client_account = $this->data_provider->get_client_by_account_id( $account_id ); } }
+        
+        $current_user = wp_get_current_user();
+        $is_admin = current_user_can( 'manage_options' );
+        $client_account = null; 
+        
+        // Determine the client_account based on user role
+        if ( $is_admin ) { 
+            // Admin users default to account '316578' for demonstration, or could be dynamic
+            $client_account = $this->data_provider->get_client_by_account_id( '316578' ); 
+        } else { 
+            $account_id = $this->data_provider->get_account_id_by_user_id( $current_user->ID ); 
+            if ( $account_id ) { 
+                $client_account = $this->data_provider->get_client_by_account_id( $account_id ); 
+            } 
+        }
+
         if ( ! $client_account ) { return '<p>Dashboard data is not available for your account. Please contact support.</p>'; }
-        $start_date = '2025-01-01'; $end_date = date('Y-m-d');
+        
+        $start_date = '2025-01-01'; // Default start date for dashboard load
+        $end_date = date('Y-m-d');   // Default end date for dashboard load
+
+        // Fetch all data required for the dashboard.
+        // These variables are now available for public-dashboard.php include.
         $summary_metrics = $this->data_provider->get_summary_metrics( $client_account->account_id, $start_date, $end_date );
-        $campaign_data = $this->data_provider->get_campaign_data( $client_account->account_id, $start_date, $end_date );
+        $campaign_data = $this->data_provider->get_campaign_data_by_ad_group( $client_account->account_id, $start_date, $end_date ); // Used for Ad Group Table
         $visitor_data = $this->data_provider->get_visitor_data( $client_account->account_id );
+
         ob_start();
         include CPD_DASHBOARD_PLUGIN_DIR . 'public/views/public-dashboard.php';
         return ob_get_clean();

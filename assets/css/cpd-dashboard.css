@@ -440,11 +440,12 @@ body.wp-admin .admin-page-container .visitor-logo {
     width: 45px !important;
     height: 45px !important;
     border-radius: 50% !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    overflow: hidden !important;
-    flex-shrink: 0 !important;
+    background-color: #f0f0f0 !important;
 }
 
 body.wp-admin .admin-page-container .visitor-logo img {
@@ -502,7 +503,12 @@ body.wp-admin .admin-page-container .chart-container {
     border-radius: var(--border-radius) !important;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
     box-sizing: border-box !important;
+    /* FIX: Constrain chart container height */
+    height: 400px !important; /* Or adjust to your preferred height */
+    max-height: 400px !important; /* Prevents infinite growth */
+    overflow: hidden !important; /* Ensures no content spills out */
 }
+
 
 /* AD GROUP TABLE FIXES */
 body.wp-admin .admin-page-container .ad-group-table {
@@ -804,7 +810,13 @@ body.client-dashboard-page .chart-container {
     padding: 20px !important;
     border-radius: var(--border-radius) !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+    /* NEW: Fixed height for charts */
+    height: 350px !important; /* Adjust as needed */
+    max-height: 350px !important; /* Prevents infinite growth */
+    overflow: hidden !important; /* Ensures content stays within bounds */
+    box-sizing: border-box !important;
 }
+
 
 body.client-dashboard-page .chart-container h3 {
     font-size: 1.2rem !important;

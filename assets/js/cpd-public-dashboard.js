@@ -15,13 +15,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /**
      * Renders or updates the Impressions Line Chart.
-     * @param {Array} data The campaign data from the PHP template.
+     * @param {Array} data The campaign data aggregated by date.
      */
     function renderImpressionsChart(data) {
         const ctx = document.getElementById('impressions-chart-canvas');
         if (!ctx) return;
 
-        const labels = data.map(item => new Date(item.last_updated).toLocaleDateString());
+        // Data is already aggregated by date from get_campaign_data_by_date.
+        const labels = data.map(item => new Date(item.date).toLocaleDateString());
         const impressions = data.map(item => item.impressions);
 
         // Destroy the old chart instance if it exists
@@ -55,17 +56,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /**
      * Renders or updates the Impressions by Ad Group Pie Chart.
-     * @param {Array} data The campaign data from the PHP template.
+     * @param {Array} data The campaign data aggregated by ad group.
      */
     function renderImpressionsByAdGroupChart(data) {
         const ctx = document.getElementById('ad-group-chart-canvas');
         if (!ctx) return;
 
+        // Data is already aggregated by ad group from get_campaign_data_by_ad_group.
         const labels = data.map(item => item.ad_group_name);
         const impressions = data.map(item => item.impressions);
         
         const backgroundColors = [
-            '#2c435d', '#4294cc', '#a8d2e8', '#e8a8d2', '#d2e8a8', '#88a8d2', '#5d2c43'
+            '#2c435d', '#4294cc', '#a8d2e8', '#e8a8d2', '#d2e8a8', '#88a8d2', '#5d2c43' // Use a palette based on your brand colors
         ];
 
         // Destroy the old chart instance if it exists
@@ -159,25 +161,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Fetch data and render charts on page load ---
-    // The PHP template will already have the data available. We just need to render it.
-    // We can fetch the data from a hidden element or a data attribute.
-    // For this implementation, the PHP will be responsible for providing the data directly to the JS.
-    // So we'll assume a global variable is set by the PHP code (e.g., cpd_dashboard_data).
-    // You will need to add a wp_localize_script call for the public dashboard in class-cpd-public.php.
-    // This is placeholder logic, assuming the data is available.
-    
-    // Example of a local data source for rendering.
-    // In a real scenario, this data would come from the server via a localized script.
-    const chartData = [
-        {"ad_group_name": "Apptio", "impressions": 1131, "reach": 479, "clicks": 9, "ctr": 0.80, "last_updated": "2025-06-01"},
-        {"ad_group_name": "Attorneys", "impressions": 7188, "reach": 5890, "clicks": 83, "ctr": 1.15, "last_updated": "2025-06-05"},
-        {"ad_group_name": "Bar/Pub Goers", "impressions": 3375, "reach": 2815, "clicks": 56, "ctr": 1.66, "last_updated": "2025-06-10"},
-        {"ad_group_name": "Bars - Legends", "impressions": 4289, "reach": 3602, "clicks": 78, "ctr": 1.82, "last_updated": "2025-06-15"},
-        {"ad_group_name": "Children Shoppers", "impressions": 9913, "reach": 7228, "clicks": 92, "ctr": 0.93, "last_updated": "2025-06-20"},
-        {"ad_group_name": "Club Works Competitors", "impressions": 1693, "reach": 1417, "clicks": 49, "ctr": 2.89, "last_updated": "2025-06-25"},
-    ];
-    
-    // Render the charts on load.
-    renderImpressionsChart(chartData);
-    renderImpressionsByAdGroupChart(chartData);
+    // Use the localized data from cpd_dashboard_data object
+    const campaignDataByDate = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data.campaign_data_by_date : [];
+    const campaignDataByAdGroup = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data.campaign_data_by_ad_group : [];
+    // The ad group table is rendered directly by PHP, so no JS update needed for it.
+
+    // Render the charts on load using their respective data.
+    renderImpressionsChart(campaignDataByDate);
+    renderImpressionsByAdGroupChart(campaignDataByAdGroup);
 });

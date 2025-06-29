@@ -159,20 +159,46 @@ $all_clients = $data_provider->get_all_client_accounts();
                     <img src="<?php echo esc_url( $memo_seal_url ); ?>" alt="Referrer Logo">
                 </div>
                 <div class="visitor-details">
-                    <p class="visitor-name"><?php echo esc_html( $visitor->name ); ?></p>
+                    <p class="visitor-name">
+                        <?php 
+                        // Check if first_name and last_name properties exist to avoid warnings.
+                        $full_name = '';
+                        if ( ! empty( $visitor->first_name ) ) {
+                            $full_name .= $visitor->first_name;
+                        }
+                        if ( ! empty( $visitor->last_name ) ) {
+                            if ( ! empty( $full_name ) ) {
+                                $full_name .= ' '; // Add a space if both names exist
+                            }
+                            $full_name .= $visitor->last_name;
+                        }
+                        
+                        // If no name is available, show a placeholder
+                        echo esc_html( ! empty( $full_name ) ? $full_name : 'Unknown Visitor' );
+                        ?>
+                    </p>
+
                     <div class="visitor-info">
-                        <?php if ( ! empty( $visitor->job_title ) ) : ?>
-                            <p><i class="fas fa-briefcase"></i> <?php echo esc_html( $visitor->job_title ); ?></p>
-                        <?php endif; ?>
-                        <?php if ( ! empty( $visitor->company_name ) ) : ?>
-                            <p><i class="fas fa-building"></i> <?php echo esc_html( $visitor->company_name ); ?></p>
-                        <?php endif; ?>
-                        <?php if ( ! empty( $visitor->location ) ) : ?>
-                            <p><i class="fas fa-map-marker-alt"></i> <?php echo esc_html( $visitor->location ); ?></p>
-                        <?php endif; ?>
-                        <?php if ( ! empty( $visitor->email ) ) : ?>
-                            <p><i class="fas fa-envelope"></i> <?php echo esc_html( $visitor->email ); ?></p>
-                        <?php endif; ?>
+                        <p><i class="fas fa-briefcase"></i> <?php echo esc_html( $visitor->job_title ?? 'Unknown' ); ?></p>
+                        <p><i class="fas fa-building"></i> <?php echo esc_html( $visitor->company_name ?? 'Unknown' ); ?></p>
+                        <p>
+                            <i class="fas fa-map-marker-alt"></i> 
+                            <?php 
+                            // Concatenate city, state, and zipcode, default to 'Unknown'
+                            $location_parts = [];
+                            if ( ! empty( $visitor->city ) ) {
+                                $location_parts[] = $visitor->city;
+                            }
+                            if ( ! empty( $visitor->state ) ) {
+                                $location_parts[] = $visitor->state;
+                            }
+                            if ( ! empty( $visitor->zipcode ) ) {
+                                $location_parts[] = $visitor->zipcode;
+                            }
+                            echo esc_html( ! empty( $location_parts ) ? implode(', ', $location_parts) : 'Unknown' );
+                            ?>
+                        </p>
+                        <p><i class="fas fa-envelope"></i> <?php echo esc_html( $visitor->email ?? 'Unknown' ); ?></p>
                     </div>
                 </div>
                 <div class="visitor-actions">
