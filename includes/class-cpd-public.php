@@ -1,25 +1,25 @@
 <?php
-/**
- * The public-facing functionality of the plugin.
- *
- * @package CPD_Dashboard
- */
+    /**
+     * The public-facing functionality of the plugin.
+     *
+     * @package CPD_Dashboard
+     */
 
-// Exit if accessed directly.
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
-}
+    // Exit if accessed directly.
+    if ( ! defined( 'ABSPATH' ) ) {
+        exit;
+    }
 
 class CPD_Public {
 
     private $plugin_name;
     private $version;
     private $data_provider;
-
+    
     public function __construct( $plugin_name, $version ) {
         $this->plugin_name = $plugin_name;
         $this->version = $version;
-        $this->data_provider = new CPD_Data_Provider(); // Initialize data provider.
+        $this->data_provider = new CPD_Data_Provider();
         
         // Add AJAX handlers for front-end.
         add_action( 'wp_ajax_cpd_update_visitor_status', array( $this, 'update_visitor_status_callback' ) );
@@ -32,8 +32,38 @@ class CPD_Public {
         
         // Add login redirect filter.
         add_filter( 'login_redirect', array( $this, 'login_redirect_by_role' ), 10, 3 );
-        // Hide admin bar on the front end.
+        
+        // Hide admin bar and add body class
         add_filter( 'body_class', array( $this, 'add_dashboard_body_class' ) );
+        add_filter( 'show_admin_bar', array( $this, 'hide_admin_bar_on_dashboard' ) );
+        
+        // Force hide admin bar with action
+        add_action( 'wp_head', array( $this, 'force_hide_admin_bar' ) );
+    }
+
+    /**
+     * Hide admin bar on dashboard pages
+     */
+    public function hide_admin_bar_on_dashboard( $show ) {
+        global $post;
+        if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
+            return false;
+        }
+        return $show;
+    }
+
+    /**
+     * Force hide admin bar with CSS
+     */
+    public function force_hide_admin_bar() {
+        global $post;
+        if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
+            echo '<style>
+                html { margin-top: 0 !important; }
+                #wpadminbar { display: none !important; }
+                body.admin-bar { margin-top: 0 !important; }
+            </style>';
+        }
     }
 
     /**
@@ -51,18 +81,29 @@ class CPD_Public {
      * Enqueue the public-facing stylesheets and dequeue theme styles on our page.
      */
     public function enqueue_styles() {
-        global $post;
+    global $post;
 
-        // Check if the current page contains our shortcode.
-        if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
-            // Dequeue the theme's main stylesheet.
-            wp_dequeue_style( 'twentytwentyfive-style' );
-            wp_deregister_style( 'twentytwentyfive-style' );
+    // Check if the current page contains our shortcode.
+    if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
+        // Dequeue ALL theme styles
+        wp_dequeue_style( 'twentytwentyfive-style' );
+        wp_deregister_style( 'twentytwentyfive-style' );
+        wp_dequeue_style( 'blocksy-style' );
+        wp_deregister_style( 'blocksy-style' );
+        wp_dequeue_style( 'theme-style' );
+        wp_deregister_style( 'theme-style' );
 
-            // Enqueue our custom dashboard styles for the public page.
-            wp_enqueue_style( 'google-montserrat', 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap', array(), null );
-            wp_enqueue_style( 'font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', array(), '5.15.4', 'all' );
-            wp_enqueue_style( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-dashboard.css', array(), $this->version, 'all' );
+        // Enqueue our custom dashboard styles for the public page.
+        wp_enqueue_style( 'google-montserrat', 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap', array(), null );
+        wp_enqueue_style( 'font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', array(), '5.15.4', 'all' );
+        wp_enqueue_style( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-dashboard.css', array(), $this->version, 'all' );
+        
+        // Add inline styles to force override
+        wp_add_inline_style( $this->plugin_name . '-public', '
+            body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
+            #wpadminbar { display: none !important; }
+            .site-header, .site-footer { display: none !important; }
+        ' );
         }
     }
 
