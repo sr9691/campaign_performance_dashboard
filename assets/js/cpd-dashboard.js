@@ -1,4 +1,59 @@
 /**
+ * Force DOM manipulation for Campaign Performance Dashboard
+ */
+
+// Force hide WordPress admin elements immediately
+document.addEventListener('DOMContentLoaded', function() {
+    // Force hide admin elements
+    const elementsToHide = [
+        '#adminmenumain',
+        '#adminmenuwrap', 
+        '#adminmenuback',
+        '#wpadminbar',
+        '#wpfooter'
+    ];
+    
+    elementsToHide.forEach(selector => {
+        const element = document.querySelector(selector);
+        if (element) {
+            element.style.display = 'none';
+            element.style.visibility = 'hidden';
+        }
+    });
+    
+    // Force body classes
+    document.body.classList.add('cpd-dashboard-active');
+    
+    // Force wrapper styles
+    const wpContent = document.getElementById('wpcontent');
+    if (wpContent) {
+        wpContent.style.marginLeft = '0';
+        wpContent.style.padding = '0';
+    }
+    
+    const wpBody = document.getElementById('wpbody');
+    if (wpBody) {
+        wpBody.style.backgroundColor = '#eef2f6';
+        wpBody.style.padding = '0';
+        wpBody.style.margin = '0';
+    }
+    
+    const wrap = document.querySelector('.wrap');
+    if (wrap) {
+        wrap.style.margin = '0';
+        wrap.style.padding = '0';
+        wrap.style.display = 'flex';
+        wrap.style.width = '100%';
+        wrap.style.minHeight = '100vh';
+        wrap.style.maxWidth = 'none';
+    }
+    
+    // Debug log
+    console.log('CPD Dashboard DOM manipulation complete');
+    console.log('Admin page container found:', document.querySelector('.admin-page-container') ? 'Yes' : 'No');
+});
+
+/**
  * Admin-specific JavaScript for the Campaign Performance Dashboard plugin.
  */
 

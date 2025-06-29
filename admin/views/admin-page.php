@@ -1,17 +1,26 @@
 <div class="admin-page-container">
     <div class="admin-sidebar">
+        <!-- Logo at top - fixed -->
         <div class="logo-container">
             <img src="<?php echo CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png'; ?>" alt="MEMO Marketing Group Logo">
         </div>
+        
+        <!-- Navigation in middle - scrollable -->
         <nav>
             <ul>
                 <li><a href="?page=<?php echo esc_attr( $plugin_name ); ?>#clients" class="active" data-target="clients-section"><i class="fas fa-users-cog"></i> Client Management</a></li>
                 <li><a href="?page=<?php echo esc_attr( $plugin_name ); ?>#users" data-target="users-section"><i class="fas fa-user-friends"></i> User Management</a></li>
                 <li><a href="?page=<?php echo esc_attr( $plugin_name ); ?>#settings" data-target="settings-section"><i class="fas fa-cogs"></i> Settings</a></li>
                 <li><a href="?page=<?php echo esc_attr( $plugin_name ); ?>#logs" data-target="logs-section"><i class="fas fa-history"></i> Activity Log</a></li>
-                <li style="margin-top: auto;"><a href="<?php echo esc_url( wp_logout_url() ); ?>" onclick="alert('Logout button clicked!');"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
             </ul>
         </nav>
+        
+        <!-- Logout at bottom - fixed -->
+        <div class="logout-container">
+            <a href="<?php echo esc_url( wp_logout_url() ); ?>" onclick="alert('Logout button clicked!');">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
     </div>
 
     <div id="clients-section" class="admin-main-content active">

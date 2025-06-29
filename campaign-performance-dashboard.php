@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name:       Campaign Performance Dashboard
- * Plugin URI:        https://example.com/
+ * Plugin URI:        https://memomarketing.com/campaign-performance-dashboard
  * Description:       A custom dashboard for clients to view their campaign performance and visitor data.
  * Version:           1.0.0
- * Author:            Your Name
- * Author URI:        https://yourwebsite.com/
+ * Author:            ANSA Solutions
+ * Author URI:        https://ansa.solutions/
  * License:           GPL-2.0+
  * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
  * Text Domain:       cpd-dashboard
@@ -32,6 +32,7 @@ require CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-dashboard.php';
  * Register activation and deactivation hooks.
  * This is the activation hook for the plugin, which will create the database tables and roles.
  */
+
 function cpd_dashboard_activate() {
     require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-database.php';
     $cpd_database = new CPD_Database();
@@ -39,6 +40,9 @@ function cpd_dashboard_activate() {
     
     // Register the custom client role on activation.
     cpd_dashboard_register_roles();
+    
+    // Add custom capabilities to existing roles
+    cpd_dashboard_add_capabilities();
 }
 
 /**
@@ -60,11 +64,26 @@ function cpd_dashboard_register_roles() {
         'client',
         'Client',
         array(
-            'read'         => true,   // Clients can read posts.
-            'upload_files' => false,  // Don't allow file uploads.
-            'edit_posts'   => false,  // Don't allow editing posts.
+            'read'                => true,   // Clients can read posts.
+            'upload_files'        => false,  // Don't allow file uploads.
+            'edit_posts'          => false,  // Don't allow editing posts.
+            'cpd_view_dashboard'  => true,   // Custom capability for viewing dashboard
         )
     );
+}
+
+function cpd_dashboard_add_capabilities() {
+    // Give administrators the dashboard capability
+    $admin_role = get_role('administrator');
+    if ($admin_role) {
+        $admin_role->add_cap('cpd_view_dashboard');
+    }
+    
+    // Give the client role the dashboard capability (in case role already exists)
+    $client_role = get_role('client');
+    if ($client_role) {
+        $client_role->add_cap('cpd_view_dashboard');
+    }
 }
 
 /**

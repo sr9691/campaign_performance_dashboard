@@ -1,4 +1,7 @@
 <?php
+
+
+
 /**
  * The admin-specific functionality of the plugin.
  *
@@ -68,7 +71,9 @@ class CPD_Admin {
      */
     public function enqueue_styles() {
         $screen = get_current_screen();
-        if ( strpos( $screen->id, $this->plugin_name ) !== false ) {
+        
+        // More specific check for our admin page
+        if ( $screen && ($screen->id === 'toplevel_page_cpd-dashboard' || $screen->id === 'toplevel_page_cpd_dashboard') ) {
             wp_enqueue_style( 'google-montserrat', 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap', array(), null );
             wp_enqueue_style( 'font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', array(), '5.15.4', 'all' );
             wp_enqueue_style( $this->plugin_name, CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-dashboard.css', array(), $this->version, 'all' );
@@ -80,7 +85,10 @@ class CPD_Admin {
      */
     public function enqueue_scripts() {
         $screen = get_current_screen();
-        if ( strpos( $screen->id, $this->plugin_name ) !== false ) {
+        
+        // More specific check for our admin page
+        if ( $screen && ($screen->id === 'toplevel_page_cpd-dashboard' || $screen->id === 'toplevel_page_cpd_dashboard') ) {
+            wp_enqueue_script( 'jquery' );
             wp_enqueue_script( 'chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js', array(), '4.4.1', true );
             wp_enqueue_script( $this->plugin_name . '-admin', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-dashboard.js', array( 'jquery', 'chart-js' ), $this->version, true );
             
@@ -96,35 +104,45 @@ class CPD_Admin {
         }
     }
 
+
     
     /**
      * Add the top-level menu page for the plugin in the admin dashboard.
      */
     public function add_plugin_admin_menu() {
-        add_menu_page(
-            'Campaign Dashboard',
-            'Campaign Dashboard',
-            'cpd_view_dashboard',
-            $this->plugin_name,
-            array( $this, 'render_admin_page' ),
-            'dashicons-chart-bar',
-            6
-        );
-        // Add a settings page as a submenu
-        add_submenu_page(
-            $this->plugin_name,
-            'Dashboard Settings',
-            'Settings',
-            'manage_options',
-            $this->plugin_name . '-settings',
-            array( $this, 'render_settings_page' )
-        );
+    // Use 'manage_options' capability instead of custom capability for main menu
+    $page_hook = add_menu_page(
+        'Campaign Dashboard',           // Page title
+        'Campaign Dashboard',           // Menu title
+        'manage_options',              // Capability - use standard capability
+        $this->plugin_name,            // Menu slug
+        array( $this, 'render_admin_page' ), // Callback function
+        'dashicons-chart-bar',         // Icon
+        6                             // Position
+    );
+    
+    // Add a settings page as a submenu
+    add_submenu_page(
+        $this->plugin_name,
+        'Dashboard Settings',
+        'Settings',
+        'manage_options',
+        $this->plugin_name . '-settings',
+        array( $this, 'render_settings_page' )
+    );
+    
+    // Add action to enqueue scripts only on our admin page
+    add_action( 'admin_print_scripts-' . $page_hook, array( $this, 'enqueue_scripts' ) );
+    add_action( 'admin_print_styles-' . $page_hook, array( $this, 'enqueue_styles' ) );
     }
+
 
     /**
      * Render the admin page content from the HTML template.
      */
     public function render_admin_page() {
+ 
+        /** Start actual code here */
         $plugin_name = $this->plugin_name;
         $all_clients = $this->data_provider->get_all_client_accounts();
         $selected_client_id = isset( $_GET['client_id'] ) ? sanitize_text_field( $_GET['client_id'] ) : ( !empty($all_clients) ? $all_clients[0]->account_id : '' );
@@ -137,9 +155,19 @@ class CPD_Admin {
             $visitor_data = $this->data_provider->get_visitor_data( $selected_client->account_id );
         }
         $logs = $this->get_all_logs();
+
+        // Force styles inline as backup
+        echo '<style id="cpd-force-styles">
+        body { overflow: hidden !important; }
+        #wpcontent { margin-left: 0 !important; padding: 0 !important; }
+        #wpbody { background: #eef2f6 !important; padding: 0 !important; }
+        .wrap { margin: 0 !important; padding: 0 !important; display: flex !important; width: 100% !important; min-height: 100vh !important; }
+        #adminmenumain, #adminmenuwrap, #adminmenuback, #wpadminbar, #wpfooter { display: none !important; }
+        </style>';
+
+        // Include the admin page template
         include CPD_DASHBOARD_PLUGIN_DIR . 'admin/views/admin-page.php';
     }
-
     /**
      * Gets the plugin name.
      *
