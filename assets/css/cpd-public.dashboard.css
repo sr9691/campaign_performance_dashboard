@@ -15,54 +15,100 @@
     --card-bg: #fff;
 }
 
-/* Force full-screen layout for public dashboard */
-body.client-dashboard-page,
-body.client-dashboard-page #page,
-body.client-dashboard-page #content,
-body.client-dashboard-page .site-main,
-body.client-dashboard-page .wp-site-blocks,
-body.client-dashboard-page main,
-body.client-dashboard-page .site-content {
+/* --- Universal Overrides for Full Screen Dashboard Page --- */
+/* Target HTML and Body for absolute full width/height and no scrollbars */
+html,
+body {
     margin: 0 !important;
     padding: 0 !important;
-    max-width: none !important;
+    overflow: hidden !important; /* Hide scrollbars on main window */
+    box-sizing: border-box !important;
+    width: 100vw !important; /* Force to 100% of viewport width */
+    height: 100vh !important; /* Force to 100% of viewport height */
+    min-width: 100vw !important;
+    min-height: 100vh !important;
+}
+
+/* Hide WordPress admin bar and any theme headers/footers/drawers */
+#wpadminbar,
+.site-header,
+.site-footer,
+.wp-block-template-part,
+.ct-drawer-canvas, /* Blocksy off-canvas menu */
+.ct-header-trigger, /* Blocksy mobile menu trigger */
+.hero-section, /* Your plugin's hero section that might add space */
+.ct-main-styles-css { /* Disable certain Blocksy styles if they cause issues */
+    display: none !important;
+}
+
+/* Force main WordPress content wrappers to full width and remove all their spacing */
+#page,
+#content,
+.site-content,
+.site-main, /* Targets <main id="main" class="site-main ..."> */
+main,
+article, /* Targets <article id="post-13" ...> */
+.wp-site-blocks,
+.ct-container,
+.ct-container-full, /* Targets <div class="ct-container-full ..."> */
+.ct-content,
+.ct-main,
+.entry-content, /* Targets <div class="entry-content ..."> */
+.is-layout-constrained, /* Gutenberg/Blocksy layout classes */
+.is-layout-flow,
+.is-width-constrained,
+.site-branding { /* Ensure theme branding doesn't push content */
     width: 100% !important;
-    height: 100% !important;
-    overflow: hidden !important;
-    position: static !important;
+    max-width: none !important; /* CRUCIAL: Overrides theme's max-width */
+    margin: 0 !important; /* Remove all margins */
+    padding: 0 !important; /* Remove all paddings */
+    box-sizing: border-box !important;
+    min-height: auto !important; /* Allow height to adapt, avoid forcing */
+    display: block !important; /* Ensure they behave as blocks */
+    overflow: visible !important; /* Allow internal content to determine overflow */
+    gap: 0 !important; /* Remove any flex/grid gaps */
 }
 
-/* Hide WordPress admin bar and theme elements */
-body.client-dashboard-page #wpadminbar {
-    display: none !important;
+/* Reset Gutenberg/Blocksy block gaps */
+:root {
+    --wp--style--block-gap: 0 !important;
+}
+.is-layout-flow > :where(:not(.alignleft):not(.alignright):not(.alignfull)),
+.is-layout-constrained > :where(:not(.alignleft):not(.alignright):not(.alignfull)) {
+    margin-block-start: 0 !important;
+    margin-block-end: 0 !important;
+}
+.is-layout-flex,
+.is-layout-grid {
+    gap: 0 !important;
 }
 
-body.client-dashboard-page .site-header,
-body.client-dashboard-page .site-footer,
-body.client-dashboard-page .wp-block-template-part {
-    display: none !important;
-}
-
-/* Main dashboard container for public */
+/* --- Main Dashboard Container Styles (from mockup + plugin needs) --- */
 body.client-dashboard-page .dashboard-container {
     display: flex !important;
-    width: 100vw !important;
-    height: 100vh !important;
+    height: 100vh !important; /* Use viewport height */
+    width: 100vw !important; /* Use viewport width directly */
+    min-width: 100vw !important;
+    min-height: 100vh !important;
     background-color: var(--bg-color) !important;
-    overflow: hidden !important; /* Prevents overall scrollbar */
+    overflow: hidden !important; /* Control internal dashboard scrolling */
     margin: 0 !important;
     padding: 0 !important;
-    position: fixed !important; /* Important for full viewport coverage */
+    position: fixed !important; /* Keep it fixed to cover entire viewport */
     top: 0 !important;
     left: 0 !important;
+    right: 0 !important; /* Crucial for fixed elements to span full width */
+    bottom: 0 !important;
     font-family: var(--font-family) !important;
-    box-sizing: border-box !important; /* Include padding/border in element's total width and height */
+    box-sizing: border-box !important;
+    flex-wrap: nowrap !important; /* Prevent content from wrapping prematurely */
+    z-index: 99999; /* Ensure it stays on top */
 }
 
-/* LEFT SIDEBAR - Account Panel */
+/* --- Left Account List Panel (Admin View) --- */
 body.client-dashboard-page .account-panel {
     width: 250px !important;
-    height: 100% !important; /* Changed to 100% of parent .dashboard-container height */
+    height: 100% !important;
     background-color: var(--primary-color) !important;
     color: #fff !important;
     padding: 0 !important;
@@ -70,16 +116,18 @@ body.client-dashboard-page .account-panel {
     flex-shrink: 0 !important;
     display: flex !important;
     flex-direction: column !important;
-    overflow: hidden !important; /* Prevents scrollbar on sidebar itself */
+    overflow: hidden !important;
     box-sizing: border-box !important;
 }
 
-/* Account panel logo */
 body.client-dashboard-page .account-panel .logo-container {
-    padding: 20px !important;
+    padding: 30px 20px !important; /* Use mockup's padding for logo container */
     text-align: center !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
     flex-shrink: 0 !important;
+    display: flex !important; /* Ensure flex for centering */
+    align-items: center !important;
+    justify-content: center !important;
 }
 
 body.client-dashboard-page .account-panel .logo-container img {
@@ -87,23 +135,23 @@ body.client-dashboard-page .account-panel .logo-container img {
     height: auto !important;
 }
 
-/* Account list */
 body.client-dashboard-page .account-list {
     list-style: none !important;
-    padding: 20px !important;
+    padding: 0 !important; /* Remove padding from outer list */
     margin: 0 !important;
     flex: 1 !important;
-    overflow-y: auto !important; /* Allow internal scrolling if accounts list is long */
+    overflow-y: auto !important;
 }
 
 body.client-dashboard-page .account-list-item {
-    padding: 12px 16px !important;
-    margin-bottom: 8px !important;
-    border-radius: var(--border-radius) !important;
+    padding: 15px 25px !important; /* Use mockup's padding for list items */
+    margin-bottom: 0 !important; /* Remove margin-bottom from previous rule */
+    border-radius: 0 !important; /* Remove border-radius to match mockup's edge-to-edge */
     cursor: pointer !important;
+    font-weight: 500 !important;
     transition: background-color 0.2s ease !important;
     color: rgba(255, 255, 255, 0.8) !important;
-    font-weight: 500 !important;
+    position: relative !important;
 }
 
 body.client-dashboard-page .account-list-item:hover {
@@ -112,114 +160,193 @@ body.client-dashboard-page .account-list-item:hover {
 }
 
 body.client-dashboard-page .account-list-item.active {
-    background-color: var(--card-bg) !important;
+    background-color: #fff !important;
     color: var(--primary-color) !important;
     font-weight: 700 !important;
 }
 
-/* Brand bottom section */
-body.client-dashboard-page .brand-bottom-section {
-    padding: 20px !important;
-    border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
-    text-align: center !important;
-    flex-shrink: 0 !important;
-    background-color: var(--card-bg) !important; /* White */
+body.client-dashboard-page .account-list-item.active::before {
+    content: '' !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    width: 5px !important;
+    background-color: var(--secondary-color) !important;
+    border-top-right-radius: 5px !important;
+    border-bottom-right-radius: 5px !important;
 }
 
+body.client-dashboard-page .brand-bottom-section {
+    padding: 20px 25px !important; /* Use mockup's padding for bottom section */
+    text-align: center !important; /* Keep for button content alignment if not flex */
+    border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+    flex-shrink: 0 !important;
+    background-color: var(--card-bg) !important;
+    display: flex !important; /* Ensure flex for centering buttons */
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 15px !important; /* Space between logo and buttons, and between buttons */
+}
+/* Ensure margin on last child of flex container is removed if using gap */
+body.client-dashboard-page .brand-bottom-section > :last-child {
+    margin-bottom: 0 !important;
+}
+
+
 body.client-dashboard-page .report-bug-button {
-    background-color: var(--card-bg) !important; /* White */
-    color: var(--primary-color) !important; /* Primary brand color for text */
-    border: 1px solid var(--primary-color) !important; /* Add a subtle border for definition */
-    padding: 8px 16px !important;
-    border-radius: var(--border-radius) !important;
-    font-size: 0.9rem !important;
+    background-color: var(--secondary-color) !important; /* Use mockup's background color */
+    color: #fff !important;
+    border: none !important; /* Mockup has no border */
+    padding: 15px !important; /* Use mockup's padding */
+    font-size: 1rem !important; /* Use mockup's font size */
+    font-weight: 600 !important;
     cursor: pointer !important;
-    margin-top: 10px !important;
-    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
-    font-weight: 600 !important; /* Make the text a bit bolder */
+    text-align: center !important;
+    transition: background-color 0.2s ease !important;
+    border-radius: var(--border-radius) !important;
+    width: 100% !important; /* Mockup's button is 100% width within its padding */
+    box-sizing: border-box !important;
+    margin-top: 0 !important; /* Remove any margin-top */
+    margin-bottom: 0 !important; /* Remove any margin-bottom if gap is used */
+    display: flex !important; /* Ensure it's flex for icon centering */
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important; /* Space for icon */
+    font-family: var(--font-family) !important;
 }
 
 body.client-dashboard-page .report-bug-button:hover {
-    background-color: var(--primary-color) !important; /* Primary color on hover */
-    color: #fff !important; /* White text on hover */
-    border-color: var(--primary-color) !important; /* Keep border consistent on hover */
+    background-color: #3884b8 !important; /* Use mockup's hover color */
 }
 
-/* MAIN CONTENT AREA - PUBLIC DASHBOARD */
-body.client-dashboard-page .main-content {
-    flex: 1 !important; /* Allows this panel to grow/shrink horizontally */
-    padding: 30px !important;
-    overflow-y: auto !important; /* Allows vertical scrolling ONLY if content overflows */
-    overflow-x: hidden !important; /* Prevents horizontal scroll */
-    background-color: var(--bg-color) !important;
-    height: 100% !important; /* Changed to 100% of its flex parent's height (dashboard-container) */
+/* Admin link button (now 'Admin') */
+body.client-dashboard-page .admin-link-button {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+
+    background-color: #fff !important;
+    color: var(--primary-color) !important;
+    border: 1px solid var(--primary-color) !important;
+    padding: 10px 16px !important;
+    border-radius: var(--border-radius) !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    text-decoration: none !important;
+    cursor: pointer !important;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
+    width: 100% !important; /* Make it 100% width like report-bug-button for consistency */
     box-sizing: border-box !important;
+    margin-top: 0 !important; /* Reset margin-top */
+    font-family: var(--font-family) !important;
+}
+
+body.client-dashboard-page .admin-link-button:hover {
+    background-color: var(--primary-color) !important;
+    color: #fff !important;
+    border-color: var(--primary-color) !important;
+}
+
+body.client-dashboard-page .admin-link-button i {
+    font-size: 1rem !important;
+}
+
+/* Style for the brand logo image in brand-bottom-section */
+body.client-dashboard-page .brand-bottom-section img {
+    max-width: 150px !important;
+    height: auto !important;
+    margin-bottom: 15px !important; /* Add margin below the logo */
+}
+
+/* --- Main Content Area --- */
+body.client-dashboard-page .main-content {
+    flex-grow: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    padding: 30px !important;
+    background-color: var(--bg-color) !important;
+    height: 100% !important;
+    box-sizing: border-box !important;
+    max-width: none !important; /* Ensure no max-width constraints */
 }
 
 /* Adjust main content width when admin sidebar is NOT present */
 body.client-dashboard-page .main-content.no-admin-sidebar {
-    /* When no left sidebar, main content takes up more space */
-    /* It already has flex: 1, so it will naturally fill the space. */
-    /* No specific width needed here unless you want to constrain it further. */
-    margin-left: 0 !important; /* Ensure no residual margin from where sidebar would be */
+    margin-left: 0 !important;
 }
 
 /* Dashboard header */
 body.client-dashboard-page .dashboard-header {
     display: flex !important;
     justify-content: space-between !important;
-    align-items: center !important;
-    margin-bottom: 30px !important;
+    align-items: flex-start !important; /* Changed to flex-start to match mockup */
     padding-bottom: 20px !important;
+    margin-bottom: 30px !important;
     border-bottom: 1px solid var(--line-color) !important;
 }
 
-body.client-dashboard-page .left-header {
+body.client-dashboard-page .dashboard-header .left-header {
     display: flex !important;
     align-items: center !important;
     gap: 20px !important;
 }
 
 body.client-dashboard-page .client-logo-container {
-    width: 60px !important;
-    height: 60px !important;
-    border-radius: 50% !important;
-    overflow: hidden !important;
+    width: auto !important;
+    height: 75px !important;
     flex-shrink: 0 !important;
     display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    background-color: #fff !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+    align-items: left !important;
+    justify-content: left !important;
+    background-color: #f0f0f0 !important; 
+    box-shadow: none !important; 
+    /* border: 0px solid #ddd !important; */
 }
 
 body.client-dashboard-page .header-title-section h1 {
-    font-size: 1.8rem !important;
+    font-size: 2rem !important; /* Use mockup's font size */
     font-weight: 700 !important;
-    margin: 0 0 8px 0 !important;
+    margin: 0 !important; /* Use mockup's margin */
     color: var(--text-color-dark) !important;
     font-family: var(--font-family) !important;
+    line-height: 1.2 !important; /* Use mockup's line-height */
 }
 
 body.client-dashboard-page .duration-select {
     display: flex !important;
     align-items: center !important;
-    gap: 10px !important;
     font-size: 0.9rem !important;
+    font-weight: 500 !important; /* Use mockup's font-weight */
     color: var(--text-color-light) !important;
+    margin-top: 5px !important; /* Use mockup's margin-top */
+    gap: 10px !important; /* Add gap for consistency with mockup's spacing */
 }
 
 body.client-dashboard-page .duration-select select {
-    padding: 6px 12px !important;
+    padding: 5px 10px !important; /* Use mockup's padding */
     border: 1px solid var(--line-color) !important;
-    border-radius: var(--border-radius) !important;
-    background-color: #fff !important;
+    border-radius: 5px !important; /* Use mockup's border-radius */
+    background-color: #fff !important; /* Ensure white background */
     font-family: var(--font-family) !important;
+    font-size: 0.8rem !important; /* Use mockup's font size */
+    font-weight: 600 !important; /* Use mockup's font weight */
+    color: var(--text-color-light) !important; /* Use mockup's color */
+    cursor: pointer !important;
+    margin-left: 10px !important; /* Use mockup's margin-left */
+}
+
+body.client-dashboard-page .right-header {
+    display: flex !important;
+    align-items: center !important;
+    gap: 20px !important;
 }
 
 body.client-dashboard-page .right-header .client-brand-logo img {
-    max-height: 50px !important;
-    width: auto !important;
+    max-height: 75px !important; /* Use mockup's max-width */
+    height: auto !important;
 }
 
 /* All Accounts heading */
@@ -234,6 +361,7 @@ body.client-dashboard-page .main-content h2 {
 /* Summary cards */
 body.client-dashboard-page .summary-cards {
     display: flex !important;
+    justify-content: space-between !important;
     gap: 20px !important;
     margin-bottom: 30px !important;
     flex-wrap: wrap !important;
@@ -241,26 +369,27 @@ body.client-dashboard-page .summary-cards {
 
 body.client-dashboard-page .summary-card {
     background-color: var(--card-bg) !important;
-    padding: 20px !important;
+    padding: 25px !important; /* Use mockup's padding */
     border-radius: var(--border-radius) !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
     text-align: center !important;
     flex: 1 !important;
     min-width: 150px !important;
 }
 
 body.client-dashboard-page .summary-card .value {
-    font-size: 2rem !important;
+    font-size: 2.5rem !important; /* Use mockup's font size */
     font-weight: 700 !important;
-    margin: 0 0 8px 0 !important;
+    margin: 0 !important; /* Use mockup's margin */
     color: var(--primary-color) !important;
     font-family: var(--font-family) !important;
 }
 
 body.client-dashboard-page .summary-card .label {
-    font-size: 0.9rem !important;
+    font-size: 1rem !important; /* Use mockup's font size */
     color: var(--text-color-light) !important;
-    margin: 0 !important;
+    text-transform: uppercase !important;
+    margin-top: 5px !important; /* Use mockup's margin-top */
     font-family: var(--font-family) !important;
 }
 
@@ -269,22 +398,23 @@ body.client-dashboard-page .charts-section {
     display: flex !important;
     gap: 30px !important;
     margin-bottom: 30px !important;
-    flex-wrap: wrap !important; /* Allow charts to wrap on smaller screens */
+    flex-wrap: wrap !important;
 }
 
 body.client-dashboard-page .chart-container {
     background-color: var(--card-bg) !important;
-    padding: 20px !important;
+    padding: 30px !important; /* Use mockup's padding */
     border-radius: var(--border-radius) !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
-    height: 350px !important; /* Keep fixed height for charts */
-    max-height: 350px !important;
-    overflow: hidden !important;
-    box-sizing: border-box !important;
-    flex: 1 !important; /* Allows chart containers to share horizontal space */
-    min-width: 300px !important; /* Ensure charts don't get too small */
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
+    flex: 1 !important;
+    height: 250px !important; /* Keep fixed height for charts */
+    max-height: 250px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    min-width: 300px !important;
 }
-
 
 body.client-dashboard-page .chart-container h3 {
     font-size: 1.2rem !important;
@@ -292,70 +422,98 @@ body.client-dashboard-page .chart-container h3 {
     margin: 0 0 20px 0 !important;
     color: var(--text-color-dark) !important;
     font-family: var(--font-family) !important;
+    text-align: left !important;
+    width: 100% !important; /* Ensure heading takes full width for left alignment */
 }
 
-/* AD GROUP TABLE FIXES */
+/* Ad Group Table */
 body.client-dashboard-page .ad-group-table {
+    background-color: var(--card-bg) !important; /* Use mockup's background */
+    padding: 30px !important; /* Use mockup's padding */
+    border-radius: var(--border-radius) !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
+    margin-bottom: 30px !important;
     width: 100% !important;
     max-width: none !important;
     box-sizing: border-box !important;
 }
 
-/* VISITOR PANEL - PUBLIC DASHBOARD */
+body.client-dashboard-page .ad-group-table table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    text-align: left !important;
+}
+
+body.client-dashboard-page .ad-group-table th,
+body.client-dashboard-page .ad-group-table td {
+    padding: 15px 20px !important; /* Use mockup's padding */
+    border-bottom: 1px solid var(--line-color) !important;
+    font-weight: 500 !important;
+}
+
+body.client-dashboard-page .ad-group-table th {
+    font-weight: 600 !important;
+    color: var(--text-color-light) !important;
+    text-transform: uppercase !important;
+    font-size: 0.8rem !important;
+}
+
+body.client-dashboard-page .ad-group-table tr:hover {
+    background-color: #f9fbfd !important;
+    cursor: pointer !important;
+}
+
+/* Right Visitor Panel */
 body.client-dashboard-page .visitor-panel {
-    width: 300px !important; /* Fixed width */
-    height: 100% !important; /* Changed to 100% of parent .dashboard-container height */
+    width: 350px !important; /* Use mockup's width */
+    height: 100% !important;
     background-color: var(--card-bg) !important;
-    border-left: 1px solid var(--line-color) !important;
-    flex-shrink: 0 !important; /* Prevents shrinking */
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1) !important; /* Use mockup's shadow */
     display: flex !important;
     flex-direction: column !important;
-    overflow: hidden !important; /* Contains internal scrolling elements */
+    flex-shrink: 0 !important;
+    overflow-y: auto !important;
     box-sizing: border-box !important;
 }
 
 body.client-dashboard-page .visitor-panel .header {
-    padding: 20px !important;
-    border-bottom: 1px solid var(--line-color) !important;
+    padding: 25px !important; /* Use mockup's padding */
+    font-size: 1.2rem !important;
     font-weight: 600 !important;
-    color: var(--text-color-dark) !important;
-    font-family: var(--font-family) !important;
-    background-color: #f8f9fa !important;
-    flex-shrink: 0 !important;
-}
-
-body.client-dashboard-page .visitor-list {
-    flex: 1 !important; /* Allows the list to grow and handle its own scroll */
-    overflow-y: auto !important; /* Enables scrolling for the list of visitors */
-    padding: 20px !important;
-}
-
-body.client-dashboard-page .visitor-card {
-    display: flex !important;
-    align-items: flex-start !important;
-    gap: 15px !important;
-    padding: 15px !important;
     border-bottom: 1px solid var(--line-color) !important;
-    transition: background-color 0.2s ease !important;
+    text-align: center !important;
 }
 
-body.client-dashboard-page .visitor-card:hover {
-    background-color: #f9fbfd !important;
+body.client-dashboard-page .visitor-panel .visitor-list {
+    flex: 1 !important;
+    padding: 10px !important; /* Use mockup's padding */
 }
 
-body.client-dashboard-page .visitor-logo {
+body.client-dashboard-page .visitor-panel .visitor-card {
+    display: flex !important;
+    align-items: center !important; /* Use mockup's align-items */
+    gap: 15px !important;
+    padding: 15px 20px !important; /* Use mockup's padding */
+    margin-bottom: 10px !important;
+    border-radius: var(--border-radius) !important;
+    background-color: #fafafa !important;
+    border: 1px solid #eee !important;
+}
+
+body.client-dashboard-page .visitor-panel .visitor-logo {
     width: 45px !important;
     height: 45px !important;
+    background-color: #fff !important;
     border-radius: 50% !important;
-    overflow: hidden !important;
-    flex-shrink: 0 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    background-color: #f0f0f0 !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+    box-shadow: none !important; /* Ensure no custom box-shadow */
 }
 
-body.client-dashboard-page .visitor-logo img {
+body.client-dashboard-page .visitor-panel .visitor-logo img {
     width: 80% !important;
     height: auto !important;
     object-fit: contain !important;
@@ -363,42 +521,56 @@ body.client-dashboard-page .visitor-logo img {
 
 body.client-dashboard-page .visitor-details {
     flex: 1 !important;
+    overflow: hidden !important;
 }
 
 body.client-dashboard-page .visitor-name {
     font-weight: 600 !important;
-    margin: 0 0 8px 0 !important;
-    color: var(--text-color-dark) !important;
-    font-family: var(--font-family) !important;
+    font-size: 0.95rem !important; /* Use mockup's font-size */
+    margin: 0 !important;
+    line-height: 1.2 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+}
+
+body.client-dashboard-page .visitor-info {
+    font-size: 0.8rem !important;
+    color: var(--text-color-light) !important;
+    margin-top: 5px !important;
+    line-height: 1.3 !important;
+    white-space: normal !important;
+    display: block !important;
 }
 
 body.client-dashboard-page .visitor-info p {
-    margin: 4px 0 !important;
-    font-size: 0.85rem !important;
-    color: var(--text-color-light) !important;
-    font-family: var(--font-family) !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
 }
 
 body.client-dashboard-page .visitor-actions {
     display: flex !important;
-    flex-direction: column !important;
-    gap: 8px !important;
+    gap: 5px !important;
+    font-size: 1.2rem !important;
+    color: var(--text-color-light) !important;
+    flex-shrink: 0 !important;
 }
 
 body.client-dashboard-page .visitor-actions .icon {
     cursor: pointer !important;
-    padding: 6px !important;
-    border-radius: 4px !important;
-    transition: background-color 0.2s ease !important;
-    color: var(--text-color-light) !important;
+    transition: color 0.2s ease !important;
+    padding: 5px !important;
 }
 
-body.client-dashboard-page .visitor-actions .add-crm-icon:hover {
-    background-color: #28a745 !important;
-    color: #fff !important;
+body.client-dashboard-page .visitor-actions .icon:hover {
+    color: var(--secondary-color) !important;
 }
 
-body.client-dashboard-page .visitor-actions .delete-icon:hover {
-    background-color: #dc3545 !important;
-    color: #fff !important;
+/* Ensure the canvas element itself correctly fits its container */
+body.client-dashboard-page .chart-container canvas {
+    width: 100% !important;
+    height: 100% !important; /* Force canvas to take 100% height of its parent */
+    max-height: 100% !important; /* Ensure it doesn't overflow */
 }

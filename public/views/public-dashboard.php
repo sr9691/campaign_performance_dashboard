@@ -41,10 +41,11 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
 <div class="dashboard-container">
     <?php if ( $is_admin ) : ?>
     <div class="account-panel">
+        <!--
         <div class="logo-container">
             <img src="<?php echo esc_url( $client_logo_url ); ?>" alt="Client Logo">
         </div>
-        
+        -->
         <ul class="account-list">
             <li class="account-list-item <?php echo ( $passed_selected_client_id_from_url === 'all' || ( !$passed_selected_client_id_from_url && !$client_account ) ) ? 'active' : ''; ?>" 
                 data-client-id="all">
@@ -88,7 +89,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                 <div class="header-title-section">
                     <h1>Digital Marketing Report</h1>
                     <div class="duration-select">
-                        <span>Campaign Duration:</span>
+                        <span>Date Range:</span>
                         <select id="duration-selector">
                             <option value="campaign">Campaign Duration</option>
                             <option value="30">30 days</option>

@@ -144,7 +144,7 @@ jQuery(document).ready(function($) {
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false,
+                maintainAspectRatio: true,
                 scales: {
                     x: { display: true, title: { display: true, text: 'Date' } },
                     y: { display: true, title: { display: true, text: 'Impressions' } }
@@ -185,7 +185,7 @@ jQuery(document).ready(function($) {
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false,
+                maintainAspectRatio: true,
                 plugins: {
                     legend: {
                         position: 'right',

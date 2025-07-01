@@ -898,8 +898,8 @@ body.wp-admin .admin-page-container .chart-container {
     padding: 20px !important;
     border-radius: var(--border-radius) !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
-    height: 350px !important; /* Keep fixed height for charts */
-    max-height: 350px !important;
+    height: 250px !important; /* Keep fixed height for charts */
+    max-height: 250px !important;
     overflow: hidden !important;
     box-sizing: border-box !important;
 }
