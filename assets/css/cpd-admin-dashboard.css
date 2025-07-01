@@ -1002,3 +1002,73 @@ body.wp-admin .admin-page-container .visitor-actions .delete-icon:hover {
     background-color: #dc3545 !important;
     color: #fff !important;
 }
+
+/* Styles for the Admin Management Link to make it look like a button */
+body.client-dashboard-page .account-panel .brand-bottom-section .admin-link-button {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+
+    background-color: #fff !important; /* White background */
+    color: var(--primary-color) !important; /* Text color matching your primary brand color */
+    border: 1px solid var(--primary-color) !important; /* Border matching primary color */
+    padding: 10px 16px !important; /* Padding for button size */
+    border-radius: var(--border-radius) !important; /* Rounded corners, using your defined variable */
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    text-decoration: none !important; /* Remove underline */
+    cursor: pointer !important;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
+    width: calc(100% - 40px) !important; /* Adjust width to account for padding of the parent */
+    box-sizing: border-box !important; /* Include padding in the width calculation */
+    margin-top: 15px !important; /* Space from the Report a Problem button */
+    font-family: var(--font-family) !important; /* Ensure font consistency */
+}
+
+body.client-dashboard-page .account-panel .brand-bottom-section .admin-link-button:hover {
+    background-color: var(--primary-color) !important; /* Primary color on hover */
+    color: #fff !important; /* White text on hover */
+    border-color: var(--primary-color) !important; /* Keep border consistent on hover */
+}
+
+/* Ensure the icon within the button scales correctly */
+body.client-dashboard-page .account-panel .brand-bottom-section .admin-link-button i {
+    font-size: 1rem !important; /* Adjust icon size as needed */
+}
+
+/* Add a fallback to remove default link underline within this section if needed */
+body.client-dashboard-page .account-panel .brand-bottom-section a {
+    text-decoration: none !important;
+}
+
+body.client-dashboard-page .account-panel .brand-bottom-section {
+    display: flex !important;
+    flex-direction: column !important; /* Stack children vertically */
+    align-items: center !important; /* Center children horizontally in a column layout */
+    padding: 20px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+    flex-shrink: 0 !important;
+    background-color: var(--card-bg) !important;
+ 
+}
+
+/* Ensure the buttons themselves adapt */
+/* We already have .admin-link-button styles, let's also ensure report-bug-button is covered */
+body.client-dashboard-page .account-panel .brand-bottom-section .report-bug-button,
+body.client-dashboard-page .account-panel .brand-bottom-section .admin-link-button {
+    width: calc(100% - 40px) !important; /* This should ensure they take up appropriate width */
+    margin-left: 0 !important; /* Remove any default margins that might prevent centering */
+    margin-right: 0 !important;
+}
+
+/* Adjust margin between the two buttons for spacing */
+body.client-dashboard-page .account-panel .brand-bottom-section .report-bug-button {
+    margin-bottom: 15px !important; /* Add space below Report button */
+}
+
+/* Ensure admin-link-button margin-top is adjusted if needed, it's already 15px */
+body.client-dashboard-page .account-panel .brand-bottom-section .admin-link-button {
+    /* Keep its existing styles, ensure margin-top isn't creating too much space if report-bug-button has mb */
+    margin-top: 0 !important; /* Reset this to 0 if report-bug-button handles bottom margin */
+}

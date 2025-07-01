@@ -200,7 +200,8 @@ jQuery(document).ready(function($) {
 
     // --- AJAX for Dashboard Filtering (Client list and date range) ---
     const dashboardContent = $('#clients-section');
-    const clientList = $('.admin-sidebar .account-list');
+    //const clientList = $('.admin-sidebar .account-list');
+    const clientList = $('.account-list');
     const dateRangeSelect = $('.duration-select select');
 
     // Function to load dashboard data via AJAX
@@ -261,15 +262,27 @@ jQuery(document).ready(function($) {
 
     // Event listener for client list clicks (Admin sidebar)
     clientList.on('click', 'li', function() {
+        // IMPORTANT: Update URL hash when clicking client list for proper page state
         const clientId = $(this).data('client-id');
         clientList.find('li').removeClass('active');
         $(this).addClass('active');
+
+        // Update URL parameter
+        const currentUrl = new URL(window.location.href);
+        if (clientId === 'all') {
+            currentUrl.searchParams.delete('client_id'); // Remove parameter for 'all'
+        } else {
+            currentUrl.searchParams.set('client_id', clientId);
+        }
+        window.history.pushState({}, '', currentUrl.toString()); // Update URL without full reload
+
         loadDashboardData(clientId, dateRangeSelect.val());
     });
 
     // Event listener for date range dropdown change
     dateRangeSelect.on('change', function() {
-        const clientId = clientList.find('li.active').data('client-id');
+        const activeClientListItem = clientList.find('li.active');
+        const clientId = activeClientListItem.length > 0 ? activeClientListItem.data('client-id') : 'all'; // Ensure default to 'all'
         loadDashboardData(clientId, $(this).val());
     });
 
@@ -530,9 +543,25 @@ jQuery(document).ready(function($) {
 
     // --- Final Step: Initialize dashboard data on page load ---
     // Load initial dashboard data when the admin page loads.
-    const initialClientId = $('.admin-sidebar .account-list li.active').data('client-id');
+    // Ensure 'All Clients' is initially active and its data-client-id is used.
+    const initialClientIdElement = $('.admin-sidebar .account-list li.active');
+    let initialClientId;
+
+    if (initialClientIdElement.length > 0) {
+        initialClientId = initialClientIdElement.data('client-id');
+    } else {
+        // Fallback if somehow no 'active' client is found, default to 'all'
+        initialClientId = 'all'; 
+        // You might want to programmatically activate the "All Clients" li here
+        $('.admin-sidebar .account-list li[data-client-id="all"]').addClass('active');
+    }
+
+
     const initialDuration = dateRangeSelect.val();
-    if (initialClientId) {
+
+    // Only load if on the specific admin dashboard page
+    // The section-content should be active for the dashboard section.
+    if ($('#clients-section.active').length > 0) {
         loadDashboardData(initialClientId, initialDuration);
     }
 });

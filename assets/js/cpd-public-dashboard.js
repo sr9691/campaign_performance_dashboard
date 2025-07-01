@@ -161,12 +161,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Fetch data and render charts on page load ---
-    // Use the localized data from cpd_dashboard_data object
-    const campaignDataByDate = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data.campaign_data_by_date : [];
-    const campaignDataByAdGroup = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data.campaign_data_by_ad_group : [];
-    // The ad group table is rendered directly by PHP, so no JS update needed for it.
-
-    // Render the charts on load using their respective data.
-    renderImpressionsChart(campaignDataByDate);
-    renderImpressionsByAdGroupChart(campaignDataByAdGroup);
+    // Only render charts if NOT an admin, as admin will handle via cpd-dashboard.js
+    // Access it as a property of the localized object
+    const isAdminUser = typeof cpd_dashboard_data !== 'undefined' && cpd_dashboard_data.is_admin_user;
+    if (!isAdminUser) {
+        const campaignDataByDate = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data.campaign_data_by_date : [];
+        const campaignDataByAdGroup = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data.campaign_data_by_ad_group : [];
+        
+        renderImpressionsChart(campaignDataByDate);
+        renderImpressionsByAdGroupChart(campaignDataByAdGroup);
+    }
 });

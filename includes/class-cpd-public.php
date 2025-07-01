@@ -19,7 +19,9 @@ class CPD_Public {
     public function __construct( $plugin_name, $version ) {
         $this->plugin_name = $plugin_name;
         $this->version = $version;
-        $this->data_provider = new CPD_Data_Provider();
+        // Initialize the data provider here, as it's used in enqueue_scripts_data and display_dashboard
+        require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-data-provider.php'; // Ensure it's loaded
+        $this->data_provider = new CPD_Data_Provider(); 
         
         // Add AJAX handlers for front-end.
         add_action( 'wp_ajax_cpd_update_visitor_status', array( $this, 'update_visitor_status_callback' ) );
@@ -28,7 +30,7 @@ class CPD_Public {
         // Add scripts and styles with a high priority to load after the theme's.
         add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_styles' ), 99 );
         add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
-        add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts_data' ) );
+        add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts_data' ) ); // Localizes script data
         
         // Add login redirect filter.
         add_filter( 'login_redirect', array( $this, 'login_redirect_by_role' ), 10, 3 );
@@ -39,6 +41,9 @@ class CPD_Public {
         
         // Force hide admin bar with action
         add_action( 'wp_head', array( $this, 'force_hide_admin_bar' ) );
+
+        // Register shortcode
+        add_shortcode( 'campaign_dashboard', array( $this, 'display_dashboard' ) );
     }
 
     /**
@@ -96,6 +101,19 @@ class CPD_Public {
             // UPDATED: Enqueue public-specific stylesheet
             wp_enqueue_style( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-public-dashboard.css', array(), $this->version, 'all' );
             
+            if ( current_user_can( 'manage_options' ) ) { // Load only for administrators
+                $style_path_admin = CPD_DASHBOARD_PLUGIN_DIR . 'assets/css/cpd-admin-dashboard.css';
+                $style_version_admin = file_exists( $style_path_admin ) ? filemtime( $style_path_admin ) : $this->version;
+
+                wp_enqueue_style(
+                    $this->plugin_name . '-admin', // Use the same handle as in CPD_Admin for consistency
+                    CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-admin-dashboard.css',
+                    array(), // No specific dependencies, Font Awesome is already loaded
+                    $style_version_admin,
+                    'all'
+                );
+            }
+
             wp_add_inline_style( $this->plugin_name . '-public', '
                 body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
                 #wpadminbar { display: none !important; }
@@ -117,6 +135,23 @@ class CPD_Public {
             $script_version = file_exists( $script_path ) ? filemtime( $script_path ) : $this->version;
 
             wp_enqueue_script( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-public-dashboard.js', array( 'jquery', 'chart-js' ), $script_version, true );
+
+            if ( current_user_can( 'manage_options' ) ) { // Load only for administrators
+                $script_path_admin = CPD_DASHBOARD_PLUGIN_DIR . 'assets/js/cpd-dashboard.js';
+                $script_version_admin = file_exists( $script_path_admin ) ? filemtime( $script_path_admin ) : $this->version;
+
+                wp_enqueue_script( $this->plugin_name . '-admin', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-dashboard.js', array( 'jquery', 'chart-js' ), $script_version_admin, true );
+                
+                // Also localize the admin AJAX data, which is needed by cpd-dashboard.js
+                wp_localize_script(
+                    $this->plugin_name . '-admin',
+                    'cpd_admin_ajax', // This matches the name used in cpd-dashboard.js
+                    array(
+                        'ajax_url' => admin_url( 'admin-ajax.php' ),
+                        'nonce' => wp_create_nonce( 'cpd_admin_nonce' ),
+                    )
+                );
+            }
         }
     }
 
@@ -127,46 +162,71 @@ class CPD_Public {
         global $post;
         if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
             $client_account = null;
-            if ( is_user_logged_in() ) {
-                $current_user = wp_get_current_user();
-                $is_admin = current_user_can( 'manage_options' );
-                if ( $is_admin ) {
-                    $client_account = $this->data_provider->get_client_by_account_id( '316578' ); 
+            $current_user = wp_get_current_user(); 
+            $is_admin = current_user_can( 'manage_options' ); 
+            $selected_client_id_from_url = isset($_GET['client_id']) ? sanitize_text_field($_GET['client_id']) : null; 
+            
+            if ( $is_admin ) {
+                if ( $selected_client_id_from_url && $selected_client_id_from_url !== 'all' ) {
+                    $client_account = $this->data_provider->get_client_by_account_id( $selected_client_id_from_url );
                 } else {
-                    $account_id = $this->data_provider->get_account_id_by_user_id( $current_user->ID );
-                    if ( $account_id ) {
-                        $client_account = $this->data_provider->get_client_by_account_id( $account_id );
-                    }
+                    $client_account = null;
                 }
+            } else { // Client role logic
+                $account_id = $this->data_provider->get_account_id_by_user_id( $current_user->ID ); 
+                if ( $account_id ) { 
+                    $client_account = $this->data_provider->get_client_by_account_id( $account_id ); 
+                } 
             }
 
-            $campaign_data_by_ad_group = [];
-            $campaign_data_by_date = [];
-            $summary_metrics = [];
-            $visitor_data = [];
+            // ONLY localize data if it's NOT an admin.
+            // Admins will fetch data dynamically via AJAX from cpd-dashboard.js
+            if ( ! $is_admin ) {
+                $campaign_data_by_ad_group = [];
+                $campaign_data_by_date = [];
+                $summary_metrics = [];
+                $visitor_data = [];
 
-            if ($client_account) {
-                $start_date = '2025-01-01'; 
-                $end_date = date('Y-m-d');   
+                $target_account_id_for_data = $client_account ? $client_account->account_id : null; 
 
-                $campaign_data_by_ad_group = $this->data_provider->get_campaign_data_by_ad_group( $client_account->account_id, $start_date, $end_date );
-                $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $client_account->account_id, $start_date, $end_date );
-                $summary_metrics = $this->data_provider->get_summary_metrics( $client_account->account_id, $start_date, $end_date );
-                $visitor_data = $this->data_provider->get_visitor_data( $client_account->account_id );
+                // For clients, $target_account_id_for_data should never be null, as they always have a linked account
+                if ($target_account_id_for_data !== null) { 
+                    $start_date = '2025-01-01'; 
+                    $end_date = date('Y-m-d');
+                    
+                    $campaign_data_by_ad_group = $this->data_provider->get_campaign_data_by_ad_group( $target_account_id_for_data, $start_date, $end_date );
+                    $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $target_account_id_for_data, $start_date, $end_date );
+                    $summary_metrics = $this->data_provider->get_summary_metrics( $target_account_id_for_data, $start_date, $end_date );
+                    $visitor_data = $this->data_provider->get_visitor_data( $target_account_id_for_data );
+                }
+
+                wp_localize_script(
+                    $this->plugin_name . '-public',
+                    'cpd_dashboard_data',
+                    array(
+                        'ajax_url' => admin_url( 'admin-ajax.php' ),
+                        'nonce'    => wp_create_nonce( 'cpd_visitor_nonce' ),
+                        'campaign_data_by_ad_group' => $campaign_data_by_ad_group,
+                        'campaign_data_by_date'     => $campaign_data_by_date,
+                        'summary_metrics'           => $summary_metrics,
+                        'visitor_data'              => $visitor_data,
+                        'is_admin_user'             => $is_admin, // <-- ADD THIS LINE
+                    )
+                );
             }
-
-            wp_localize_script(
-                $this->plugin_name . '-public',
-                'cpd_dashboard_data',
-                array(
-                    'ajax_url' => admin_url( 'admin-ajax.php' ),
-                    'nonce'    => wp_create_nonce( 'cpd_visitor_nonce' ),
-                    'campaign_data_by_ad_group' => $campaign_data_by_ad_group,
-                    'campaign_data_by_date'     => $campaign_data_by_date,
-                    'summary_metrics'           => $summary_metrics,
-                    'visitor_data'              => $visitor_data,
-                )
-            );
+             // For admins, we still need to localize a minimal object for other JS functionality in cpd-public-dashboard.js
+            else {
+                wp_localize_script(
+                    $this->plugin_name . '-public',
+                    'cpd_dashboard_data',
+                    array(
+                        'ajax_url' => admin_url( 'admin-ajax.php' ),
+                        'nonce'    => wp_create_nonce( 'cpd_visitor_nonce' ),
+                        'is_admin_user' => $is_admin, // <-- ADD THIS LINE
+                        // No full data for admins here, it comes from cpd-dashboard.js AJAX
+                    )
+                );
+            }
         }
     }
     
@@ -180,8 +240,19 @@ class CPD_Public {
         $is_admin = current_user_can( 'manage_options' ); 
         $client_account = null; 
         
+        // Define $selected_client_id_from_url
+        $selected_client_id_from_url = isset($_GET['client_id']) ? sanitize_text_field($_GET['client_id']) : null; 
+
         if ( $is_admin ) { 
-            $client_account = $this->data_provider->get_client_by_account_id( '316578' ); 
+            // For admins, determine the initial client account.
+            // If a client_id is in the URL, use that.
+            // Otherwise, if 'all' is requested, set client_account to null to signify 'all'.
+            // If no client_id or 'all' is requested, and there are clients, set client_account to null to signify 'all'.
+            if ( $selected_client_id_from_url && $selected_client_id_from_url !== 'all' ) {
+                $client_account = $this->data_provider->get_client_by_account_id( $selected_client_id_from_url );
+            } else {
+                $client_account = null; // Set to null to trigger 'all clients' logic in data provider
+            }
         } else { 
             $account_id = $this->data_provider->get_account_id_by_user_id( $current_user->ID ); 
             if ( $account_id ) { 
@@ -189,17 +260,26 @@ class CPD_Public {
             } 
         }
 
-        if ( ! $client_account ) { return '<p>Dashboard data is not available for your account. Please contact support.</p>'; }
+        if ( ! $client_account && ! $is_admin ) { 
+             return '<p>Dashboard data is not available for your account. Please contact support.</p>';
+        }
         
         $start_date = '2025-01-01'; 
         $end_date = date('Y-m-d');   
 
-        $summary_metrics = $this->data_provider->get_summary_metrics( $client_account->account_id, $start_date, $end_date );
-        $campaign_data = $this->data_provider->get_campaign_data_by_ad_group( $client_account->account_id, $start_date, $end_date ); 
-        $visitor_data = $this->data_provider->get_visitor_data( $client_account->account_id );
+        // Determine the target_account_id for data fetching
+        $target_account_id_for_data = $client_account ? $client_account->account_id : null; 
 
-        // Pass the plugin name to the template
+        // Fetch data based on the determined client (null for all clients if admin)
+        $summary_metrics = $this->data_provider->get_summary_metrics( $target_account_id_for_data, $start_date, $end_date );
+        $campaign_data = $this->data_provider->get_campaign_data_by_ad_group( $target_account_id_for_data, $start_date, $end_date ); 
+        $visitor_data = $this->data_provider->get_visitor_data( $target_account_id_for_data );
+
+        // Pass the plugin name and selected_client_id_from_url to the template
         $plugin_name = $this->plugin_name;
+        // Pass it here so it's available in public-dashboard.php
+        $passed_selected_client_id_from_url = $selected_client_id_from_url;
+        $report_problem_email = get_option('cpd_report_problem_email', 'support@memomarketinggroup.com'); // Get the setting, with a fallback
 
         ob_start();
         include CPD_DASHBOARD_PLUGIN_DIR . 'public/views/public-dashboard.php';

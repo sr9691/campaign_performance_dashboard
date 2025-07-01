@@ -279,16 +279,24 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
         <div id="settings-section" class="card section-content">
             <h2>Dashboard Settings</h2>
             
+
             <div class="settings-section">
                 <h3>General Settings</h3>
-                <form id="settings-form">
+                <form id="settings-form" method="post" action="options.php"> <?php settings_fields( 'cpd-dashboard-settings-group' ); ?>
+                    <?php do_settings_sections( 'cpd-dashboard-settings-group' ); ?>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="client_dashboard_url">Client Dashboard URL</label>
-                            <input type="url" id="client_dashboard_url" name="client_dashboard_url" 
+                            <input type="url" id="client_dashboard_url" name="cpd_client_dashboard_url" 
                                    value="<?php echo esc_url( get_option( 'cpd_client_dashboard_url', '' ) ); ?>" 
                                    placeholder="https://yoursite.com/dashboard">
                             <small class="form-help">Enter the full URL of the page where you added the [campaign_dashboard] shortcode.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="cpd_report_problem_email">Report Problem Email</label> <input type="email" id="cpd_report_problem_email" name="cpd_report_problem_email"
+                                   value="<?php echo esc_attr( get_option('cpd_report_problem_email', 'support@memomarketinggroup.com') ); ?>"
+                                   placeholder="support@yourcompany.com">
+                            <small class="form-help">Email address for the "Report a Problem" button.</small>
                         </div>
                         <div class="form-group">
                             <label for="default_campaign_duration">Default Campaign Duration</label>
@@ -298,14 +306,7 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
                                 <option value="7">7 days</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label for="dashboard_theme">Dashboard Theme</label>
-                            <select id="dashboard_theme" name="dashboard_theme">
-                                <option value="default">Default Theme</option>
-                                <option value="dark">Dark Theme</option>
-                                <option value="light">Light Theme</option>
-                            </select>
-                        </div>
+
                         <div class="form-group">
                             <label for="enable_notifications">Enable Email Notifications</label>
                             <select id="enable_notifications" name="enable_notifications">
@@ -320,6 +321,7 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
                 </form>
             </div>
 
+            
             <div class="settings-section">
                 <h3>Data Management</h3>
                 <div class="data-management-actions">
@@ -331,14 +333,7 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
                             Export All Data
                         </button>
                     </div>
-                    <div class="action-group">
-                        <h4>Clear Cache</h4>
-                        <p>Clear dashboard cache to refresh data and improve performance.</p>
-                        <button type="button" class="action-button-large clear-cache">
-                            <i class="fas fa-refresh"></i>
-                            Clear Cache
-                        </button>
-                    </div>
+
                 </div>
             </div>
         </div>

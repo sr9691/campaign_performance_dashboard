@@ -63,8 +63,11 @@ class CPD_Admin {
         // Add admin menus
         add_action( 'admin_menu', array( $this, 'add_plugin_admin_menu' ) );
 
-        // Register settings
+         // Register settings
         add_action( 'admin_init', array( $this, 'register_settings' ) );
+
+        // Add the new setting for Report Problem Email
+        register_setting( 'cpd-dashboard-settings-group', 'cpd_report_problem_email', 'sanitize_email' );
         
         // Handle dashboard redirect
         add_action( 'admin_init', array( $this, 'handle_dashboard_redirect' ) );
@@ -193,6 +196,7 @@ class CPD_Admin {
         $script_version = file_exists( $script_path ) ? filemtime( $script_path ) : $this->version;
 
         wp_enqueue_script( $this->plugin_name . '-admin', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-dashboard.js', array( 'jquery', 'chart-js' ), $script_version, true );
+        
         
         // Localize script to pass data to JS
         wp_localize_script(
@@ -552,17 +556,39 @@ class CPD_Admin {
     /**
      * AJAX handler for getting dashboard data.
      */
+
     public function ajax_get_dashboard_data() {
-        if ( ! current_user_can( 'cpd_view_dashboard' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) { wp_send_json_error( 'Security check failed.' ); }
-        $client_id = isset( $_POST['client_id'] ) ? sanitize_text_field( $_POST['client_id'] ) : null;
+        if ( ! current_user_can( 'manage_options' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) {
+            wp_send_json_error( 'Security check failed.' );
+        }
+
+        // Allow 'all' or null for client_id to indicate aggregation across all clients
+        $client_id = isset( $_POST['client_id'] ) && $_POST['client_id'] !== 'all' ? sanitize_text_field( $_POST['client_id'] ) : null;
+        
         $duration = isset( $_POST['duration'] ) ? sanitize_text_field( $_POST['duration'] ) : 'Campaign Duration';
         $end_date = date('Y-m-d');
-        switch ($duration) { case '7 days': $start_date = date('Y-m-d', strtotime('-7 days')); break; case '30 days': $start_date = date('Y-m-d', strtotime('-30 days')); break; case 'Campaign Duration': default: $start_date = '2025-01-01'; break; }
-        if ( ! $client_id ) { wp_send_json_error( 'No client ID provided.' ); }
+        $start_date = '2025-01-01'; // Default for 'Campaign Duration'
+
+        switch ($duration) {
+            case '7 days':
+                $start_date = date('Y-m-d', strtotime('-7 days'));
+                break;
+            case '30 days':
+                $start_date = date('Y-m-d', strtotime('-30 days'));
+                break;
+            case 'Campaign Duration':
+            default:
+                $start_date = '2025-01-01'; // This should probably be dynamic based on *earliest* campaign date if 'Campaign Duration' means 'all time'
+                break;
+        }
+
+        // No more error if $client_id is null; we now handle 'all clients' case.
+        
         $summary_metrics = $this->data_provider->get_summary_metrics( $client_id, $start_date, $end_date );
         $campaign_data_by_ad_group = $this->data_provider->get_campaign_data_by_ad_group( $client_id, $start_date, $end_date );
         $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $client_id, $start_date, $end_date );
-        $visitor_data = $this->data_provider->get_visitor_data( $client_id );
+        $visitor_data = $this->data_provider->get_visitor_data( $client_id ); // This one needs special handling if 'all visitors' makes sense.
+
         wp_send_json_success( array(
             'summary_metrics' => $summary_metrics,
             'campaign_data' => $campaign_data_by_ad_group,

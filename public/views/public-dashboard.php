@@ -12,19 +12,30 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+// Variables passed from CPD_Public::display_dashboard()
+// $plugin_name
+// $client_account (can be null for 'All Clients' in admin view)
+// $summary_metrics
+// $campaign_data
+// $visitor_data
+// $passed_selected_client_id_from_url <--- This variable is now passed
+
 $current_user = wp_get_current_user();
 $is_admin = current_user_can( 'manage_options' ); // Check if the current user is an admin
 $memo_logo_url = CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png';
 $memo_seal_url = CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Seal.png';
+
 // Use client_account->logo_url for the top-left logo, with a fallback
-$client_logo_url = isset($client_account->logo_url) ? esc_url($client_account->logo_url) : 'https://i.imgur.com/gK9J2bC.png'; 
+// For 'All Clients' (when $client_account is null), you might want a default generic logo
+$client_logo_url = isset($client_account->logo_url) ? esc_url($client_account->logo_url) : esc_url($memo_logo_url); // Fallback to your main logo if no specific client logo
 
 // Get all clients for the left sidebar (only needed if admin and sidebar is visible)
 $data_provider = new CPD_Data_Provider();
 $all_clients = $is_admin ? $data_provider->get_all_client_accounts() : []; // Only fetch if admin
 
 // Define the URL for the admin management page
-$admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-management' ); // Corrected line
+$admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-management' );
+
 ?>
 
 <div class="dashboard-container">
@@ -35,28 +46,36 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
         </div>
         
         <ul class="account-list">
+            <li class="account-list-item <?php echo ( $passed_selected_client_id_from_url === 'all' || ( !$passed_selected_client_id_from_url && !$client_account ) ) ? 'active' : ''; ?>" 
+                data-client-id="all">
+                All Clients
+            </li>
             <?php if (!empty($all_clients)) : ?>
                 <?php foreach ($all_clients as $client) : ?>
-                    <li class="account-list-item <?php echo ($client->account_id === $client_account->account_id) ? 'active' : ''; ?>" 
+                    <li class="account-list-item <?php echo ( $passed_selected_client_id_from_url === $client->account_id ) ? 'active' : ''; ?>" 
                         data-client-id="<?php echo esc_attr($client->account_id); ?>">
                         <?php echo esc_html($client->client_name); ?>
                     </li>
                 <?php endforeach; ?>
             <?php else : ?>
-                <li class="account-list-item active">No Clients Found</li>
-            <?php endif; ?>
+                <?php endif; ?>
         </ul>
         
         <div class="brand-bottom-section">
-            <button class="report-bug-button">
+            <?php
+            // The $report_problem_email variable will be passed from display_dashboard()
+            $report_email = !empty($report_problem_email) ? esc_attr($report_problem_email) : 'support@example.com';
+            ?>
+            <a href="mailto:<?php echo $report_email; ?>" class="report-bug-button">
                 <i class="fas fa-bug"></i> Report a Problem
-            </button>
+            </a>
             <?php if ( $is_admin ) : // Link to Admin Management page for admins ?>
                 <a href="<?php echo esc_url( $admin_management_url ); ?>" class="admin-link-button">
-                    <i class="fas fa-cog"></i> Admin Management
+                    <i class="fas fa-cog"></i> Admin
                 </a>
             <?php endif; ?>
         </div>
+        
     </div>
     <?php endif; ?>
 
