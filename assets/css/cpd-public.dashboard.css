@@ -1,0 +1,404 @@
+/*
+ * Public-specific CSS for Campaign Performance Dashboard Plugin
+ * This file contains styles for the public-facing client dashboard.
+ */
+
+:root {
+    --primary-color: #2c435d;
+    --secondary-color: #4294cc;
+    --font-family: 'Montserrat', sans-serif;
+    --text-color-dark: #333;
+    --text-color-light: #555;
+    --line-color: #ddd;
+    --border-radius: 8px;
+    --bg-color: #eef2f6;
+    --card-bg: #fff;
+}
+
+/* Force full-screen layout for public dashboard */
+body.client-dashboard-page,
+body.client-dashboard-page #page,
+body.client-dashboard-page #content,
+body.client-dashboard-page .site-main,
+body.client-dashboard-page .wp-site-blocks,
+body.client-dashboard-page main,
+body.client-dashboard-page .site-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: hidden !important;
+    position: static !important;
+}
+
+/* Hide WordPress admin bar and theme elements */
+body.client-dashboard-page #wpadminbar {
+    display: none !important;
+}
+
+body.client-dashboard-page .site-header,
+body.client-dashboard-page .site-footer,
+body.client-dashboard-page .wp-block-template-part {
+    display: none !important;
+}
+
+/* Main dashboard container for public */
+body.client-dashboard-page .dashboard-container {
+    display: flex !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background-color: var(--bg-color) !important;
+    overflow: hidden !important; /* Prevents overall scrollbar */
+    margin: 0 !important;
+    padding: 0 !important;
+    position: fixed !important; /* Important for full viewport coverage */
+    top: 0 !important;
+    left: 0 !important;
+    font-family: var(--font-family) !important;
+    box-sizing: border-box !important; /* Include padding/border in element's total width and height */
+}
+
+/* LEFT SIDEBAR - Account Panel */
+body.client-dashboard-page .account-panel {
+    width: 250px !important;
+    height: 100% !important; /* Changed to 100% of parent .dashboard-container height */
+    background-color: var(--primary-color) !important;
+    color: #fff !important;
+    padding: 0 !important;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1) !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important; /* Prevents scrollbar on sidebar itself */
+    box-sizing: border-box !important;
+}
+
+/* Account panel logo */
+body.client-dashboard-page .account-panel .logo-container {
+    padding: 20px !important;
+    text-align: center !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    flex-shrink: 0 !important;
+}
+
+body.client-dashboard-page .account-panel .logo-container img {
+    max-width: 180px !important;
+    height: auto !important;
+}
+
+/* Account list */
+body.client-dashboard-page .account-list {
+    list-style: none !important;
+    padding: 20px !important;
+    margin: 0 !important;
+    flex: 1 !important;
+    overflow-y: auto !important; /* Allow internal scrolling if accounts list is long */
+}
+
+body.client-dashboard-page .account-list-item {
+    padding: 12px 16px !important;
+    margin-bottom: 8px !important;
+    border-radius: var(--border-radius) !important;
+    cursor: pointer !important;
+    transition: background-color 0.2s ease !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+    font-weight: 500 !important;
+}
+
+body.client-dashboard-page .account-list-item:hover {
+    background-color: var(--secondary-color) !important;
+    color: #fff !important;
+}
+
+body.client-dashboard-page .account-list-item.active {
+    background-color: var(--card-bg) !important;
+    color: var(--primary-color) !important;
+    font-weight: 700 !important;
+}
+
+/* Brand bottom section */
+body.client-dashboard-page .brand-bottom-section {
+    padding: 20px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+    text-align: center !important;
+    flex-shrink: 0 !important;
+    background-color: var(--card-bg) !important; /* White */
+}
+
+body.client-dashboard-page .report-bug-button {
+    background-color: var(--card-bg) !important; /* White */
+    color: var(--primary-color) !important; /* Primary brand color for text */
+    border: 1px solid var(--primary-color) !important; /* Add a subtle border for definition */
+    padding: 8px 16px !important;
+    border-radius: var(--border-radius) !important;
+    font-size: 0.9rem !important;
+    cursor: pointer !important;
+    margin-top: 10px !important;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
+    font-weight: 600 !important; /* Make the text a bit bolder */
+}
+
+body.client-dashboard-page .report-bug-button:hover {
+    background-color: var(--primary-color) !important; /* Primary color on hover */
+    color: #fff !important; /* White text on hover */
+    border-color: var(--primary-color) !important; /* Keep border consistent on hover */
+}
+
+/* MAIN CONTENT AREA - PUBLIC DASHBOARD */
+body.client-dashboard-page .main-content {
+    flex: 1 !important; /* Allows this panel to grow/shrink horizontally */
+    padding: 30px !important;
+    overflow-y: auto !important; /* Allows vertical scrolling ONLY if content overflows */
+    overflow-x: hidden !important; /* Prevents horizontal scroll */
+    background-color: var(--bg-color) !important;
+    height: 100% !important; /* Changed to 100% of its flex parent's height (dashboard-container) */
+    box-sizing: border-box !important;
+}
+
+/* Adjust main content width when admin sidebar is NOT present */
+body.client-dashboard-page .main-content.no-admin-sidebar {
+    /* When no left sidebar, main content takes up more space */
+    /* It already has flex: 1, so it will naturally fill the space. */
+    /* No specific width needed here unless you want to constrain it further. */
+    margin-left: 0 !important; /* Ensure no residual margin from where sidebar would be */
+}
+
+/* Dashboard header */
+body.client-dashboard-page .dashboard-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    margin-bottom: 30px !important;
+    padding-bottom: 20px !important;
+    border-bottom: 1px solid var(--line-color) !important;
+}
+
+body.client-dashboard-page .left-header {
+    display: flex !important;
+    align-items: center !important;
+    gap: 20px !important;
+}
+
+body.client-dashboard-page .client-logo-container {
+    width: 60px !important;
+    height: 60px !important;
+    border-radius: 50% !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background-color: #fff !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+body.client-dashboard-page .header-title-section h1 {
+    font-size: 1.8rem !important;
+    font-weight: 700 !important;
+    margin: 0 0 8px 0 !important;
+    color: var(--text-color-dark) !important;
+    font-family: var(--font-family) !important;
+}
+
+body.client-dashboard-page .duration-select {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    font-size: 0.9rem !important;
+    color: var(--text-color-light) !important;
+}
+
+body.client-dashboard-page .duration-select select {
+    padding: 6px 12px !important;
+    border: 1px solid var(--line-color) !important;
+    border-radius: var(--border-radius) !important;
+    background-color: #fff !important;
+    font-family: var(--font-family) !important;
+}
+
+body.client-dashboard-page .right-header .client-brand-logo img {
+    max-height: 50px !important;
+    width: auto !important;
+}
+
+/* All Accounts heading */
+body.client-dashboard-page .main-content h2 {
+    font-size: 1.5rem !important;
+    font-weight: 600 !important;
+    margin: 0 0 25px 0 !important;
+    color: var(--primary-color) !important;
+    font-family: var(--font-family) !important;
+}
+
+/* Summary cards */
+body.client-dashboard-page .summary-cards {
+    display: flex !important;
+    gap: 20px !important;
+    margin-bottom: 30px !important;
+    flex-wrap: wrap !important;
+}
+
+body.client-dashboard-page .summary-card {
+    background-color: var(--card-bg) !important;
+    padding: 20px !important;
+    border-radius: var(--border-radius) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+    text-align: center !important;
+    flex: 1 !important;
+    min-width: 150px !important;
+}
+
+body.client-dashboard-page .summary-card .value {
+    font-size: 2rem !important;
+    font-weight: 700 !important;
+    margin: 0 0 8px 0 !important;
+    color: var(--primary-color) !important;
+    font-family: var(--font-family) !important;
+}
+
+body.client-dashboard-page .summary-card .label {
+    font-size: 0.9rem !important;
+    color: var(--text-color-light) !important;
+    margin: 0 !important;
+    font-family: var(--font-family) !important;
+}
+
+/* Charts section */
+body.client-dashboard-page .charts-section {
+    display: flex !important;
+    gap: 30px !important;
+    margin-bottom: 30px !important;
+    flex-wrap: wrap !important; /* Allow charts to wrap on smaller screens */
+}
+
+body.client-dashboard-page .chart-container {
+    background-color: var(--card-bg) !important;
+    padding: 20px !important;
+    border-radius: var(--border-radius) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+    height: 350px !important; /* Keep fixed height for charts */
+    max-height: 350px !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    flex: 1 !important; /* Allows chart containers to share horizontal space */
+    min-width: 300px !important; /* Ensure charts don't get too small */
+}
+
+
+body.client-dashboard-page .chart-container h3 {
+    font-size: 1.2rem !important;
+    font-weight: 600 !important;
+    margin: 0 0 20px 0 !important;
+    color: var(--text-color-dark) !important;
+    font-family: var(--font-family) !important;
+}
+
+/* AD GROUP TABLE FIXES */
+body.client-dashboard-page .ad-group-table {
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
+}
+
+/* VISITOR PANEL - PUBLIC DASHBOARD */
+body.client-dashboard-page .visitor-panel {
+    width: 300px !important; /* Fixed width */
+    height: 100% !important; /* Changed to 100% of parent .dashboard-container height */
+    background-color: var(--card-bg) !important;
+    border-left: 1px solid var(--line-color) !important;
+    flex-shrink: 0 !important; /* Prevents shrinking */
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important; /* Contains internal scrolling elements */
+    box-sizing: border-box !important;
+}
+
+body.client-dashboard-page .visitor-panel .header {
+    padding: 20px !important;
+    border-bottom: 1px solid var(--line-color) !important;
+    font-weight: 600 !important;
+    color: var(--text-color-dark) !important;
+    font-family: var(--font-family) !important;
+    background-color: #f8f9fa !important;
+    flex-shrink: 0 !important;
+}
+
+body.client-dashboard-page .visitor-list {
+    flex: 1 !important; /* Allows the list to grow and handle its own scroll */
+    overflow-y: auto !important; /* Enables scrolling for the list of visitors */
+    padding: 20px !important;
+}
+
+body.client-dashboard-page .visitor-card {
+    display: flex !important;
+    align-items: flex-start !important;
+    gap: 15px !important;
+    padding: 15px !important;
+    border-bottom: 1px solid var(--line-color) !important;
+    transition: background-color 0.2s ease !important;
+}
+
+body.client-dashboard-page .visitor-card:hover {
+    background-color: #f9fbfd !important;
+}
+
+body.client-dashboard-page .visitor-logo {
+    width: 45px !important;
+    height: 45px !important;
+    border-radius: 50% !important;
+    overflow: hidden !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background-color: #f0f0f0 !important;
+}
+
+body.client-dashboard-page .visitor-logo img {
+    width: 80% !important;
+    height: auto !important;
+    object-fit: contain !important;
+}
+
+body.client-dashboard-page .visitor-details {
+    flex: 1 !important;
+}
+
+body.client-dashboard-page .visitor-name {
+    font-weight: 600 !important;
+    margin: 0 0 8px 0 !important;
+    color: var(--text-color-dark) !important;
+    font-family: var(--font-family) !important;
+}
+
+body.client-dashboard-page .visitor-info p {
+    margin: 4px 0 !important;
+    font-size: 0.85rem !important;
+    color: var(--text-color-light) !important;
+    font-family: var(--font-family) !important;
+}
+
+body.client-dashboard-page .visitor-actions {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+}
+
+body.client-dashboard-page .visitor-actions .icon {
+    cursor: pointer !important;
+    padding: 6px !important;
+    border-radius: 4px !important;
+    transition: background-color 0.2s ease !important;
+    color: var(--text-color-light) !important;
+}
+
+body.client-dashboard-page .visitor-actions .add-crm-icon:hover {
+    background-color: #28a745 !important;
+    color: #fff !important;
+}
+
+body.client-dashboard-page .visitor-actions .delete-icon:hover {
+    background-color: #dc3545 !important;
+    color: #fff !important;
+}

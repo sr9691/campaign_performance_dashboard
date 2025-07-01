@@ -1,7 +1,5 @@
 <?php
 
-
-
 /**
  * The admin-specific functionality of the plugin.
  *
@@ -55,126 +53,250 @@ class CPD_Admin {
         add_action( 'wp_ajax_cpd_ajax_delete_user', array( $this, 'ajax_handle_delete_user' ) );
         add_action( 'wp_ajax_cpd_get_client_list', array( $this, 'ajax_get_client_list' ) );
 
-        // Enqueue styles/scripts
+        // Enqueue styles/scripts - FIXED: Use global hooks for all admin pages
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
+        
+        // Force admin styles for all our pages
+        add_action( 'admin_head', array( $this, 'force_admin_styles' ) );
 
         // Add admin menus
         add_action( 'admin_menu', array( $this, 'add_plugin_admin_menu' ) );
 
-        // --- ADD THIS LINE TO REGISTER THE SETTINGS ---
+        // Register settings
         add_action( 'admin_init', array( $this, 'register_settings' ) );
+        
+        // Handle dashboard redirect
+        add_action( 'admin_init', array( $this, 'handle_dashboard_redirect' ) );
+        
+        // DEBUG: Add action to show current screen info
+        add_action( 'admin_notices', array( $this, 'debug_screen_info' ) );
+    }
+
+    /**
+     * DEBUG: Show current screen information
+     */
+    public function debug_screen_info() {
+        if ( isset( $_GET['cpd_debug'] ) ) {
+            $screen = get_current_screen();
+            echo '<div class="notice notice-info"><p><strong>Debug Info:</strong> Screen ID: ' . esc_html( $screen->id ) . ' | Page: ' . esc_html( $_GET['page'] ?? 'none' ) . '</p></div>';
+        }
+    }
+
+    /**
+     * Check if we're on one of our admin pages
+     */
+    private function is_our_admin_page() {
+        $screen = get_current_screen();
+        
+        // Check by page parameter first (most reliable)
+        if ( isset( $_GET['page'] ) ) {
+            $page = $_GET['page'];
+            $our_pages = array(
+                $this->plugin_name,
+                $this->plugin_name . '-management',
+                $this->plugin_name . '-settings'
+            );
+            
+            if ( in_array( $page, $our_pages ) ) {
+                return true;
+            }
+        }
+        
+        // Fallback: Check by screen ID
+        if ( $screen ) {
+            $our_screen_patterns = array(
+                'cpd-dashboard',
+                'cpd_dashboard',
+                'campaign-dashboard'
+            );
+            
+            foreach ( $our_screen_patterns as $pattern ) {
+                if ( strpos( $screen->id, $pattern ) !== false ) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     /**
      * Enqueue the admin stylesheets for the admin area.
      */
     public function enqueue_styles() {
-        $screen = get_current_screen();
-        
-        // More specific check for our admin page
-        if ( $screen && ($screen->id === 'toplevel_page_cpd-dashboard' || $screen->id === 'toplevel_page_cpd_dashboard') ) {
-            wp_enqueue_style( 'google-montserrat', 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap', array(), null );
-            wp_enqueue_style( 'font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', array(), '5.15.4', 'all' );
-            wp_enqueue_style( $this->plugin_name, CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-dashboard.css', array(), $this->version, 'all' );
+        // Check if we're on one of our admin pages
+        if ( ! $this->is_our_admin_page() ) {
+            return;
         }
+
+        // Enqueue external dependencies
+        wp_enqueue_style( 'google-montserrat', 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap', array(), null );
+        wp_enqueue_style( 'font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', array(), '5.15.4', 'all' );
+        
+        // Use filemtime() for version to ensure cache busting on CSS file changes
+        $style_path = CPD_DASHBOARD_PLUGIN_DIR . 'assets/css/cpd-admin-dashboard.css';
+        $style_version = file_exists( $style_path ) ? filemtime( $style_path ) : $this->version;
+
+        // Enqueue admin-specific stylesheet with high priority
+        wp_enqueue_style( 
+            $this->plugin_name . '-admin', 
+            CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-admin-dashboard.css', 
+            array(), 
+            $style_version, 
+            'all' 
+        );
+        
+        // Add inline style to ensure our styles take precedence
+        wp_add_inline_style( $this->plugin_name . '-admin', '
+            /* Force our admin styles to load */
+            body.wp-admin { font-family: "Montserrat", sans-serif !important; }
+        ' );
+    }
+
+    /**
+     * Force admin styles and hide default WP elements directly in admin_head.
+     */
+    public function force_admin_styles() {
+        // Check if we're on one of our admin pages
+        if ( ! $this->is_our_admin_page() ) {
+            return;
+        }
+
+        // Only add minimal critical CSS that absolutely must be inline
+        echo '<style type="text/css" id="cpd-admin-critical-styles">
+            /* Critical styles that must load immediately */
+            body.wp-admin { 
+                font-family: "Montserrat", sans-serif !important;
+                background-color: #eef2f6 !important;
+            }
+            
+            /* Ensure our CSS file is loaded if it failed to enqueue */
+            @import url("' . CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-admin-dashboard.css");
+        </style>';
     }
 
     /**
      * Enqueue the admin JavaScript files for the admin area.
      */
     public function enqueue_scripts() {
-        $screen = get_current_screen();
-        
-        // More specific check for our admin page
-        if ( $screen && ($screen->id === 'toplevel_page_cpd-dashboard' || $screen->id === 'toplevel_page_cpd_dashboard') ) {
-            wp_enqueue_script( 'jquery' );
-            wp_enqueue_script( 'chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js', array(), '4.4.1', true );
-            wp_enqueue_script( $this->plugin_name . '-admin', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-dashboard.js', array( 'jquery', 'chart-js' ), $this->version, true );
-            
-            // Localize script to pass data to JS
-            wp_localize_script(
-                $this->plugin_name . '-admin',
-                'cpd_admin_ajax',
-                array(
-                    'ajax_url' => admin_url( 'admin-ajax.php' ),
-                    'nonce' => wp_create_nonce( 'cpd_admin_nonce' ),
-                )
-            );
+        // Check if we're on one of our admin pages
+        if ( ! $this->is_our_admin_page() ) {
+            return;
         }
+
+        wp_enqueue_script( 'jquery' );
+        wp_enqueue_script( 'chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js', array(), '4.4.1', true );
+        
+        // Use filemtime() for version to ensure cache busting on file changes
+        $script_path = CPD_DASHBOARD_PLUGIN_DIR . 'assets/js/cpd-dashboard.js';
+        $script_version = file_exists( $script_path ) ? filemtime( $script_path ) : $this->version;
+
+        wp_enqueue_script( $this->plugin_name . '-admin', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-dashboard.js', array( 'jquery', 'chart-js' ), $script_version, true );
+        
+        // Localize script to pass data to JS
+        wp_localize_script(
+            $this->plugin_name . '-admin',
+            'cpd_admin_ajax',
+            array(
+                'ajax_url' => admin_url( 'admin-ajax.php' ),
+                'nonce' => wp_create_nonce( 'cpd_admin_nonce' ),
+            )
+        );
     }
 
-
-    
     /**
      * Add the top-level menu page for the plugin in the admin dashboard.
      */
     public function add_plugin_admin_menu() {
-    // Use 'manage_options' capability instead of custom capability for main menu
-    $page_hook = add_menu_page(
-        'Campaign Dashboard',           // Page title
-        'Campaign Dashboard',           // Menu title
-        'manage_options',              // Capability - use standard capability
-        $this->plugin_name,            // Menu slug
-        array( $this, 'render_admin_page' ), // Callback function
-        'dashicons-chart-bar',         // Icon
-        6                             // Position
-    );
-    
-    // Add a settings page as a submenu
-    add_submenu_page(
-        $this->plugin_name,
-        'Dashboard Settings',
-        'Settings',
-        'manage_options',
-        $this->plugin_name . '-settings',
-        array( $this, 'render_settings_page' )
-    );
-    
-    // Add action to enqueue scripts only on our admin page
-    add_action( 'admin_print_scripts-' . $page_hook, array( $this, 'enqueue_scripts' ) );
-    add_action( 'admin_print_styles-' . $page_hook, array( $this, 'enqueue_styles' ) );
+        // Main Dashboard link (will redirect to the public dashboard page for all users)
+        add_menu_page(
+            'Campaign Dashboard',           // Page title
+            'Campaign Dashboard',           // Menu title
+            'read',                         // Capability - 'read' allows all logged-in users to see it
+            $this->plugin_name,             // Menu slug (e.g., 'cpd-dashboard')
+            '__return_empty_string',        // Use a simple callback that returns an empty string
+            'dashicons-chart-bar',          // Icon
+            6                               // Position
+        );
+        
+        // Admin Management submenu page (only for admins)
+        $management_page_hook = add_submenu_page(
+            $this->plugin_name,            // Parent slug
+            'Client & User Management',     // Page title
+            'Management',                   // Menu title
+            'manage_options',               // Capability - only admins can see this
+            $this->plugin_name . '-management', // Menu slug (e.g., 'cpd-dashboard-management')
+            array( $this, 'render_admin_management_page' ) // Callback function for management content
+        );
+        
+        // Add a settings page as a submenu
+        $settings_page_hook = add_submenu_page( // Capture settings page hook
+            $this->plugin_name,
+            'Dashboard Settings',
+            'Settings',
+            'manage_options',
+            $this->plugin_name . '-settings',
+            array( $this, 'render_settings_page' )
+        );
     }
 
+    /**
+     * Handles redirection from the admin dashboard menu item to the public dashboard.
+     * This runs on 'admin_init' to ensure early redirection before headers are sent.
+     */
+    public function handle_dashboard_redirect() {
+        // Check if we are on the correct admin page that should redirect
+        if ( is_admin() && isset( $_GET['page'] ) && $_GET['page'] === $this->plugin_name ) {
+            $client_dashboard_url = get_option( 'cpd_client_dashboard_url' );
+            if ( $client_dashboard_url ) {
+                wp_redirect( esc_url_raw( $client_dashboard_url ) );
+                exit; // Crucial to exit after redirect
+            } else {
+                // If URL is not set, display a message on the admin page itself
+                add_action( 'admin_notices', function() {
+                    echo '<div class="notice notice-error is-dismissible"><p><strong>Campaign Dashboard Error:</strong> Public Dashboard URL is not set. Please go to <a href="' . esc_url( admin_url( 'admin.php?page=' . $this->plugin_name . '-settings' ) ) . '">Settings</a> to configure it.</p></div>';
+                });
+            }
+        }
+    }
+
+    /**
+     * Render the admin management page content from the HTML template.
+     * This will now contain ONLY management sections.
+     */
+    public function render_admin_management_page() {
+        // Ensure user has capability to view this page
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( 'You do not have sufficient permissions to access this page.' );
+        }
+
+        $plugin_name = $this->plugin_name;
+        $all_clients = $this->data_provider->get_all_client_accounts();
+        $logs = $this->get_all_logs(); // Assuming logs are part of management
+
+        // Get all users for the user management table
+        $all_users = get_users( array( 'role__in' => array( 'administrator', 'client' ) ) ); // Fetch users with specific roles
+
+        // Get all client accounts for the user linking dropdown (needed in the template)
+        $all_client_accounts_for_dropdown = $this->data_provider->get_all_client_accounts();
+
+        // Make the data_provider object available to the included template
+        $data_provider = $this->data_provider; 
+
+        // Include the admin page template (this should now contain only management sections)
+        include CPD_DASHBOARD_PLUGIN_DIR . 'admin/views/admin-page.php';
+    }
 
     /**
      * Render the admin page content from the HTML template.
+     * This method is now effectively deprecated or will be replaced by redirect.
      */
     public function render_admin_page() {
- 
-        /** Start actual code here */
-        $plugin_name = $this->plugin_name;
-        $all_clients = $this->data_provider->get_all_client_accounts();
-        $selected_client_id = isset( $_GET['client_id'] ) ? sanitize_text_field( $_GET['client_id'] ) : ( !empty($all_clients) ? $all_clients[0]->account_id : '' );
-        $selected_client = $selected_client_id ? $this->data_provider->get_client_by_account_id( $selected_client_id ) : null;
-        $summary_metrics = null; $campaign_data = null; $visitor_data = null;
-        if ( $selected_client ) {
-            $start_date = '2025-01-01'; $end_date = date('Y-m-d');
-            $summary_metrics = $this->data_provider->get_summary_metrics( $selected_client->account_id, $start_date, $end_date );
-            $campaign_data = $this->data_provider->get_campaign_data( $selected_client->account_id, $start_date, $end_date );
-            $visitor_data = $this->data_provider->get_visitor_data( $selected_client->account_id );
-        }
-        $logs = $this->get_all_logs();
-
-        // Force styles inline as backup
-        echo '<style id="cpd-force-styles">
-        body { overflow: hidden !important; }
-        #wpcontent { margin-left: 0 !important; padding: 0 !important; }
-        #wpbody { background: #eef2f6 !important; padding: 0 !important; }
-        .wrap { margin: 0 !important; padding: 0 !important; display: flex !important; width: 100% !important; min-height: 100vh !important; }
-        #adminmenumain, #adminmenuwrap, #adminmenuback, #wpadminbar, #wpfooter { display: none !important; }
-        </style>';
-
-        // Include the admin page template
-        include CPD_DASHBOARD_PLUGIN_DIR . 'admin/views/admin-page.php';
-    }
-    /**
-     * Gets the plugin name.
-     *
-     * @return string The plugin name.
-     */
-    public static function get_plugin_name() {
-        return 'cpd-dashboard'; // Hardcode the plugin name
+        // This method is now effectively a placeholder. The redirect logic is in handle_dashboard_redirect.
+        // It will render an empty page, allowing the admin_notices to display if the URL is not set.
+        // WordPress requires a callback function for add_menu_page, even if it does nothing.
+        // The actual content is handled by the redirect or the admin_notices.
     }
     
     /**
@@ -243,7 +365,7 @@ class CPD_Admin {
         $client_name = sanitize_text_field( $_POST['client_name'] ); $account_id = sanitize_text_field( $_POST['account_id'] ); $logo_url = esc_url_raw( $_POST['logo_url'] ); $webpage_url = esc_url_raw( $_POST['webpage_url'] ); $crm_feed_email = sanitize_text_field( $_POST['crm_feed_email'] );
         $result = $this->wpdb->insert( $this->client_table, array( 'account_id' => $account_id, 'client_name' => $client_name, 'logo_url' => $logo_url, 'webpage_url' => $webpage_url, 'crm_feed_email' => $crm_feed_email, ) );
         $user_id = get_current_user_id();
-        if ( $result ) { $this->log_action( $user_id, 'CLIENT_ADDED', 'Client "' . $client_name . '" (ID: ' . $account_id . ') was added.' ); wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '&message=client_added' ) ); } else { $this->log_action( $user_id, 'CLIENT_ADD_FAILED', 'Failed to add client "' . $client_name . '".' ); wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '&error=client_add_failed' ) ); }
+        if ( $result ) { $this->log_action( $user_id, 'CLIENT_ADDED', 'Client "' . $client_name . '" (ID: ' . $account_id . ') was added.' ); wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management&message=client_added' ) ); } else { $this->log_action( $user_id, 'CLIENT_ADD_FAILED', 'Failed to add client "' . $client_name . '".' ); wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management&error=client_add_failed' ) ); }
         exit;
     }
     
@@ -266,13 +388,13 @@ class CPD_Admin {
         if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'You do not have sufficient permissions to access this page.' ); }
         if ( ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( $_POST['_wpnonce'], 'cpd_delete_client_nonce' ) ) { wp_die( 'Security check failed.' ); }
         $client_id = isset( $_POST['client_id'] ) ? intval( $_POST['client_id'] ) : 0;
-        if ( $client_id <= 0 ) { wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '&error=invalid_client_id' ) ); exit; }
+        if ( $client_id <= 0 ) { wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management&error=invalid_client_id' ) ); exit; }
         $client_name = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT client_name FROM $this->client_table WHERE id = %d", $client_id ) );
         $this->wpdb->delete( $this->client_table, array( 'id' => $client_id ), array( '%d' ) );
         $this->wpdb->delete( $this->user_client_table, array( 'client_id' => $client_id ), array( '%d' ) );
         $user_id = get_current_user_id();
         $this->log_action( $user_id, 'CLIENT_DELETED', 'Client "' . $client_name . '" (ID: ' . $client_id . ') was deleted.' );
-        wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '&message=client_deleted' ) );
+        wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management&message=client_deleted' ) );
         exit;
     }
     
@@ -343,15 +465,15 @@ class CPD_Admin {
         if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'You do not have sufficient permissions to access this page.' ); }
         if ( ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( $_POST['_wpnonce'], 'cpd_add_user_nonce' ) ) { wp_die( 'Security check failed.' ); }
         $username = sanitize_user( $_POST['username'] ); $email = sanitize_email( $_POST['email'] ); $password = $_POST['password']; $role = sanitize_text_field( $_POST['role'] ); $client_account_id = sanitize_text_field( $_POST['client_account_id'] );
-        if ( empty( $username ) || empty( $email ) || empty( $password ) ) { wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '&error=missing_user_fields' ) ); exit; }
+        if ( empty( $username ) || empty( $email ) || empty( $password ) ) { wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management&error=missing_user_fields' ) ); exit; }
         $user_id = wp_create_user( $username, $password, $email );
         if ( ! is_wp_error( $user_id ) ) {
             $user = new WP_User( $user_id ); $user->set_role( $role );
             if ( ! empty( $client_account_id ) ) { $client = $this->data_provider->get_client_by_account_id( $client_account_id ); if ($client) { $this->wpdb->insert( $this->user_client_table, array( 'user_id' => $user_id, 'client_id' => $client->id ) ); } }
             $this->log_action( get_current_user_id(), 'USER_ADDED', 'User "' . $username . '" (ID: ' . $user_id . ') was created with role "' . $role . '".' );
-            wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '&message=user_added' ) );
+            wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management&message=user_added' ) );
         } else {
-            $this->log_action( get_current_user_id(), 'USER_ADD_FAILED', 'Failed to create user "' . $username . '": ' . $user_id->get_error_message() ); wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '&error=user_add_failed&reason=' . urlencode($user_id->get_error_message()) ) ); }
+            $this->log_action( get_current_user_id(), 'USER_ADD_FAILED', 'Failed to create user "' . $username . '": ' . $user_id->get_error_message() ); wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management&error=user_add_failed&reason=' . urlencode($user_id->get_error_message()) ) ); }
         exit;
     }
     
@@ -371,21 +493,29 @@ class CPD_Admin {
         } else {
             $this->log_action( get_current_user_id(), 'USER_ADD_FAILED', 'Failed to create user "' . $username . '" via AJAX: ' . $user_id->get_error_message() ); wp_send_json_error( array( 'message' => $user_id->get_error_message() ) ); }
     }
+    
+    /**
+     * Handle the form submission for deleting a user.
+     */
     public function handle_delete_user_submission() {
         if ( ! current_user_can( 'manage_options' ) ) { wp_die( 'You do not have sufficient permissions to access this page.' ); }
         if ( ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( $_POST['_wpnonce'], 'cpd_delete_user_nonce' ) ) { wp_die( 'Security check failed.' ); }
         $user_id_to_delete = isset( $_POST['user_id'] ) ? intval( $_POST['user_id'] ) : 0;
-        if ( $user_id_to_delete <= 0 || $user_id_to_delete === get_current_user_id() ) { wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '&error=invalid_user_id' ) ); exit; }
+        if ( $user_id_to_delete <= 0 || $user_id_to_delete === get_current_user_id() ) { wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management&error=invalid_user_id' ) ); exit; }
         require_once( ABSPATH . 'wp-admin/includes/user.php' );
         $deleted = wp_delete_user( $user_id_to_delete );
         if ( $deleted ) {
             $this->wpdb->delete( $this->user_client_table, array( 'user_id' => $user_id_to_delete ), array( '%d' ) );
             $this->log_action( get_current_user_id(), 'USER_DELETED', 'User ID ' . $user_id_to_delete . ' was deleted.' );
-            wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '&message=user_deleted&tab=users' ) );
+            wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management&message=user_deleted&tab=users' ) );
         } else {
-            $this->log_action( get_current_user_id(), 'USER_DELETE_FAILED', 'Failed to delete user ID ' . $user_id_to_delete . '.' ); wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '&error=user_delete_failed&tab=users' ) ); }
+            $this->log_action( get_current_user_id(), 'USER_DELETE_FAILED', 'Failed to delete user ID ' . $user_id_to_delete . '.' ); wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management&error=user_delete_failed&tab=users' ) ); }
         exit;
     }
+    
+    /**
+     * AJAX handler for deleting a user.
+     */
     public function ajax_handle_delete_user() {
         if ( ! current_user_can( 'manage_options' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) { wp_send_json_error( array( 'message' => 'Security check failed.' ) ); }
         $user_id_to_delete = isset( $_POST['user_id'] ) ? intval( $_POST['user_id'] ) : 0;
@@ -400,6 +530,9 @@ class CPD_Admin {
             $this->log_action( get_current_user_id(), 'USER_DELETE_FAILED_AJAX', 'Failed to delete user ID ' . $user_id_to_delete . ' via AJAX.' ); wp_send_json_error( array( 'message' => 'Failed to delete user.' ) ); }
     }
 
+    /**
+     * AJAX handler for editing a user.
+     */
     public function ajax_handle_edit_user() {
         if ( ! current_user_can( 'manage_options' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) { wp_send_json_error( array( 'message' => 'Security check failed.' ) ); }
         $user_id = isset( $_POST['user_id'] ) ? intval( $_POST['user_id'] ) : 0;
@@ -415,6 +548,10 @@ class CPD_Admin {
         $this->log_action( get_current_user_id(), 'USER_EDITED_AJAX', 'User ID ' . $user_id . ' was edited via AJAX.' );
         wp_send_json_success( array( 'message' => 'User updated successfully!' ) );
     }
+    
+    /**
+     * AJAX handler for getting dashboard data.
+     */
     public function ajax_get_dashboard_data() {
         if ( ! current_user_can( 'cpd_view_dashboard' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) { wp_send_json_error( 'Security check failed.' ); }
         $client_id = isset( $_POST['client_id'] ) ? sanitize_text_field( $_POST['client_id'] ) : null;
@@ -423,9 +560,15 @@ class CPD_Admin {
         switch ($duration) { case '7 days': $start_date = date('Y-m-d', strtotime('-7 days')); break; case '30 days': $start_date = date('Y-m-d', strtotime('-30 days')); break; case 'Campaign Duration': default: $start_date = '2025-01-01'; break; }
         if ( ! $client_id ) { wp_send_json_error( 'No client ID provided.' ); }
         $summary_metrics = $this->data_provider->get_summary_metrics( $client_id, $start_date, $end_date );
-        $campaign_data = $this->data_provider->get_campaign_data( $client_id, $start_date, $end_date );
+        $campaign_data_by_ad_group = $this->data_provider->get_campaign_data_by_ad_group( $client_id, $start_date, $end_date );
+        $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $client_id, $start_date, $end_date );
         $visitor_data = $this->data_provider->get_visitor_data( $client_id );
-        wp_send_json_success( array( 'summary_metrics' => $summary_metrics, 'campaign_data' => $campaign_data, 'visitor_data' => $visitor_data, ) );
+        wp_send_json_success( array(
+            'summary_metrics' => $summary_metrics,
+            'campaign_data' => $campaign_data_by_ad_group,
+            'campaign_data_by_date' => $campaign_data_by_date,
+            'visitor_data' => $visitor_data,
+        ) );
     }
 
     /**
@@ -437,5 +580,12 @@ class CPD_Admin {
         }
         $clients = $this->data_provider->get_all_client_accounts();
         wp_send_json_success( array( 'clients' => $clients ) );
+    }
+
+    /**
+     * Get the plugin name for use in other classes
+     */
+    public static function get_plugin_name() {
+        return 'cpd-dashboard';
     }
 }

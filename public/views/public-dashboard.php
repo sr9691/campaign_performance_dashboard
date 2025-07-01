@@ -2,6 +2,9 @@
 /**
  * Updated HTML template for the public-facing campaign performance dashboard.
  * This creates the three-column layout: Left sidebar, Main content, Right sidebar
+ *
+ * This version conditionally displays the left sidebar based on user role
+ * and adds a link to the admin management page for administrators.
  */
 
 // Exit if accessed directly.
@@ -10,21 +13,25 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $current_user = wp_get_current_user();
-$is_admin = current_user_can( 'manage_options' );
+$is_admin = current_user_can( 'manage_options' ); // Check if the current user is an admin
 $memo_logo_url = CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png';
 $memo_seal_url = CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Seal.png';
+// Use client_account->logo_url for the top-left logo, with a fallback
 $client_logo_url = isset($client_account->logo_url) ? esc_url($client_account->logo_url) : 'https://i.imgur.com/gK9J2bC.png'; 
 
-// Get all clients for the left sidebar
+// Get all clients for the left sidebar (only needed if admin and sidebar is visible)
 $data_provider = new CPD_Data_Provider();
-$all_clients = $data_provider->get_all_client_accounts();
+$all_clients = $is_admin ? $data_provider->get_all_client_accounts() : []; // Only fetch if admin
+
+// Define the URL for the admin management page
+$admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-management' ); // Corrected line
 ?>
 
 <div class="dashboard-container">
-    <!-- LEFT SIDEBAR - Account Panel -->
+    <?php if ( $is_admin ) : ?>
     <div class="account-panel">
         <div class="logo-container">
-            <img src="<?php echo esc_url( $memo_logo_url ); ?>" alt="MEMO Marketing Group Logo">
+            <img src="<?php echo esc_url( $client_logo_url ); ?>" alt="Client Logo">
         </div>
         
         <ul class="account-list">
@@ -36,24 +43,24 @@ $all_clients = $data_provider->get_all_client_accounts();
                     </li>
                 <?php endforeach; ?>
             <?php else : ?>
-                <li class="account-list-item active">CleanSlate</li>
-                <li class="account-list-item">Appian Media</li>
-                <li class="account-list-item">Club Works</li>
-                <li class="account-list-item">LaundryStinks!</li>
+                <li class="account-list-item active">No Clients Found</li>
             <?php endif; ?>
         </ul>
         
         <div class="brand-bottom-section">
-            <img src="<?php echo esc_url( $memo_logo_url ); ?>" alt="MEMO Marketing Group Logo">
             <button class="report-bug-button">
                 <i class="fas fa-bug"></i> Report a Problem
             </button>
+            <?php if ( $is_admin ) : // Link to Admin Management page for admins ?>
+                <a href="<?php echo esc_url( $admin_management_url ); ?>" class="admin-link-button">
+                    <i class="fas fa-cog"></i> Admin Management
+                </a>
+            <?php endif; ?>
         </div>
     </div>
+    <?php endif; ?>
 
-    <!-- MAIN CONTENT AREA -->
-    <div class="main-content">
-        <!-- Dashboard Header -->
+    <div class="main-content <?php echo $is_admin ? 'has-admin-sidebar' : 'no-admin-sidebar'; ?>">
         <div class="dashboard-header">
             <div class="left-header">
                 <div class="client-logo-container">
@@ -78,10 +85,8 @@ $all_clients = $data_provider->get_all_client_accounts();
             </div>
         </div>
 
-        <!-- All Accounts Section -->
         <h2>All Accounts</h2>
 
-        <!-- Summary Cards -->
         <?php if ( ! empty( $summary_metrics ) ) : ?>
         <div class="summary-cards">
             <div class="summary-card">
@@ -107,7 +112,6 @@ $all_clients = $data_provider->get_all_client_accounts();
         </div>
         <?php endif; ?>
 
-        <!-- Charts Section -->
         <div class="charts-section">
             <div class="chart-container" style="flex: 2;">
                 <h3>Impressions Chart</h3>
@@ -119,7 +123,6 @@ $all_clients = $data_provider->get_all_client_accounts();
             </div>
         </div>
 
-        <!-- Ad Group Data Table -->
         <?php if ( ! empty( $campaign_data ) ) : ?>
         <div class="ad-group-table">
             <table class="data-table">
@@ -148,7 +151,6 @@ $all_clients = $data_provider->get_all_client_accounts();
         <?php endif; ?>
     </div>
 
-    <!-- RIGHT SIDEBAR - Visitor Panel -->
     <?php if ( ! empty( $visitor_data ) ) : ?>
     <div class="visitor-panel">
         <div class="header">All Visitors</div>
@@ -161,30 +163,25 @@ $all_clients = $data_provider->get_all_client_accounts();
                 <div class="visitor-details">
                     <p class="visitor-name">
                         <?php 
-                        // Check if first_name and last_name properties exist to avoid warnings.
                         $full_name = '';
                         if ( ! empty( $visitor->first_name ) ) {
                             $full_name .= $visitor->first_name;
                         }
                         if ( ! empty( $visitor->last_name ) ) {
                             if ( ! empty( $full_name ) ) {
-                                $full_name .= ' '; // Add a space if both names exist
+                                $full_name .= ' ';
                             }
                             $full_name .= $visitor->last_name;
                         }
-                        
-                        // If no name is available, show a placeholder
                         echo esc_html( ! empty( $full_name ) ? $full_name : 'Unknown Visitor' );
                         ?>
                     </p>
-
                     <div class="visitor-info">
                         <p><i class="fas fa-briefcase"></i> <?php echo esc_html( $visitor->job_title ?? 'Unknown' ); ?></p>
                         <p><i class="fas fa-building"></i> <?php echo esc_html( $visitor->company_name ?? 'Unknown' ); ?></p>
                         <p>
                             <i class="fas fa-map-marker-alt"></i> 
                             <?php 
-                            // Concatenate city, state, and zipcode, default to 'Unknown'
                             $location_parts = [];
                             if ( ! empty( $visitor->city ) ) {
                                 $location_parts[] = $visitor->city;

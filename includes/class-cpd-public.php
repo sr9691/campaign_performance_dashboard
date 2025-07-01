@@ -93,7 +93,8 @@ class CPD_Public {
 
             wp_enqueue_style( 'google-montserrat', 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap', array(), null );
             wp_enqueue_style( 'font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', array(), '5.15.4', 'all' );
-            wp_enqueue_style( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-dashboard.css', array(), $this->version, 'all' );
+            // UPDATED: Enqueue public-specific stylesheet
+            wp_enqueue_style( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-public-dashboard.css', array(), $this->version, 'all' );
             
             wp_add_inline_style( $this->plugin_name . '-public', '
                 body, html { margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
@@ -110,7 +111,12 @@ class CPD_Public {
         global $post;
         if ( is_a( $post, 'WP_Post' ) && has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
             wp_enqueue_script( 'chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js', array(), '4.4.1', true );
-            wp_enqueue_script( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-public-dashboard.js', array( 'jquery', 'chart-js' ), $this->version, true );
+            
+            // Use filemtime() for version to ensure cache busting on file changes
+            $script_path = CPD_DASHBOARD_PLUGIN_DIR . 'assets/js/cpd-public-dashboard.js';
+            $script_version = file_exists( $script_path ) ? filemtime( $script_path ) : $this->version;
+
+            wp_enqueue_script( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-public-dashboard.js', array( 'jquery', 'chart-js' ), $script_version, true );
         }
     }
 
@@ -125,7 +131,6 @@ class CPD_Public {
                 $current_user = wp_get_current_user();
                 $is_admin = current_user_can( 'manage_options' );
                 if ( $is_admin ) {
-                    // For admin, use the default account_id or implement admin's current client selection
                     $client_account = $this->data_provider->get_client_by_account_id( '316578' ); 
                 } else {
                     $account_id = $this->data_provider->get_account_id_by_user_id( $current_user->ID );
@@ -141,8 +146,8 @@ class CPD_Public {
             $visitor_data = [];
 
             if ($client_account) {
-                $start_date = '2025-01-01'; // Define your default/initial start date
-                $end_date = date('Y-m-d');   // Define your default/initial end date
+                $start_date = '2025-01-01'; 
+                $end_date = date('Y-m-d');   
 
                 $campaign_data_by_ad_group = $this->data_provider->get_campaign_data_by_ad_group( $client_account->account_id, $start_date, $end_date );
                 $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $client_account->account_id, $start_date, $end_date );
@@ -156,8 +161,8 @@ class CPD_Public {
                 array(
                     'ajax_url' => admin_url( 'admin-ajax.php' ),
                     'nonce'    => wp_create_nonce( 'cpd_visitor_nonce' ),
-                    'campaign_data_by_ad_group' => $campaign_data_by_ad_group, // Data for pie chart and table
-                    'campaign_data_by_date'     => $campaign_data_by_date,     // Data for line chart
+                    'campaign_data_by_ad_group' => $campaign_data_by_ad_group,
+                    'campaign_data_by_date'     => $campaign_data_by_date,
                     'summary_metrics'           => $summary_metrics,
                     'visitor_data'              => $visitor_data,
                 )
@@ -172,12 +177,10 @@ class CPD_Public {
         if ( ! is_user_logged_in() ) { return '<p>Please log in to view the dashboard.</p>'; }
         
         $current_user = wp_get_current_user();
-        $is_admin = current_user_can( 'manage_options' );
+        $is_admin = current_user_can( 'manage_options' ); 
         $client_account = null; 
         
-        // Determine the client_account based on user role
         if ( $is_admin ) { 
-            // Admin users default to account '316578' for demonstration, or could be dynamic
             $client_account = $this->data_provider->get_client_by_account_id( '316578' ); 
         } else { 
             $account_id = $this->data_provider->get_account_id_by_user_id( $current_user->ID ); 
@@ -188,14 +191,15 @@ class CPD_Public {
 
         if ( ! $client_account ) { return '<p>Dashboard data is not available for your account. Please contact support.</p>'; }
         
-        $start_date = '2025-01-01'; // Default start date for dashboard load
-        $end_date = date('Y-m-d');   // Default end date for dashboard load
+        $start_date = '2025-01-01'; 
+        $end_date = date('Y-m-d');   
 
-        // Fetch all data required for the dashboard.
-        // These variables are now available for public-dashboard.php include.
         $summary_metrics = $this->data_provider->get_summary_metrics( $client_account->account_id, $start_date, $end_date );
-        $campaign_data = $this->data_provider->get_campaign_data_by_ad_group( $client_account->account_id, $start_date, $end_date ); // Used for Ad Group Table
+        $campaign_data = $this->data_provider->get_campaign_data_by_ad_group( $client_account->account_id, $start_date, $end_date ); 
         $visitor_data = $this->data_provider->get_visitor_data( $client_account->account_id );
+
+        // Pass the plugin name to the template
+        $plugin_name = $this->plugin_name;
 
         ob_start();
         include CPD_DASHBOARD_PLUGIN_DIR . 'public/views/public-dashboard.php';

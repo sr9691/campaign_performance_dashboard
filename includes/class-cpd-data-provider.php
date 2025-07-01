@@ -37,7 +37,7 @@ class CPD_Data_Provider {
      */
     public function get_client_by_account_id( $account_id ) {
         $table_name = $this->wpdb->prefix . 'cpd_clients';
-        return $this->wpdb->get_row( $this->wpdb->prepare( "SELECT * FROM $table_name WHERE account_id = %s", $account_id ) );
+        return $this->wpdb->get_row( $this->wpdb->prepare( "SELECT * FROM %i WHERE account_id = %s", $table_name, $account_id ) );
     }
 
     /**
@@ -53,9 +53,11 @@ class CPD_Data_Provider {
         return $this->wpdb->get_var(
             $this->wpdb->prepare(
                 "SELECT c.account_id 
-                 FROM $user_client_table AS uc
-                 INNER JOIN $client_table AS c ON uc.client_id = c.id
+                 FROM %i AS uc
+                 INNER JOIN %i AS c ON uc.client_id = c.id
                  WHERE uc.user_id = %d",
+                $user_client_table,
+                $client_table,
                 $user_id
             )
         );
@@ -82,10 +84,11 @@ class CPD_Data_Provider {
                     SUM(clicks) AS clicks,
                     (SUM(clicks) / NULLIF(SUM(impressions), 0)) * 100 AS ctr,
                     MAX(date) AS last_updated
-                 FROM {$table_name}
+                 FROM %i
                  WHERE account_id = %s AND date BETWEEN %s AND %s
                  GROUP BY ad_group_name
                  ORDER BY ad_group_name ASC",
+                $table_name, // Using %i for table name
                 $account_id,
                 $start_date,
                 $end_date
@@ -110,10 +113,11 @@ class CPD_Data_Provider {
                 "SELECT
                     date,
                     SUM(impressions) AS impressions
-                 FROM {$table_name}
+                 FROM %i
                  WHERE account_id = %s AND date BETWEEN %s AND %s
                  GROUP BY date
                  ORDER BY date ASC",
+                $table_name, // Using %i for table name
                 $account_id,
                 $start_date,
                 $end_date
@@ -130,12 +134,15 @@ class CPD_Data_Provider {
     public function get_visitor_data( $account_id ) {
         $table_name = $this->wpdb->prefix . 'cpd_visitors';
         
-        // Debugging logs - keep them for now, remove once confirmed working
+        // Prepare the SQL query to fetch visitor data for the given account_id.
+        // UPDATED: Changed ORDER BY from 'visit_time' to 'last_seen_at'
         $sql_query = $this->wpdb->prepare(
-            "SELECT * FROM $table_name WHERE account_id = %s AND is_archived = %d ORDER BY visit_time DESC",
+            "SELECT * FROM %i WHERE account_id = %s AND is_archived = %d ORDER BY last_seen_at DESC",
+            $table_name, // Using %i for table name
             $account_id,
             0 // Only get unarchived visitors
         );
+
         error_log('CPD_Data_Provider: Fetching visitor data with query: ' . $sql_query);
         
         $results = $this->wpdb->get_results( $sql_query );
@@ -167,7 +174,8 @@ class CPD_Data_Provider {
         $metrics = $this->wpdb->get_row(
             $this->wpdb->prepare(
                 "SELECT SUM(impressions) as total_impressions, SUM(daily_reach) as total_reach, SUM(clicks) as total_clicks
-                 FROM {$campaign_table} WHERE account_id = %s AND date BETWEEN %s AND %s",
+                 FROM %i WHERE account_id = %s AND date BETWEEN %s AND %s",
+                $campaign_table, // Using %i for table name
                 $account_id,
                 $start_date,
                 $end_date
@@ -178,7 +186,8 @@ class CPD_Data_Provider {
         $contact_counts = $this->wpdb->get_row(
             $this->wpdb->prepare(
                 "SELECT SUM(new_profile) as new_contacts, SUM(is_crm_added) as crm_additions
-                 FROM {$visitor_table} WHERE account_id = %s AND last_seen_at BETWEEN %s AND %s",
+                 FROM %i WHERE account_id = %s AND last_seen_at BETWEEN %s AND %s",
+                $visitor_table, // Using %i for table name
                 $account_id,
                 $start_date,
                 $end_date
