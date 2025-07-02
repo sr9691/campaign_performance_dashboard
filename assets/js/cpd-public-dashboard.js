@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // A simple function to handle AJAX requests for visitor status updates
     const sendAjaxRequestForVisitorStatus = async (action, visitorId) => {
         const ajaxUrl = localizedData.ajax_url; 
-        const nonce = localizedData.nonce;
+        const nonce = localizedData.visitor_nonce;
 
         if (!ajaxUrl || !nonce) {
             console.error('sendAjaxRequestForVisitorStatus: Localized data (ajax_url or nonce) is missing.');
@@ -168,7 +168,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Show loading state
         const mainContent = document.querySelector('.main-content');
         if (mainContent) mainContent.style.opacity = '0.5';
 
@@ -179,8 +178,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 body: new URLSearchParams({
-                    action: 'cpd_get_dashboard_data', // Use the same action as Admin
-                    nonce: localizedData.nonce, // Use client's nonce
+                    action: 'cpd_get_dashboard_data',
+                    nonce: localizedData.dashboard_nonce,
                     client_id: clientId,
                     duration: duration
                 }).toString()
@@ -195,15 +194,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (responseData.success) {
                 const data = responseData.data;
 
-                // Update Summary Cards
+                // Update Summary Cards (MODIFIED TO USE data-summary-key)
                 document.querySelectorAll('.summary-card .value').forEach(el => {
-                    const label = el.nextElementSibling.textContent.toLowerCase().replace(/ /g, '_');
-                    let dataKey = label;
-                    if (label.includes('crm') && label.includes('additions')) {
-                        dataKey = 'crm_additions';
-                    }
-                    if (data.summary_metrics[dataKey]) {
+                    const dataKey = el.nextElementSibling.dataset.summaryKey; // Get from new data-key attribute
+                    if (dataKey && data.summary_metrics && data.summary_metrics[dataKey]) {
                         el.textContent = data.summary_metrics[dataKey];
+                    } else {
+                        // console.warn(`Summary data not found for key: ${dataKey}`); // Optional debug
                     }
                 });
 
@@ -306,30 +303,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (!confirm('Are you sure you want to archive this visitor? They will no longer appear in the list.')) return;
                     }
 
-                    // Disable button visually
                     button.style.pointerEvents = 'none';
                     button.style.opacity = '0.6';
 
-                    const success = await sendAjaxRequestForVisitorStatus(updateAction, visitorId); // Corrected function call
+                    const success = await sendAjaxRequestForVisitorStatus(updateAction, visitorId); 
 
                     if (success) {
-                        // After successful update, refresh the client dashboard data
-                        await loadClientDashboardData(); // Call new refresh function
-                        console.log(`Visitor ${visitorId} action "${updateAction}" processed. Client Dashboard reloaded.`);
+                        await loadClientDashboardData();
                     } else {
                         alert('Failed to update visitor status. Please check console for details.');
                     }
-                    // Re-enable button
                     button.style.pointerEvents = 'auto';
                     button.style.opacity = '1';
                 }
             });
         }
+
     }
 
     // --- Fetch initial data and render charts on page load for CLIENTS ONLY ---
     if (!isAdminUser) {
-        // Initial data is already localized via cpd_dashboard_data for public view
         const campaignDataByDate = localizedData.campaign_data_by_date || [];
         const campaignDataByAdGroup = localizedData.campaign_data_by_ad_group || [];
         const summaryMetrics = localizedData.summary_metrics || {};
@@ -337,17 +330,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderImpressionsChart(campaignDataByDate);
         renderImpressionsByAdGroupChart(campaignDataByAdGroup);
-        // Initial update of summary cards from localized data
+        
+        // Initial update of summary cards from localized data (MODIFIED TO USE data-summary-key)
         document.querySelectorAll('.summary-card .value').forEach(el => {
-            const label = el.nextElementSibling.textContent.toLowerCase().replace(/ /g, '_');
-            let dataKey = label;
-            if (label.includes('crm') && label.includes('additions')) {
-                dataKey = 'crm_additions';
-            }
-            if (summaryMetrics[dataKey]) {
+            const dataKey = el.nextElementSibling.dataset.summaryKey; // Get from new data-key attribute
+            if (dataKey && summaryMetrics[dataKey]) {
                 el.textContent = summaryMetrics[dataKey];
+                console.log(`Summary card updated for key: ${dataKey} with value: ${summaryMetrics[dataKey]}`);
             }
         });
+
         // Initial update of visitor list from localized data
         const visitorListContainer = document.querySelector('.visitor-panel .visitor-list');
         if (visitorListContainer) {

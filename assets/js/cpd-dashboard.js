@@ -4,10 +4,12 @@
  */
 
 jQuery(document).ready(function($) {
-    console.log('cpd-dashboard.js: Script started. jQuery document ready.'); // New general debug log
+    console.log('cpd-dashboard.js: Script started. jQuery document ready.');
+
+    // Access localized data from cpd_dashboard_data (public-facing) for nonces needed on public page
+    const localizedPublicData = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data : {};
 
     // --- Force DOM Manipulation (Moved inside document.ready) ---
-    // Force hide WordPress admin elements immediately
     const elementsToHide = [
         '#adminmenumain',
         '#adminmenuwrap',
@@ -24,10 +26,8 @@ jQuery(document).ready(function($) {
         }
     });
     
-    // Force body classes (if needed elsewhere for CSS targeting)
     document.body.classList.add('cpd-dashboard-active');
     
-    // Force wrapper styles
     const wpContent = document.getElementById('wpcontent');
     if (wpContent) {
         wpContent.style.marginLeft = '0';
@@ -50,7 +50,6 @@ jQuery(document).ready(function($) {
         wrap.style.minHeight = '100vh';
         wrap.style.maxWidth = 'none';
     }
-    // console.log('CPD Dashboard DOM manipulation complete (inside document.ready)'); // Debug log
     // --- End Force DOM Manipulation ---
 
 
@@ -58,7 +57,6 @@ jQuery(document).ready(function($) {
     const navLinks = document.querySelectorAll('.admin-sidebar nav a[data-target]');
     const sections = document.querySelectorAll('.admin-main-content');
     
-    // Set the initial active state based on the URL hash.
     const initialHash = window.location.hash.substring(1);
     if (initialHash) {
         navLinks.forEach(l => l.classList.remove('active'));
@@ -78,7 +76,6 @@ jQuery(document).ready(function($) {
         }
     }
 
-    // Add click event listeners to the sidebar navigation links.
     navLinks.forEach(link => {
         link.addEventListener('click', (event) => {
             event.preventDefault();
@@ -106,14 +103,13 @@ jQuery(document).ready(function($) {
         const ctx = $('#impressions-chart-canvas');
         if (ctx.length === 0) return;
 
-        // Get the parent container's dimensions for explicit canvas sizing
         const parent = ctx.parent();
         const parentWidth = parent.innerWidth();
         const parentHeight = parent.innerHeight();
         ctx.attr('width', parentWidth);
         ctx.attr('height', parentHeight);
 
-        const labels = data.map(item => new Date(item.date).toLocaleDateString()); // Corrected to 'date'
+        const labels = data.map(item => new Date(item.date).toLocaleDateString());
         const impressions = data.map(item => item.impressions);
 
         if (impressionsChartInstance) {
@@ -135,7 +131,7 @@ jQuery(document).ready(function($) {
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false, // Keep false with explicit sizing
+                maintainAspectRatio: false,
                 scales: {
                     x: { display: true, title: { display: true, text: 'Date' } },
                     y: { display: true, title: { display: true, text: 'Impressions' } }
@@ -152,7 +148,6 @@ jQuery(document).ready(function($) {
         const ctx = $('#ad-group-chart-canvas');
         if (ctx.length === 0) return;
 
-        // Get the parent container's dimensions for explicit canvas sizing
         const parent = ctx.parent();
         const parentWidth = parent.innerWidth();
         const parentHeight = parent.innerHeight();
@@ -182,7 +177,7 @@ jQuery(document).ready(function($) {
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false, // Keep false with explicit sizing
+                maintainAspectRatio: false,
                 plugins: {
                     legend: {
                         position: 'right',
@@ -197,8 +192,8 @@ jQuery(document).ready(function($) {
 
     // A simple function to handle AJAX requests to our custom endpoint for visitor updates.
     const sendAjaxRequestForVisitor = async (action, visitorId) => {
-        const ajaxUrl = cpd_admin_ajax.ajax_url;
-        const nonce = cpd_admin_ajax.nonce;
+        const ajaxUrl = localizedPublicData.ajax_url;
+        const nonce = localizedPublicData.visitor_nonce;
 
         const formData = new FormData();
         formData.append('action', 'cpd_update_visitor_status');
@@ -238,20 +233,20 @@ jQuery(document).ready(function($) {
 
     // Function to load dashboard data via AJAX
     function loadDashboardData(clientId, duration) {
-        console.log('loadDashboardData: Called with Client ID:', clientId, 'Duration:', duration); // Debug log
-        dashboardContent.css('opacity', 0.5); // Show loading state
+        console.log('loadDashboardData: Called with Client ID:', clientId, 'Duration:', duration);
+        dashboardContent.css('opacity', 0.5);
 
         $.ajax({
             url: cpd_admin_ajax.ajax_url,
             type: 'POST',
             data: {
                 action: 'cpd_get_dashboard_data',
-                nonce: cpd_admin_ajax.nonce,
+                nonce: cpd_dashboard_ajax_nonce.nonce,
                 client_id: clientId,
                 duration: duration
             },
             success: function(response) {
-                console.log('loadDashboardData: AJAX Success. Response:', response); // Debug log
+                console.log('loadDashboardData: AJAX Success. Response:', response);
                 if (response.success) {
                     const data = response.data;
                     
@@ -260,20 +255,21 @@ jQuery(document).ready(function($) {
                         $('.dashboard-header .client-logo-container img').attr('src', data.client_logo_url);
                     }
                     
-                    // Update Summary Cards
+                    // Update Summary Cards (MODIFIED TO USE data-summary-key)
                     $('.summary-card .value').each(function() {
-                        const label = $(this).next('.label').text().toLowerCase().replace(/ /g, '_');
-                        let dataKey = label;
-                        if (label.includes('crm') && label.includes('additions')) {
-                            dataKey = 'crm_additions';
-                        }
-                        if (data.summary_metrics[dataKey]) {
-                            $(this).text(data.summary_metrics[dataKey]);
+                        const el = $(this);
+                        const dataKey = el.next('.label').data('summary-key'); // Get from new data-key attribute
+
+                        if (dataKey && data.summary_metrics && data.summary_metrics[dataKey]) {
+                            el.text(data.summary_metrics[dataKey]);
+                            console.log(`Summary card updated for key: ${dataKey} with value: ${data.summary_metrics[dataKey]}`);
+                        } else {
+                             // console.warn(`Summary data not found for key: ${dataKey}`); // Optional debug
                         }
                     });
                     
                     // Update Charts
-                    renderImpressionsChart(data.campaign_data_by_date); // Corrected to data_by_date
+                    renderImpressionsChart(data.campaign_data_by_date);
                     renderImpressionsByAdGroupChart(data.campaign_data);
 
                     // Update Ad Group Table
@@ -300,7 +296,7 @@ jQuery(document).ready(function($) {
                     visitorListContainer.empty();
                     if (data.visitor_data && data.visitor_data.length > 0) {
                         data.visitor_data.forEach(visitor => {
-                            const memoSealUrl = cpd_admin_ajax.memo_seal_url; 
+                            const memoSealUrl = localizedPublicData.memo_seal_url; 
                             const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
                             const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
                             const email = visitor.email || '';
@@ -340,6 +336,8 @@ jQuery(document).ready(function($) {
             },
             error: function(jqXHR, textStatus, errorThrown) {
                 console.error('loadDashboardData: AJAX request failed. Status:', textStatus, 'Error:', errorThrown, 'Response Text:', jqXHR.responseText);
+                // Optionally display a user-friendly error message
+                // alert('Error loading dashboard data. Please try again.');
             },
             complete: function() {
                 dashboardContent.css('opacity', 1);
@@ -348,43 +346,42 @@ jQuery(document).ready(function($) {
         });
     }
 
-    // Event listener for the "Add CRM" and "Delete" buttons on Visitor Panel
     const visitorPanel = $('.visitor-panel');
-    console.log('cpd-dashboard.js: Visitor Panel element found (jQuery):', visitorPanel.length > 0 ? 'Yes' : 'No', visitorPanel); // Debug log
+    console.log('cpd-dashboard.js: Visitor Panel element found (jQuery):', visitorPanel.length > 0 ? 'Yes' : 'No', visitorPanel);
 
     if (visitorPanel.length > 0) {
-        console.log('cpd-dashboard.js: Attaching click listener to Visitor Panel buttons.'); // Debug log
+        console.log('cpd-dashboard.js: Attaching click listener to Visitor Panel buttons.');
         visitorPanel.on('click', '.add-crm-icon, .delete-icon', async function(event) {
             event.preventDefault();
-            console.log('cpd-dashboard.js: Visitor button clicked!'); // Debug log
+            console.log('cpd-dashboard.js: Visitor button clicked!');
 
             const button = $(this);
             const visitorCard = button.closest('.visitor-card');
             const visitorId = visitorCard.data('visitor-id');
-            console.log('cpd-dashboard.js: Visitor ID:', visitorId); // Debug log
+            console.log('cpd-dashboard.js: Visitor ID:', visitorId);
             
             let updateAction = '';
             if (button.hasClass('add-crm-icon')) {
                 updateAction = 'add_crm';
                 if (!confirm('Are you sure you want to flag this visitor for CRM addition?')) {
-                    console.log('cpd-dashboard.js: CRM Add confirmation cancelled.'); // Debug log
+                    console.log('cpd-dashboard.js: CRM Add confirmation cancelled.');
                     return;
                 }
             } else if (button.hasClass('delete-icon')) {
                 updateAction = 'archive';
                 if (!confirm('Are you sure you want to archive this visitor? They will no longer appear in the list.')) {
-                    console.log('cpd-dashboard.js: Archive confirmation cancelled.'); // Debug log
+                    console.log('cpd-dashboard.js: Archive confirmation cancelled.');
                     return;
                 }
             }
-            console.log('cpd-dashboard.js: Update action:', updateAction); // Debug log
+            console.log('cpd-dashboard.js: Update action:', updateAction);
 
             button.prop('disabled', true).css('opacity', 0.6);
-            console.log('cpd-dashboard.js: Button disabled.'); // Debug log
+            console.log('cpd-dashboard.js: Button disabled.');
 
             try {
                 const success = await sendAjaxRequestForVisitor(updateAction, visitorId);
-                console.log('cpd-dashboard.js: sendAjaxRequestForVisitor success status:', success); // Debug log
+                console.log('cpd-dashboard.js: sendAjaxRequestForVisitor success status:', success);
 
                 if (success) {
                     const activeClientListItem = clientList.find('li.active');
@@ -395,23 +392,22 @@ jQuery(document).ready(function($) {
                     console.log(`cpd-dashboard.js: Visitor ${visitorId} action "${updateAction}" processed. Dashboard reloaded.`);
                 } else {
                     alert('Failed to update visitor status. Please check console for details.');
-                    console.error('cpd-dashboard.js: Failed to update visitor status.'); // Debug log
+                    console.error('cpd-dashboard.js: Failed to update visitor status.');
                 }
             } catch (error) {
-                console.error('cpd-dashboard.js: Error during visitor action AJAX:', error); // Catch any errors from await
+                console.error('cpd-dashboard.js: Error during visitor action AJAX:', error);
                 alert('An unexpected error occurred. Please check console.');
             } finally {
                 button.prop('disabled', false).css('opacity', 1);
-                console.log('cpd-dashboard.js: Button re-enabled.'); // Debug log
+                console.log('cpd-dashboard.js: Button re-enabled.');
             }
         });
     }
 
-    // Event listener for client list clicks (Admin sidebar)
     clientList.on('click', 'li', function() {
-        console.log('cpd-dashboard.js: Client list item clicked!'); // Debug log
+        console.log('cpd-dashboard.js: Client list item clicked!');
         const clientId = $(this).data('client-id');
-        console.log('cpd-dashboard.js: Clicked Client ID:', clientId); // Debug log
+        console.log('cpd-dashboard.js: Clicked Client ID:', clientId);
         clientList.find('li').removeClass('active');
         $(this).addClass('active');
 
@@ -426,19 +422,17 @@ jQuery(document).ready(function($) {
         loadDashboardData(clientId, dateRangeSelect.val());
     });
 
-    // Event listener for date range dropdown change
     dateRangeSelect.on('change', function() {
-        console.log('cpd-dashboard.js: Date range dropdown changed!'); // Debug log
+        console.log('cpd-dashboard.js: Date range dropdown changed!');
         const activeClientListItem = clientList.find('li.active');
         const clientId = activeClientListItem.length > 0 ? activeClientListItem.data('client-id') : 'all';
         loadDashboardData(clientId, $(this).val());
     });
 
     // --- AJAX for Management Forms ---
-    // Handle Add Client form submission
     $('#add-client-form').on('submit', function(event) {
         event.preventDefault();
-        console.log('cpd-dashboard.js: Add Client form submitted!'); // Debug log
+        console.log('cpd-dashboard.js: Add Client form submitted!');
         const form = $(this);
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop('disabled', true).text('Adding...');
@@ -466,10 +460,9 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // Handle Add User form submission
     $('#add-user-form').on('submit', function(event) {
         event.preventDefault();
-        console.log('cpd-dashboard.js: Add User form submitted!'); // Debug log
+        console.log('cpd-dashboard.js: Add User form submitted!');
         const form = $(this);
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop('disabled', true).text('Adding...');
@@ -497,10 +490,9 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // --- Delete Client via AJAX ---
     $('#clients-section .data-table').on('click', '.action-button.delete-client', function(event) {
         event.preventDefault();
-        console.log('cpd-dashboard.js: Delete Client button clicked!'); // Debug log
+        console.log('cpd-dashboard.js: Delete Client button clicked!');
         const row = $(this).closest('tr');
         const clientId = $(this).data('client-id');
         
@@ -516,7 +508,7 @@ jQuery(document).ready(function($) {
                 success: function(response) {
                     if (response.success) {
                         row.fadeOut(300, function() {
-                            $(this).remove(); // Remove the row on success
+                            $(this).remove();
                             alert('Client deleted successfully!');
                         });
                     } else {
@@ -530,10 +522,9 @@ jQuery(document).ready(function($) {
         }
     });
     
-    // --- Delete User via AJAX ---
     $('#users-section .data-table').on('click', '.action-button.delete-user', function(event) {
         event.preventDefault();
-        console.log('cpd-dashboard.js: Delete User button clicked!'); // Debug log
+        console.log('cpd-dashboard.js: Delete User button clicked!');
         const row = $(this).closest('tr');
         const userId = $(this).data('user-id');
         
@@ -549,7 +540,7 @@ jQuery(document).ready(function($) {
                 success: function(response) {
                     if (response.success) {
                         row.fadeOut(300, function() {
-                            $(this).remove(); // Remove the row on success
+                            $(this).remove();
                             alert('User deleted successfully!');
                         });
                     } else {
@@ -563,13 +554,11 @@ jQuery(document).ready(function($) {
         }
     });
 
-    // --- Edit Client via AJAX (Modal Logic) ---
     const editClientModal = $('#edit-client-modal');
     const editClientForm = $('#edit-client-form');
     
-    // Open modal and populate form when Edit button is clicked
     $('#clients-section .data-table').on('click', '.action-button.edit-client', function() {
-        console.log('cpd-dashboard.js: Edit Client button clicked!'); // Debug log
+        console.log('cpd-dashboard.js: Edit Client button clicked!');
         const row = $(this).closest('tr');
         const clientId = $(this).data('client-id');
         const clientName = row.data('client-name');
@@ -578,21 +567,19 @@ jQuery(document).ready(function($) {
         const webpageUrl = row.data('webpage-url');
         const crmEmail = row.data('crm-email');
 
-        // Populate the modal form fields
         $('#edit_client_id').val(clientId);
         $('#edit_client_name').val(clientName);
-        $('#edit_account_id').val(accountId); // This field is read-only
+        $('#edit_account_id').val(accountId);
         $('#edit_logo_url').val(logoUrl);
         $('#edit_webpage_url').val(webpageUrl);
         $('#edit_crm_feed_email').val(crmEmail);
 
-        editClientModal.fadeIn(); // Show the modal
+        editClientModal.fadeIn();
     });
 
-    // Handle Edit Client form submission
     editClientForm.on('submit', function(event) {
         event.preventDefault();
-        console.log('cpd-dashboard.js: Edit Client form submitted!'); // Debug log
+        console.log('cpd-dashboard.js: Edit Client form submitted!');
         const form = $(this);
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop('disabled', true).text('Saving...');
@@ -620,27 +607,23 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // Close modal when close button is clicked
     $('.modal .close').on('click', function() {
-        console.log('cpd-dashboard.js: Modal close button clicked!'); // Debug log
+        console.log('cpd-dashboard.js: Modal close button clicked!');
         $(this).closest('.modal').fadeOut();
     });
 
-    // Close modal when clicking outside of it
     $('.modal').on('click', function(event) {
         if ($(event.target).hasClass('modal')) {
-            console.log('cpd-dashboard.js: Modal background clicked!'); // Debug log
+            console.log('cpd-dashboard.js: Modal background clicked!');
             $(this).fadeOut();
         }
     });
 
-    // --- Edit User via AJAX (Modal Logic) ---
     const editUserModal = $('#edit-user-modal');
     const editUserForm = $('#edit-user-form');
 
-    // Open modal and populate form when Edit button is clicked
     $('#users-section .data-table').on('click', '.action-button.edit-user', function() {
-        console.log('cpd-dashboard.js: Edit User button clicked!'); // Debug log
+        console.log('cpd-dashboard.js: Edit User button clicked!');
         const row = $(this).closest('tr');
         const userId = $(this).data('user-id');
         const username = row.data('username');
@@ -648,20 +631,18 @@ jQuery(document).ready(function($) {
         const role = row.data('role');
         const clientAccountId = row.data('client-account-id');
 
-        // Populate the modal form fields
         $('#edit_user_id').val(userId);
         $('#edit_user_username').val(username);
         $('#edit_user_email').val(email);
         $('#edit_user_role').val(role);
-        $('#edit_linked_client').val(clientAccountId); // This will set the value of the select
+        $('#edit_linked_client').val(clientAccountId);
         
         editUserModal.fadeIn();
     });
 
-    // Handle Edit User form submission
     editUserForm.on('submit', function(event) {
         event.preventDefault();
-        console.log('cpd-dashboard.js: Edit User form submitted!'); // Debug log
+        console.log('cpd-dashboard.js: Edit User form submitted!');
         const form = $(this);
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop('disabled', true).text('Saving...');
@@ -689,10 +670,8 @@ jQuery(document).ready(function($) {
         });
     });
 
-    // --- Searchable Dropdown (Select2) Initialization ---
-    // You'll need to enqueue Select2 CSS and JS in your PHP file.
     if ($.fn.select2) {
-        console.log('cpd-dashboard.js: Select2 found, initializing searchable selects.'); // Debug log
+        console.log('cpd-dashboard.js: Select2 found, initializing searchable selects.');
         $('.searchable-select').select2({
             dropdownParent: $('.card'),
             placeholder: 'Select a client...',
@@ -701,13 +680,11 @@ jQuery(document).ready(function($) {
     }
 
     // --- Final Step: Initialize dashboard data on page load ---
-    // Load initial dashboard data when the admin page loads.
-    // Ensure 'All Clients' is initially active and its data-client-id is used.
     const initialClientIdElement = $('.admin-sidebar .account-list li.active');
     let initialClientId;
 
     if (initialClientIdElement.length > 0) {
-        initialClientId = initialClientIdElement.data('client-id'); // Corrected: Access data from the element
+        initialClientId = initialClientIdElement.data('client-id');
     } else {
         initialClientId = 'all'; 
         $('.admin-sidebar .account-list li[data-client-id="all"]').addClass('active');
@@ -715,10 +692,8 @@ jQuery(document).ready(function($) {
 
     const initialDuration = dateRangeSelect.val();
 
-    // Only load if on the specific admin dashboard page
-    // The section-content should be active for the dashboard section.
     if ($('#clients-section.active').length > 0) {
-        console.log('cpd-dashboard.js: Initializing dashboard data load.'); // Debug log
+        console.log('cpd-dashboard.js: Initializing dashboard data load.');
         loadDashboardData(initialClientId, initialDuration);
     }
 });

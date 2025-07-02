@@ -207,6 +207,16 @@ class CPD_Admin {
                 'nonce' => wp_create_nonce( 'cpd_admin_nonce' ),
             )
         );
+
+
+        // Add a separate nonce for dashboard data fetching
+        wp_localize_script(
+            $this->plugin_name . '-admin',
+            'cpd_dashboard_ajax_nonce', // New object for dashboard data specific nonce
+            array(
+                'nonce' => wp_create_nonce( 'cpd_get_dashboard_data_nonce' ), // Specific nonce for dashboard data
+            )
+        );
     }
 
     /**
@@ -558,7 +568,13 @@ class CPD_Admin {
      */
 
     public function ajax_get_dashboard_data() {
+/*
         if ( ! current_user_can( 'manage_options' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) {
+            wp_send_json_error( 'Security check failed.' );
+        }
+*/
+        // Change the nonce check here to match the new specific nonce
+        if ( ! current_user_can( 'read' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_get_dashboard_data_nonce' ) ) { // ALL users (read cap) can get dashboard data
             wp_send_json_error( 'Security check failed.' );
         }
 

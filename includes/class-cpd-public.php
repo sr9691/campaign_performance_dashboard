@@ -20,12 +20,13 @@ class CPD_Public {
         $this->plugin_name = $plugin_name;
         $this->version = $version;
         // Initialize the data provider here, as it's used in enqueue_scripts_data and display_dashboard
-        require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-data-provider.php'; // Ensure it's loaded
+        require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-data-provider.php';
         $this->data_provider = new CPD_Data_Provider(); 
         
         // Add AJAX handlers for front-end.
         add_action( 'wp_ajax_cpd_update_visitor_status', array( $this, 'update_visitor_status_callback' ) );
         add_action( 'wp_ajax_nopriv_cpd_update_visitor_status', array( $this, 'update_visitor_status_callback' ) );
+        
 
         // Add scripts and styles with a high priority to load after the theme's.
         add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_styles' ), 99 );
@@ -143,13 +144,23 @@ class CPD_Public {
                 wp_enqueue_script( $this->plugin_name . '-admin', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-dashboard.js', array( 'jquery', 'chart-js' ), $script_version_admin, true );
                 
                 // Also localize the admin AJAX data, which is needed by cpd-dashboard.js
+                // Keep cpd_admin_ajax for admin-specific actions handled by cpd-dashboard.js
                 wp_localize_script(
                     $this->plugin_name . '-admin',
                     'cpd_admin_ajax', // This matches the name used in cpd-dashboard.js
                     array(
                         'ajax_url' => admin_url( 'admin-ajax.php' ),
-                        'nonce' => wp_create_nonce( 'cpd_visitor_nonce' ),
+                        'nonce' => wp_create_nonce( 'cpd_admin_nonce' ), // Admin specific nonce for admin management actions
                         'memo_seal_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Seal.png',
+                    )
+                );
+
+                // Add a separate nonce for dashboard data fetching (used by both admin & client JS for dashboard data fetch)
+                wp_localize_script(
+                    $this->plugin_name . '-admin', // Associate with admin script since it uses this nonce
+                    'cpd_dashboard_ajax_nonce',
+                    array(
+                        'nonce' => wp_create_nonce( 'cpd_get_dashboard_data_nonce' ),
                     )
                 );
             }
@@ -180,17 +191,15 @@ class CPD_Public {
                 } 
             }
 
-            // ONLY localize data if it's NOT an admin.
-            // Admins will fetch data dynamically via AJAX from cpd-dashboard.js
-            if ( ! $is_admin ) {
-                $campaign_data_by_ad_group = [];
-                $campaign_data_by_date = [];
-                $summary_metrics = [];
-                $visitor_data = [];
+            $campaign_data_by_ad_group = [];
+            $campaign_data_by_date = [];
+            $summary_metrics = [];
+            $visitor_data = [];
 
-                $target_account_id_for_data = $client_account ? $client_account->account_id : null; 
+            $target_account_id_for_data = $client_account ? $client_account->account_id : null; 
 
-                // For clients, $target_account_id_for_data should never be null, as they always have a linked account
+            // Only fetch initial data if it's NOT an admin OR if an admin is viewing a specific client's data on the public page (not 'all')
+            if ( ! $is_admin || ($is_admin && $target_account_id_for_data !== null) ) { 
                 if ($target_account_id_for_data !== null) { 
                     $start_date = '2025-01-01'; 
                     $end_date = date('Y-m-d');
@@ -200,34 +209,28 @@ class CPD_Public {
                     $summary_metrics = $this->data_provider->get_summary_metrics( $target_account_id_for_data, $start_date, $end_date );
                     $visitor_data = $this->data_provider->get_visitor_data( $target_account_id_for_data );
                 }
+            }
 
-                wp_localize_script(
-                    $this->plugin_name . '-public',
-                    'cpd_dashboard_data',
-                    array(
-                        'ajax_url' => admin_url( 'admin-ajax.php' ),
-                        'nonce'    => wp_create_nonce( 'cpd_visitor_nonce' ),
-                        'campaign_data_by_ad_group' => $campaign_data_by_ad_group,
-                        'campaign_data_by_date'     => $campaign_data_by_date,
-                        'summary_metrics'           => $summary_metrics,
-                        'visitor_data'              => $visitor_data,
-                        'is_admin_user'             => $is_admin, // <-- ADD THIS LINE
-                    )
-                );
-            }
-             // For admins, we still need to localize a minimal object for other JS functionality in cpd-public-dashboard.js
-            else {
-                wp_localize_script(
-                    $this->plugin_name . '-public',
-                    'cpd_dashboard_data',
-                    array(
-                        'ajax_url' => admin_url( 'admin-ajax.php' ),
-                        'nonce'    => wp_create_nonce( 'cpd_visitor_nonce' ),
-                        'is_admin_user' => $is_admin, // <-- ADD THIS LINE
-                        // No full data for admins here, it comes from cpd-dashboard.js AJAX
-                    )
-                );
-            }
+            // Always localize the general dashboard data object.
+            // This is crucial for both admins and non-admins on the public dashboard page
+            wp_localize_script(
+                $this->plugin_name . '-public',
+                'cpd_dashboard_data',
+                array(
+                    'ajax_url' => admin_url( 'admin-ajax.php' ),
+                    'visitor_nonce'    => wp_create_nonce( 'cpd_visitor_nonce' ), // Specific nonce for visitor updates
+                    'dashboard_nonce'  => wp_create_nonce( 'cpd_get_dashboard_data_nonce' ), // Specific nonce for dashboard data
+                    'is_admin_user' => $is_admin,
+                    'memo_seal_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Seal.png',
+                    // Data for non-admins is included here initially
+                    // For admins, these will be empty arrays as they fetch dynamically
+                    'campaign_data_by_ad_group' => $campaign_data_by_ad_group,
+                    'campaign_data_by_date'     => $campaign_data_by_date,
+                    'summary_metrics'           => $summary_metrics,
+                    'visitor_data'              => $visitor_data,
+                    'current_client_account_id' => $client_account ? $client_account->account_id : null,
+                )
+            );
         }
     }
     
@@ -272,6 +275,10 @@ class CPD_Public {
         $target_account_id_for_data = $client_account ? $client_account->account_id : null; 
 
         // Fetch data based on the determined client (null for all clients if admin)
+        // Note: For admins, initial data might not be displayed directly by PHP
+        // but fetched via JS. However, we still need to potentially pass it for
+        // the *initially selected* client if the admin is viewing a specific client.
+        // For 'all clients', the data provider should handle aggregation.
         $summary_metrics = $this->data_provider->get_summary_metrics( $target_account_id_for_data, $start_date, $end_date );
         $campaign_data = $this->data_provider->get_campaign_data_by_ad_group( $target_account_id_for_data, $start_date, $end_date ); 
         $visitor_data = $this->data_provider->get_visitor_data( $target_account_id_for_data );
@@ -307,7 +314,11 @@ class CPD_Public {
         global $wpdb;
         $visitor_table = $wpdb->prefix . 'cpd_visitors';
         $log_table = $wpdb->prefix . 'cpd_action_logs';
-        if ( ! check_ajax_referer( 'cpd_visitor_nonce', 'nonce', false ) ) { wp_send_json_error( 'Invalid security nonce.', 403 ); }
+        
+        // Ensure this nonce check matches 'cpd_visitor_nonce'
+        if ( ! check_ajax_referer( 'cpd_visitor_nonce', 'nonce', false ) ) { 
+            wp_send_json_error( 'Invalid security nonce.', 403 ); 
+        }
         $visitor_id = isset( $_POST['visitor_id'] ) ? sanitize_text_field( $_POST['visitor_id'] ) : '';
         $update_action = isset( $_POST['update_action'] ) ? sanitize_text_field( $_POST['update_action'] ) : '';
         $user_id = get_current_user_id();

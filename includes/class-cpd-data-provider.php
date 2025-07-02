@@ -99,17 +99,16 @@ class CPD_Data_Provider {
         $sql .= " GROUP BY ad_group_name
                  ORDER BY ad_group_name ASC";
 
-        $query = $this->wpdb->prepare( $sql, $table_name, ...$prepare_args ); // Create a variable for the prepared query
-        // error_log('CPD_Data_Provider: Ad Group SQL Query (Account ' . ($account_id ?? 'ALL') . '): ' . $query); // ADD THIS LINE
+        $query = $this->wpdb->prepare( $sql, $table_name, ...$prepare_args );
         
-        $results = $this->wpdb->get_results( $query ); // Get results into a variable
-        // error_log('CPD_Data_Provider: Results for get_campaign_data_by_ad_group (Account ' . ($account_id ?? 'ALL') . '): ' . var_export($results, true)); // ADD THIS LINE
+        $results = $this->wpdb->get_results( $query );
 
         if ( $this->wpdb->last_error ) {
-            error_log('CPD_Data_Provider: Database error for ad group data: ' . $this->wpdb->last_error); // ADD THIS LINE
+            error_log('CPD_Data_Provider: Database error for ad group data: ' . $this->wpdb->last_error);
         }
 
-        return $results;    }
+        return $results;
+    }
 
     /**
      * Get campaign data aggregated by Date for a specific account and date range.
@@ -143,20 +142,19 @@ class CPD_Data_Provider {
         $sql .= " GROUP BY date
                  ORDER BY date ASC";
 
-        $query = $this->wpdb->prepare( $sql, $table_name, ...$prepare_args ); // Create a variable for the prepared query
-        // error_log('CPD_Data_Provider: By Date SQL Query (Account ' . ($account_id ?? 'ALL') . '): ' . $query); // ADD THIS LINE
+        $query = $this->wpdb->prepare( $sql, $table_name, ...$prepare_args );
         
-        $results = $this->wpdb->get_results( $query ); // Get results into a variable
-        // error_log('CPD_Data_Provider: Results for get_campaign_data_by_date (Account ' . ($account_id ?? 'ALL') . '): ' . var_export($results, true)); // ADD THIS LINE
+        $results = $this->wpdb->get_results( $query );
 
         if ( $this->wpdb->last_error ) {
-            error_log('CPD_Data_Provider: Database error for campaign data by date: ' . $this->wpdb->last_error); // ADD THIS LINE
+            error_log('CPD_Data_Provider: Database error for campaign data by date: ' . $this->wpdb->last_error);
         }
 
-        return $results;    }
+        return $results;
+    }
 
     /**
-     * Get visitor data for a specific account.
+     * Get visitor data for a specific account, showing only those not archived and not yet sent to CRM.
      *
      * @param string $account_id The account ID.
      * @return array An array of visitor data rows.
@@ -164,8 +162,10 @@ class CPD_Data_Provider {
     public function get_visitor_data( $account_id ) {
         $table_name = $this->wpdb->prefix . 'cpd_visitors';
         
-        $where_clauses = ["is_archived = %d"];
-        $prepare_args = [0]; // Always filter for unarchived visitors
+        // Filter: Only show visitors that are NOT archived (is_archived = 0)
+        // AND NOT flagged for CRM (is_crm_added = 0).
+        $where_clauses = ["is_archived = %d", "is_crm_added = %d"];
+        $prepare_args = [0, 0]; // 0 for not archived, 0 for not CRM-added
 
         if ( $account_id !== null ) { // Only add account_id filter if it's explicitly provided
             $where_clauses[] = "account_id = %s";
@@ -174,7 +174,7 @@ class CPD_Data_Provider {
         
         $sql_query = $this->wpdb->prepare(
             "SELECT * FROM %i WHERE " . implode(" AND ", $where_clauses) . " ORDER BY last_seen_at DESC",
-            $table_name, // Using %i for table name
+            $table_name,
             ...$prepare_args
         );
 
@@ -199,7 +199,7 @@ class CPD_Data_Provider {
      * @return array An associative array of aggregated metrics.
      */
     public function get_summary_metrics( $account_id, $start_date, $end_date ) {
-        $campaign_table = 'dashdev_cpd_campaign_data'; // Using fixed table name
+        $campaign_table = 'dashdev_cpd_campaign_data';
         $visitor_table = $this->wpdb->prefix . 'cpd_visitors';
 
         // Build WHERE clause for campaign data
@@ -216,12 +216,12 @@ class CPD_Data_Provider {
             $this->wpdb->prepare(
                 "SELECT SUM(impressions) as total_impressions, SUM(daily_reach) as total_reach, SUM(clicks) as total_clicks
                  FROM %i WHERE " . $campaign_where_sql,
-                $campaign_table, // Using %i for table name
+                $campaign_table,
                 ...$campaign_prepare_args
             )
         );
 
-        // Build WHERE clause for visitor data
+        // Build WHERE clause for visitor data (using last_seen_at for date range for CRM additions)
         $visitor_where_clauses = ["last_seen_at BETWEEN %s AND %s"];
         $visitor_prepare_args = [$start_date, $end_date];
         if ( $account_id !== null ) {
@@ -231,34 +231,34 @@ class CPD_Data_Provider {
         $visitor_where_sql = implode(" AND ", $visitor_where_clauses);
 
         // Count new contacts and CRM additions from the visitors table.
-        $contact_counts = $this->wpdb->get_row(
-            $this->wpdb->prepare(
-                "SELECT SUM(new_profile) as new_contacts, SUM(is_crm_added) as crm_additions
-                 FROM %i WHERE " . $visitor_where_sql,
-                $visitor_table, // Using %i for table name
-                ...$visitor_prepare_args
-            )
-        );
+        // SUM(is_crm_added) correctly sums 1s for true and 0s for false.
 
-        /*** Log return data for debuggin */
-        // error_log('CPD_Data_Provider: Raw contact counts from visitors (Account ' . ($account_id ?? 'ALL') . '): ' . var_export($contact_counts, true)); // ADD THIS LINE
+        $crm_additions_sql = $this->wpdb->prepare(
+            "SELECT SUM(new_profile) as new_contacts, SUM(CASE WHEN is_crm_added = 1 THEN 1 ELSE 0 END) as crm_additions_count
+             FROM %i WHERE " . $visitor_where_sql,
+            $visitor_table,
+            ...$visitor_prepare_args
+        );
+        error_log('CPD_Data_Provider: CRM Additions SQL Query: ' . $crm_additions_sql); // Log the CRM SQL query
+
+        $contact_counts = $this->wpdb->get_row( $crm_additions_sql );
         
         $total_clicks = isset($metrics->total_clicks) ? $metrics->total_clicks : 0;
         $total_impressions = isset($metrics->total_impressions) ? $metrics->total_impressions : 0;
         $total_reach = isset($metrics->total_reach) ? $metrics->total_reach : 0;
         $new_contacts = isset($contact_counts->new_contacts) ? $contact_counts->new_contacts : 0;
-        $crm_additions = isset($contact_counts->crm_additions) ? $contact_counts->crm_additions : 0;
+        $crm_additions = isset($contact_counts->crm_additions_count) ? $contact_counts->crm_additions_count : 0;
+        error_log('CPD_Data_Provider: Summary Metrics - Impressions: ' . $metrics->total_impressions . ', Reach: ' . $metrics->total_reach . ', Clicks: ' . $metrics->total_clicks . ', New Contacts: ' . $contact_counts->new_contacts . ', CRM Additions: ' . $contact_counts->crm_additions_count);
 
         $ctr = ($total_impressions > 0) ? ($total_clicks / $total_impressions) * 100 : 0;
 
-        $final_summary = array( // Assign to a variable to log it
+        $final_summary = array(
                 'impressions' => number_format( $total_impressions ),
                 'reach'       => number_format( $total_reach ),
                 'ctr'         => number_format( $ctr, 2 ) . '%',
                 'new_contacts'  => number_format( $new_contacts ),
                 'crm_additions' => number_format( $crm_additions ),
             );
-        // error_log('CPD_Data_Provider: Final summary metrics (Account ' . ($account_id ?? 'ALL') . '): ' . var_export($final_summary, true)); // ADD THIS LINE
 
         return $final_summary;
     }

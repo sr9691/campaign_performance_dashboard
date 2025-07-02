@@ -41,11 +41,6 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
 <div class="dashboard-container">
     <?php if ( $is_admin ) : ?>
     <div class="account-panel">
-        <!--
-        <div class="logo-container">
-            <img src="<?php echo esc_url( $client_logo_url ); ?>" alt="Client Logo">
-        </div>
-        -->
         <ul class="account-list">
             <li class="account-list-item <?php echo ( $passed_selected_client_id_from_url === 'all' || ( !$passed_selected_client_id_from_url && !$client_account ) ) ? 'active' : ''; ?>" 
                 data-client-id="all">
@@ -111,24 +106,19 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
         <div class="summary-cards">
             <div class="summary-card">
                 <p class="value"><?php echo esc_html( $summary_metrics['impressions'] ); ?></p>
-                <p class="label">Impressions</p>
-            </div>
+                <p class="label" data-summary-key="impressions">Impressions</p> </div>
             <div class="summary-card">
                 <p class="value"><?php echo esc_html( $summary_metrics['reach'] ); ?></p>
-                <p class="label">Reach</p>
-            </div>
+                <p class="label" data-summary-key="reach">Reach</p> </div>
             <div class="summary-card">
                 <p class="value"><?php echo esc_html( $summary_metrics['ctr'] ); ?></p>
-                <p class="label">CTR</p>
-            </div>
+                <p class="label" data-summary-key="ctr">CTR</p> </div>
             <div class="summary-card">
                 <p class="value"><?php echo esc_html( $summary_metrics['new_contacts'] ); ?></p>
-                <p class="label">New Contacts</p>
-            </div>
+                <p class="label" data-summary-key="new_contacts">New Contacts</p> </div>
             <div class="summary-card">
                 <p class="value"><?php echo esc_html( $summary_metrics['crm_additions'] ); ?></p>
-                <p class="label">CRM Additions</p>
-            </div>
+                <p class="label" data-summary-key="crm_additions">CRM Additions</p> </div>
         </div>
         <?php endif; ?>
 
