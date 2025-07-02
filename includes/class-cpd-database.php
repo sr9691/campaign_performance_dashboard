@@ -134,6 +134,7 @@ class CPD_Database {
             profile_type varchar(10) DEFAULT '' NOT NULL,
             status varchar(10) DEFAULT 'active' NOT NULL,
             is_crm_added tinyint(1) DEFAULT 0 NOT NULL,
+            crm_sent datetime DEFAULT NULL,
             is_archived tinyint(1) DEFAULT 0 NOT NULL,
             visit_time datetime NOT NULL,
             PRIMARY KEY (id),

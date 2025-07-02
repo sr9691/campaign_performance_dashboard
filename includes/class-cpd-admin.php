@@ -30,9 +30,8 @@ class CPD_Admin {
         $this->client_table = $this->wpdb->prefix . 'cpd_clients';
         $this->user_client_table = $this->wpdb->prefix . 'cpd_client_users';
         
-        
         // Initialize the data provider
-        require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-data-provider.php';
+        require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-data-provider.php'; // Ensure it's loaded
         $this->data_provider = new CPD_Data_Provider();
 
         // Add hooks for form processing (AJAX and non-AJAX)
@@ -52,6 +51,9 @@ class CPD_Admin {
         add_action( 'wp_ajax_cpd_ajax_edit_user', array( $this, 'ajax_handle_edit_user' ) );
         add_action( 'wp_ajax_cpd_ajax_delete_user', array( $this, 'ajax_handle_delete_user' ) );
         add_action( 'wp_ajax_cpd_get_client_list', array( $this, 'ajax_get_client_list' ) );
+        // NEW: AJAX for API token generation
+        add_action( 'wp_ajax_cpd_generate_api_token', array( $this, 'ajax_generate_api_token' ) );
+
 
         // Enqueue styles/scripts - FIXED: Use global hooks for all admin pages
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
@@ -63,17 +65,21 @@ class CPD_Admin {
         // Add admin menus
         add_action( 'admin_menu', array( $this, 'add_plugin_admin_menu' ) );
 
-         // Register settings
+        // Register settings
         add_action( 'admin_init', array( $this, 'register_settings' ) );
 
-        // Add the new setting for Report Problem Email
-        register_setting( 'cpd-dashboard-settings-group', 'cpd_report_problem_email', 'sanitize_email' );
+        // Add the new setting for Report Problem Email (already there)
+        // register_setting( 'cpd-dashboard-settings-group', 'cpd_report_problem_email', 'sanitize_email' ); 
         
         // Handle dashboard redirect
         add_action( 'admin_init', array( $this, 'handle_dashboard_redirect' ) );
         
         // Add action to show current screen info
         // add_action( 'admin_notices', array( $this, 'debug_screen_info' ) );
+
+        // NEW: Register REST API endpoints
+        // Removed from here to be managed by CPD_API class (new approach)
+        // add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
     }
 
     /**
@@ -286,16 +292,10 @@ class CPD_Admin {
         }
 
         $plugin_name = $this->plugin_name;
-        $all_clients = $this->data_provider->get_all_client_accounts();
-        $logs = $this->get_all_logs(); // Assuming logs are part of management
-
-        // Get all users for the user management table
-        $all_users = get_users( array( 'role__in' => array( 'administrator', 'client' ) ) ); // Fetch users with specific roles
-
-        // Get all client accounts for the user linking dropdown (needed in the template)
-        $all_client_accounts_for_dropdown = $this->data_provider->get_all_client_accounts();
-
-        // Make the data_provider object available to the included template
+        $all_clients = $this->data_provider->get_all_client_accounts(); //
+        $logs = $this->get_all_logs();
+        $all_users = get_users( array( 'role__in' => array( 'administrator', 'client' ) ) );
+        $all_client_accounts_for_dropdown = $this->data_provider->get_all_client_accounts(); //
         $data_provider = $this->data_provider; 
 
         // Include the admin page template (this should now contain only management sections)
@@ -320,6 +320,8 @@ class CPD_Admin {
         // This is a placeholder for the settings page content.
         // It will contain a form to set the client dashboard URL.
         $dashboard_page_url = get_option( 'cpd_client_dashboard_url', '' );
+        $api_key = get_option( 'cpd_api_key', '' ); // NEW: Get API Key
+
         ?>
         <div class="wrap">
             <h1>Dashboard Settings</h1>
@@ -334,6 +336,21 @@ class CPD_Admin {
                             <p class="description">Enter the full URL of the page where you added the <code>[campaign_dashboard]</code> shortcode.</p>
                         </td>
                     </tr>
+                    <tr valign="top">
+                        <th scope="row">Report Problem Email</th>
+                        <td>
+                            <input type="email" name="cpd_report_problem_email" value="<?php echo esc_attr( get_option('cpd_report_problem_email', 'support@memomarketinggroup.com') ); ?>" size="50" />
+                            <p class="description">Email address for the "Report a Problem" button on the dashboard.</p>
+                        </td>
+                    </tr>
+                    <tr valign="top">
+                        <th scope="row">REST API Key</th>
+                        <td>
+                            <input type="text" id="cpd_api_key_field" name="cpd_api_key" value="<?php echo esc_attr( $api_key ); ?>" size="60" readonly />
+                            <button type="button" id="generate_api_key_button" class="button button-secondary">Generate New Key</button>
+                            <p class="description">This key is used for secure API data imports (e.g., from Make.com). Regenerating will invalidate the old key.</p>
+                        </td>
+                    </tr>
                 </table>
                 <?php submit_button(); ?>
             </form>
@@ -346,6 +363,9 @@ class CPD_Admin {
      */
     public function register_settings() {
         register_setting( 'cpd-dashboard-settings-group', 'cpd_client_dashboard_url', 'esc_url_raw' );
+        register_setting( 'cpd-dashboard-settings-group', 'cpd_report_problem_email', 'sanitize_email' );
+        // NEW: Register the API key setting. We'll sanitize it as text, as it's a random string.
+        register_setting( 'cpd-dashboard-settings-group', 'cpd_api_key', 'sanitize_text_field' );
     }
 
     /**
@@ -357,8 +377,9 @@ class CPD_Admin {
 
     /**
      * Logs an action to the database.
+     * This is made public so CPD_API can use it.
      */
-    private function log_action( $user_id, $action_type, $description ) {
+    public function log_action( $user_id, $action_type, $description ) {
         $this->wpdb->insert(
             $this->log_table,
             array(
@@ -369,7 +390,6 @@ class CPD_Admin {
             array('%d', '%s', '%s')
         );
     }
-
     /**
      * Handle the form submission for adding a new client.
      */
@@ -632,6 +652,26 @@ class CPD_Admin {
         }
         $clients = $this->data_provider->get_all_client_accounts();
         wp_send_json_success( array( 'clients' => $clients ) );
+    }
+
+    /**
+     * AJAX callback to generate a new API token.
+     */
+    public function ajax_generate_api_token() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Permission denied.' );
+        }
+
+        // Generate a random, cryptographically secure token
+        $new_token = wp_generate_uuid4(); // WordPress's built-in UUID generator is good for this
+        // For a longer/stronger key, you could use bin2hex(random_bytes(32)) for 64 chars
+
+        update_option( 'cpd_api_key', $new_token );
+
+        // Log the token generation
+        $this->log_action( get_current_user_id(), 'API_TOKEN_GENERATED', 'New API token generated for data import.' );
+
+        wp_send_json_success( array( 'token' => $new_token ) );
     }
 
     /**

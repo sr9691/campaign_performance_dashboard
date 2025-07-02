@@ -24,7 +24,6 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
 ?>
 
 <div class="admin-page-container">
-    <!-- LEFT SIDEBAR - Navigation Panel -->
     <div class="admin-sidebar">
         <div class="logo-container">
             <img src="<?php echo esc_url( $memo_logo_url ); ?>" alt="MEMO Marketing Group">
@@ -67,15 +66,12 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
         </div>
     </div>
 
-    <!-- MAIN CONTENT AREA -->
     <div class="admin-main-content">
         <h1>Admin Management</h1>
 
-        <!-- Clients Section -->
         <div id="clients-section" class="card section-content active">
             <h2>Client Management</h2>
             
-            <!-- Add New Client Form -->
             <div class="add-form-section">
                 <h3>Add New Client</h3>
                 <form id="add-client-form">
@@ -107,7 +103,6 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
                 </form>
             </div>
 
-            <!-- All Clients Table -->
             <div class="table-section">
                 <h3>All Clients</h3>
                 <div class="table-container">
@@ -171,11 +166,9 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
             </div>
         </div>
 
-        <!-- Users Section -->
         <div id="users-section" class="card section-content">
             <h2>User Management</h2>
             
-            <!-- Add New User Form -->
             <div class="add-form-section">
                 <h3>Add New User</h3>
                 <form id="add-user-form">
@@ -217,7 +210,6 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
                 </form>
             </div>
 
-            <!-- All Users Table -->
             <div class="table-section">
                 <h3>All Users</h3>
                 <div class="table-container">
@@ -234,10 +226,10 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
                         <tbody>
                             <?php if ( ! empty( $all_users ) ) : ?>
                                 <?php foreach ( $all_users as $user ) : 
-                                    $user_client_account_id = $data_provider->get_account_id_by_user_id( $user->ID );
+                                    $user_client_account_id = $data_provider->get_account_id_by_user_id( $user->ID ); //
                                     $linked_client_name = 'N/A';
                                     if ($user_client_account_id) {
-                                        $linked_client_obj = $data_provider->get_client_by_account_id($user_client_account_id);
+                                        $linked_client_obj = $data_provider->get_client_by_account_id($user_client_account_id); //
                                         if ($linked_client_obj) {
                                             $linked_client_name = $linked_client_obj->client_name;
                                         }
@@ -275,14 +267,13 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
             </div>
         </div>
 
-        <!-- Settings Section -->
         <div id="settings-section" class="card section-content">
             <h2>Dashboard Settings</h2>
             
-
             <div class="settings-section">
                 <h3>General Settings</h3>
-                <form id="settings-form" method="post" action="options.php"> <?php settings_fields( 'cpd-dashboard-settings-group' ); ?>
+                <form id="settings-form" method="post" action="options.php"> 
+                    <?php settings_fields( 'cpd-dashboard-settings-group' ); ?>
                     <?php do_settings_sections( 'cpd-dashboard-settings-group' ); ?>
                     <div class="form-grid">
                         <div class="form-group">
@@ -293,10 +284,21 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
                             <small class="form-help">Enter the full URL of the page where you added the [campaign_dashboard] shortcode.</small>
                         </div>
                         <div class="form-group">
-                            <label for="cpd_report_problem_email">Report Problem Email</label> <input type="email" id="cpd_report_problem_email" name="cpd_report_problem_email"
+                            <label for="cpd_report_problem_email">Report Problem Email</label> 
+                            <input type="email" id="cpd_report_problem_email" name="cpd_report_problem_email"
                                    value="<?php echo esc_attr( get_option('cpd_report_problem_email', 'support@memomarketinggroup.com') ); ?>"
                                    placeholder="support@yourcompany.com">
                             <small class="form-help">Email address for the "Report a Problem" button.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="cpd_api_key_field">REST API Key</label>
+                            <div class="api-key-input-group">
+                                <input type="text" id="cpd_api_key_field" name="cpd_api_key" 
+                                       value="<?php echo esc_attr( get_option('cpd_api_key', '') ); ?>" 
+                                       readonly>
+                                <button type="button" id="generate_api_key_button" class="button button-secondary">Generate New Key</button>
+                            </div>
+                            <small class="form-help">This key is used for secure API data imports (e.g., from Make.com). Regenerating will invalidate the old key.</small>
                         </div>
                         <div class="form-group">
                             <label for="default_campaign_duration">Default Campaign Duration</label>
@@ -338,7 +340,6 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
             </div>
         </div>
 
-        <!-- Action Logs Section -->
         <div id="logs-section" class="card section-content">
             <h2>Action Logs</h2>
             <div class="table-container">
@@ -371,8 +372,6 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
             </div>
         </div>
 
-        <!-- Modals for Edit Client and Edit User -->
-        <!-- Edit Client Modal -->
         <div id="edit-client-modal" class="modal" style="display:none;">
             <div class="modal-content">
                 <span class="close">&times;</span>
@@ -406,7 +405,6 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
             </div>
         </div>
 
-        <!-- Edit User Modal -->
         <div id="edit-user-modal" class="modal" style="display:none;">
             <div class="modal-content">
                 <span class="close">&times;</span>

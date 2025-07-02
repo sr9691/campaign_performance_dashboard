@@ -255,16 +255,15 @@ jQuery(document).ready(function($) {
                         $('.dashboard-header .client-logo-container img').attr('src', data.client_logo_url);
                     }
                     
-                    // Update Summary Cards (MODIFIED TO USE data-summary-key)
+                    // Update Summary Cards
                     $('.summary-card .value').each(function() {
                         const el = $(this);
-                        const dataKey = el.next('.label').data('summary-key'); // Get from new data-key attribute
+                        const dataKey = el.next('.label').data('summary-key');
 
                         if (dataKey && data.summary_metrics && data.summary_metrics[dataKey]) {
                             el.text(data.summary_metrics[dataKey]);
-                            console.log(`Summary card updated for key: ${dataKey} with value: ${data.summary_metrics[dataKey]}`);
                         } else {
-                             // console.warn(`Summary data not found for key: ${dataKey}`); // Optional debug
+                             // console.warn(`Summary data not found for key: ${dataKey}`);
                         }
                     });
                     
@@ -336,8 +335,6 @@ jQuery(document).ready(function($) {
             },
             error: function(jqXHR, textStatus, errorThrown) {
                 console.error('loadDashboardData: AJAX request failed. Status:', textStatus, 'Error:', errorThrown, 'Response Text:', jqXHR.responseText);
-                // Optionally display a user-friendly error message
-                // alert('Error loading dashboard data. Please try again.');
             },
             complete: function() {
                 dashboardContent.css('opacity', 1);
@@ -678,6 +675,41 @@ jQuery(document).ready(function($) {
             allowClear: true
         });
     }
+
+    // NEW: API Key Generation Logic
+    $('#generate_api_key_button').on('click', function(event) {
+        event.preventDefault();
+        const button = $(this);
+        const apiKeyField = $('#cpd_api_key_field');
+        const originalText = button.text();
+
+        button.prop('disabled', true).text('Generating...');
+
+        $.ajax({
+            url: cpd_admin_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'cpd_generate_api_token',
+                nonce: cpd_admin_ajax.nonce // Using the general admin nonce
+            },
+            success: function(response) {
+                if (response.success && response.data.token) {
+                    apiKeyField.val(response.data.token);
+                    alert('New API Key generated successfully!');
+                } else {
+                    alert('Error: ' + (response.data && response.data.message ? response.data.message : 'Failed to generate API key.'));
+                    console.error('API Key generation failed:', response);
+                }
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                alert('An error occurred during API key generation.');
+                console.error('AJAX error during API key generation:', textStatus, errorThrown, jqXHR.responseText);
+            },
+            complete: function() {
+                button.prop('disabled', false).text(originalText);
+            }
+        });
+    });
 
     // --- Final Step: Initialize dashboard data on page load ---
     const initialClientIdElement = $('.admin-sidebar .account-list li.active');
