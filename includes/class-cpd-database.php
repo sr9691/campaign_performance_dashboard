@@ -104,12 +104,14 @@ class CPD_Database {
         dbDelta( $sql_campaign_data );
 
         // Table for Visitor Data (RB2B).
+        // CRITICAL CHANGE: UNIQUE KEY is now `unique_linkedin_account` on `linkedin_url` + `account_id`.
+        // `visitor_id` is a VARCHAR for external ID, and is nullable as per previous steps.
         $table_name_visitors = $this->wpdb->prefix . 'cpd_visitors';
         $sql_visitors = "CREATE TABLE $table_name_visitors (
             id mediumint(9) NOT NULL AUTO_INCREMENT,
-            visitor_id varchar(255) NOT NULL,
+            visitor_id varchar(255) NULL DEFAULT NULL, -- Changed to NULLABLE to match current DB and API handling
             account_id varchar(255) NOT NULL,
-            linkedin_url varchar(255) DEFAULT '' NOT NULL,
+            linkedin_url varchar(255) DEFAULT '' NOT NULL, -- Confirmed NOT NULL as per your latest change
             company_name varchar(255) DEFAULT '' NOT NULL,
             all_time_page_views int(11) DEFAULT 0 NOT NULL,
             first_name varchar(255) DEFAULT '' NOT NULL,
@@ -136,9 +138,9 @@ class CPD_Database {
             is_crm_added tinyint(1) DEFAULT 0 NOT NULL,
             crm_sent datetime DEFAULT NULL,
             is_archived tinyint(1) DEFAULT 0 NOT NULL,
-            visit_time datetime NOT NULL,
             PRIMARY KEY (id),
-            UNIQUE KEY visitor_account (visitor_id, account_id)
+            -- Corrected UNIQUE KEY to match the live DB and API logic: (linkedin_url, account_id)
+            UNIQUE KEY unique_linkedin_account (linkedin_url, account_id)
         ) $this->charset_collate;";
         dbDelta( $sql_visitors );
         

@@ -229,29 +229,44 @@ class CPD_Admin {
      * Add the top-level menu page for the plugin in the admin dashboard.
      */
     public function add_plugin_admin_menu() {
-        // Main Dashboard link (will redirect to the public dashboard page for all users)
+
+        // First, register the top-level menu item.
+        // The callback is important: it should lead to your main dashboard page.
+        // If this menu item is just a placeholder to create submenus, it often needs a specific callback.
+        // Since you're redirecting to a public page, '__return_empty_string' is fine here.
         add_menu_page(
-            'Campaign Dashboard',           // Page title
-            'Campaign Dashboard',           // Menu title
-            'read',                         // Capability - 'read' allows all logged-in users to see it
-            $this->plugin_name,             // Menu slug (e.g., 'cpd-dashboard')
-            '__return_empty_string',        // Use a simple callback that returns an empty string
-            'dashicons-chart-bar',          // Icon
-            6                               // Position
+            'Campaign Dashboard',             // Page title
+            'Campaign Dashboard',             // Menu title
+            'read',                           // Capability required to see this menu item
+            $this->plugin_name,               // Unique menu slug: 'cpd-dashboard'
+            '__return_empty_string',          // This callback is used when clicking the top-level menu item directly
+            'dashicons-chart-bar',            // Icon URL or Dashicon class
+            6                                 // Position in the menu order
+        );
+
+        // Now, add the actual submenu pages.
+        // The first submenu often uses the same slug as the parent to appear as the primary link
+        // when the parent menu is clicked.
+        add_submenu_page(
+            $this->plugin_name,                 // Parent slug: 'cpd-dashboard'
+            'Campaign Dashboard',                // Page title for this specific submenu
+            'Dashboard',                         // Menu title for this submenu (e.g., 'Dashboard')
+            'read',                              // Capability (same as parent, or higher if needed)
+            $this->plugin_name,                 // !!! IMPORTANT: Use the SAME SLUG as the parent menu here for the first submenu. This makes it the default view when the parent is clicked.
+            '__return_empty_string'             // Callback for this submenu (will be handled by redirect)
+        );
+
+
+        add_submenu_page(
+            $this->plugin_name,                 // Parent slug: 'cpd-dashboard'
+            'Client & User Management',          // Page title
+            'Management',                        // Menu title
+            'manage_options',                    // Capability - only admins can see this
+            $this->plugin_name . '-management',  // Menu slug (e.g., 'cpd-dashboard-management')
+            array( $this, 'render_admin_management_page' ) // Callback for management content
         );
         
-        // Admin Management submenu page (only for admins)
-        $management_page_hook = add_submenu_page(
-            $this->plugin_name,            // Parent slug
-            'Client & User Management',     // Page title
-            'Management',                   // Menu title
-            'manage_options',               // Capability - only admins can see this
-            $this->plugin_name . '-management', // Menu slug (e.g., 'cpd-dashboard-management')
-            array( $this, 'render_admin_management_page' ) // Callback function for management content
-        );
-        
-        // Add a settings page as a submenu
-        $settings_page_hook = add_submenu_page( // Capture settings page hook
+        add_submenu_page(
             $this->plugin_name,
             'Dashboard Settings',
             'Settings',
