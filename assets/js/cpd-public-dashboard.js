@@ -1,3 +1,6 @@
+// assets/js/cpd-public-dashboard.js
+console.log('*** cpd-public-dashboard.js file HAS LOADED AND IS EXECUTING! ***');
+
 /**
  * Public-facing JavaScript for the Campaign Performance Dashboard.
  */
@@ -8,6 +11,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!dashboardContainer) {
         return;
     }
+
+    // Access localized data
+    const localizedData = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data : {};
+    const isAdminUser = localizedData.is_admin_user;
 
     // --- Chart Rendering Functionality ---
     let impressionsChartInstance = null;
@@ -21,11 +28,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = document.getElementById('impressions-chart-canvas');
         if (!ctx) return;
 
-        // Data is already aggregated by date from get_campaign_data_by_date.
+        const parent = ctx.parentElement;
+        const parentWidth = parent ? parent.offsetWidth : 0;
+        const parentHeight = parent ? parent.offsetHeight : 0;
+        
+        ctx.width = parentWidth;
+        ctx.height = parentHeight;
+
         const labels = data.map(item => new Date(item.date).toLocaleDateString());
         const impressions = data.map(item => item.impressions);
 
-        // Destroy the old chart instance if it exists
         if (impressionsChartInstance) {
             impressionsChartInstance.destroy();
         }
@@ -37,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 datasets: [{
                     label: 'Impressions',
                     data: impressions,
-                    borderColor: 'rgb(66, 148, 204)', // Secondary color
+                    borderColor: 'rgb(66, 148, 204)',
                     backgroundColor: 'rgba(66, 148, 204, 0.2)',
                     fill: true,
                     tension: 0.3
@@ -62,15 +74,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = document.getElementById('ad-group-chart-canvas');
         if (!ctx) return;
 
-        // Data is already aggregated by ad group from get_campaign_data_by_ad_group.
+        const parent = ctx.parentElement;
+        const parentWidth = parent ? parent.offsetWidth : 0;
+        const parentHeight = parent ? parent.offsetHeight : 0;
+        
+        ctx.width = parentWidth;
+        ctx.height = parentHeight;
+
         const labels = data.map(item => item.ad_group_name);
         const impressions = data.map(item => item.impressions);
         
         const backgroundColors = [
-            '#2c435d', '#4294cc', '#a8d2e8', '#e8a8d2', '#d2e8a8', '#88a8d2', '#5d2c43' // Use a palette based on your brand colors
+            '#2c435d', '#4294cc', '#a8d2e8', '#e8a8d2', '#d2e8a8', '#88a8d2', '#5d2c43'
         ];
 
-        // Destroy the old chart instance if it exists
         if (impressionsByAdGroupChartInstance) {
             impressionsByAdGroupChartInstance.destroy();
         }
@@ -93,17 +110,22 @@ document.addEventListener('DOMContentLoaded', () => {
                         position: 'right',
                     },
                     tooltip: {
-                        enabled: false // No tooltips as per the user's request
+                        enabled: false
                     }
                 }
             }
         });
     }
 
-    // A simple function to handle AJAX requests to our custom endpoint.
-    const sendAjaxRequest = async (action, visitorId) => {
-        const ajaxUrl = ajax_object.ajax_url; 
-        const nonce = ajax_object.nonce;
+    // A simple function to handle AJAX requests for visitor status updates
+    const sendAjaxRequestForVisitorStatus = async (action, visitorId) => {
+        const ajaxUrl = localizedData.ajax_url; 
+        const nonce = localizedData.nonce;
+
+        if (!ajaxUrl || !nonce) {
+            console.error('sendAjaxRequestForVisitorStatus: Localized data (ajax_url or nonce) is missing.');
+            return false;
+        }
 
         const formData = new FormData();
         formData.append('action', 'cpd_update_visitor_status');
@@ -124,51 +146,247 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             
             if (data.success) {
-                console.log(`Visitor ${visitorId} status updated successfully.`);
+                console.log(`sendAjaxRequestForVisitorStatus: Visitor ${visitorId} status updated successfully.`);
                 return true;
             } else {
-                console.error('AJAX error:', data.data);
+                console.error('sendAjaxRequestForVisitorStatus: AJAX error:', data.data);
                 return false;
             }
         } catch (error) {
-            console.error('Fetch error:', error);
+            console.error('sendAjaxRequestForVisitorStatus: Fetch error:', error);
             return false;
         }
     };
 
-    // Event listener for the "Add CRM" and "Delete" buttons.
-    const visitorPanel = document.querySelector('.visitor-panel');
-    if (visitorPanel) {
-        visitorPanel.addEventListener('click', async (event) => {
-            const button = event.target.closest('.add-crm-icon, .delete-icon');
+    // --- Client-specific function to load all dashboard data via AJAX ---
+    async function loadClientDashboardData() {
+        const clientId = localizedData.current_client_account_id;
+        const duration = 'Campaign Duration'; // Default for client view, or from a selector if implemented
 
-            if (button) {
-                const visitorCard = button.closest('.visitor-card');
-                const visitorId = visitorCard.dataset.visitorId;
-                
-                let success = false;
-                if (button.classList.contains('add-crm-icon')) {
-                    success = await sendAjaxRequest('add_crm', visitorId);
-                } else if (button.classList.contains('delete-icon')) {
-                    success = await sendAjaxRequest('archive', visitorId);
-                }
+        if (!clientId) {
+            console.warn('loadClientDashboardData: No client ID available for client view.');
+            return;
+        }
 
-                if (success) {
-                    visitorCard.style.display = 'none';
-                }
+        // Show loading state
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) mainContent.style.opacity = '0.5';
+
+        try {
+            const response = await fetch(localizedData.ajax_url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    action: 'cpd_get_dashboard_data', // Use the same action as Admin
+                    nonce: localizedData.nonce, // Use client's nonce
+                    client_id: clientId,
+                    duration: duration
+                }).toString()
+            });
+
+            if (!response.ok) {
+                throw new Error('Network response was not ok.');
             }
-        });
+
+            const responseData = await response.json();
+
+            if (responseData.success) {
+                const data = responseData.data;
+
+                // Update Summary Cards
+                document.querySelectorAll('.summary-card .value').forEach(el => {
+                    const label = el.nextElementSibling.textContent.toLowerCase().replace(/ /g, '_');
+                    let dataKey = label;
+                    if (label.includes('crm') && label.includes('additions')) {
+                        dataKey = 'crm_additions';
+                    }
+                    if (data.summary_metrics[dataKey]) {
+                        el.textContent = data.summary_metrics[dataKey];
+                    }
+                });
+
+                // Update Charts
+                renderImpressionsChart(data.campaign_data_by_date);
+                renderImpressionsByAdGroupChart(data.campaign_data);
+
+                // Update Ad Group Table
+                const adGroupTableBody = document.querySelector('.ad-group-table tbody');
+                if (adGroupTableBody) {
+                    adGroupTableBody.innerHTML = '';
+                    if (data.campaign_data && data.campaign_data.length > 0) {
+                        data.campaign_data.forEach(item => {
+                            adGroupTableBody.insertAdjacentHTML('beforeend', `
+                                <tr>
+                                    <td>${item.ad_group_name}</td>
+                                    <td>${(item.impressions).toLocaleString()}</td>
+                                    <td>${(item.reach).toLocaleString()}</td>
+                                    <td>${(item.ctr).toLocaleString()}%</td>
+                                    <td>${(item.clicks).toLocaleString()}</td>
+                                </tr>
+                            `);
+                        });
+                    } else {
+                        adGroupTableBody.insertAdjacentHTML('beforeend', '<tr><td colspan="5" class="no-data">No campaign data found for this period.</td></tr>');
+                    }
+                }
+
+                // Update Visitor Panel
+                const visitorListContainer = document.querySelector('.visitor-panel .visitor-list');
+                if (visitorListContainer) {
+                    visitorListContainer.innerHTML = '';
+                    if (data.visitor_data && data.visitor_data.length > 0) {
+                        data.visitor_data.forEach(visitor => {
+                            const memoSealUrl = localizedData.memo_seal_url; 
+                            const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
+                            const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
+                            const email = visitor.email || '';
+
+                            visitorListContainer.insertAdjacentHTML('beforeend', `
+                                <div class="visitor-card" data-visitor-id="${visitor.visitor_id}">
+                                    <div class="visitor-logo">
+                                        <img src="${memoSealUrl}" alt="Referrer Logo">
+                                    </div>
+                                    <div class="visitor-details">
+                                        <p class="visitor-name">${fullName.trim() || 'Unknown Visitor'}</p>
+                                        <div class="visitor-info">
+                                            <p><i class="fas fa-briefcase"></i> ${visitor.job_title || 'Unknown'}</p>
+                                            <p><i class="fas fa-building"></i> ${visitor.company_name || 'Unknown'}</p>
+                                            <p><i class="fas fa-map-marker-alt"></i> ${location || 'Unknown'}</p>
+                                            <p><i class="fas fa-envelope"></i> ${email || 'Unknown'}</p>
+                                        </div>
+                                    </div>
+                                    <div class="visitor-actions">
+                                        <span class="icon add-crm-icon" title="Add to CRM">
+                                            <i class="fas fa-plus-square"></i>
+                                        </span>
+                                        <span class="icon delete-icon" title="Archive">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </span>
+                                    </div>
+                                </div>
+                            `);
+                        });
+                    } else {
+                        visitorListContainer.insertAdjacentHTML('beforeend', '<div class="no-data">No visitor data found.</div>');
+                    }
+                }
+
+                console.log('loadClientDashboardData: Dashboard updated successfully.');
+            } else {
+                console.error('loadClientDashboardData: AJAX response success is false:', responseData.data);
+            }
+        } catch (error) {
+            console.error('loadClientDashboardData: Fetch error:', error);
+        } finally {
+            if (mainContent) mainContent.style.opacity = '1';
+        }
     }
 
-    // --- Fetch data and render charts on page load ---
-    // Only render charts if NOT an admin, as admin will handle via cpd-dashboard.js
-    // Access it as a property of the localized object
-    const isAdminUser = typeof cpd_dashboard_data !== 'undefined' && cpd_dashboard_data.is_admin_user;
+
+    // Event listener for the "Add CRM" and "Delete" buttons on Visitor Panel.
+    // ONLY attach if NOT an admin, as cpd-dashboard.js handles admin events.
     if (!isAdminUser) {
-        const campaignDataByDate = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data.campaign_data_by_date : [];
-        const campaignDataByAdGroup = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data.campaign_data_by_ad_group : [];
-        
+        const visitorPanel = document.querySelector('.visitor-panel');
+        if (visitorPanel) {
+            visitorPanel.addEventListener('click', async (event) => {
+                const button = event.target.closest('.add-crm-icon, .delete-icon');
+
+                if (button) {
+                    const visitorCard = button.closest('.visitor-card');
+                    const visitorId = visitorCard.dataset.visitorId;
+                    
+                    let updateAction = '';
+                    if (button.classList.contains('add-crm-icon')) {
+                        updateAction = 'add_crm';
+                        if (!confirm('Are you sure you want to flag this visitor for CRM addition?')) return;
+                    } else if (button.classList.contains('delete-icon')) {
+                        updateAction = 'archive';
+                        if (!confirm('Are you sure you want to archive this visitor? They will no longer appear in the list.')) return;
+                    }
+
+                    // Disable button visually
+                    button.style.pointerEvents = 'none';
+                    button.style.opacity = '0.6';
+
+                    const success = await sendAjaxRequestForVisitorStatus(updateAction, visitorId); // Corrected function call
+
+                    if (success) {
+                        // After successful update, refresh the client dashboard data
+                        await loadClientDashboardData(); // Call new refresh function
+                        console.log(`Visitor ${visitorId} action "${updateAction}" processed. Client Dashboard reloaded.`);
+                    } else {
+                        alert('Failed to update visitor status. Please check console for details.');
+                    }
+                    // Re-enable button
+                    button.style.pointerEvents = 'auto';
+                    button.style.opacity = '1';
+                }
+            });
+        }
+    }
+
+    // --- Fetch initial data and render charts on page load for CLIENTS ONLY ---
+    if (!isAdminUser) {
+        // Initial data is already localized via cpd_dashboard_data for public view
+        const campaignDataByDate = localizedData.campaign_data_by_date || [];
+        const campaignDataByAdGroup = localizedData.campaign_data_by_ad_group || [];
+        const summaryMetrics = localizedData.summary_metrics || {};
+        const visitorData = localizedData.visitor_data || [];
+
         renderImpressionsChart(campaignDataByDate);
         renderImpressionsByAdGroupChart(campaignDataByAdGroup);
+        // Initial update of summary cards from localized data
+        document.querySelectorAll('.summary-card .value').forEach(el => {
+            const label = el.nextElementSibling.textContent.toLowerCase().replace(/ /g, '_');
+            let dataKey = label;
+            if (label.includes('crm') && label.includes('additions')) {
+                dataKey = 'crm_additions';
+            }
+            if (summaryMetrics[dataKey]) {
+                el.textContent = summaryMetrics[dataKey];
+            }
+        });
+        // Initial update of visitor list from localized data
+        const visitorListContainer = document.querySelector('.visitor-panel .visitor-list');
+        if (visitorListContainer) {
+            visitorListContainer.innerHTML = '';
+            if (visitorData.length > 0) {
+                visitorData.forEach(visitor => {
+                    const memoSealUrl = localizedData.memo_seal_url; 
+                    const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
+                    const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
+                    const email = visitor.email || '';
+
+                    visitorListContainer.insertAdjacentHTML('beforeend', `
+                        <div class="visitor-card" data-visitor-id="${visitor.visitor_id}">
+                            <div class="visitor-logo">
+                                <img src="${memoSealUrl}" alt="Referrer Logo">
+                            </div>
+                            <div class="visitor-details">
+                                <p class="visitor-name">${fullName.trim() || 'Unknown Visitor'}</p>
+                                <div class="visitor-info">
+                                    <p><i class="fas fa-briefcase"></i> ${visitor.job_title || 'Unknown'}</p>
+                                    <p><i class="fas fa-building"></i> ${visitor.company_name || 'Unknown'}</p>
+                                    <p><i class="fas fa-map-marker-alt"></i> ${location || 'Unknown'}</p>
+                                    <p><i class="fas fa-envelope"></i> ${email || 'Unknown'}</p>
+                                </div>
+                            </div>
+                            <div class="visitor-actions">
+                                <span class="icon add-crm-icon" title="Add to CRM">
+                                    <i class="fas fa-plus-square"></i>
+                                </span>
+                                <span class="icon delete-icon" title="Archive">
+                                    <i class="fas fa-trash-alt"></i>
+                                </span>
+                            </div>
+                        </div>
+                    `);
+                });
+            } else {
+                visitorListContainer.insertAdjacentHTML('beforeend', '<div class="no-data">No visitor data found.</div>');
+            }
+        }
     }
 });

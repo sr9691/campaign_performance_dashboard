@@ -295,34 +295,53 @@ body.client-dashboard-page .dashboard-header .left-header {
 }
 
 body.client-dashboard-page .client-logo-container {
-    width: auto !important;
-    height: 75px !important;
+    max-width: 250px !important;
+    max-height: 100px !important; /* Updated max-height to 100px as requested */
     flex-shrink: 0 !important;
     display: flex !important;
-    align-items: left !important;
-    justify-content: left !important;
-    background-color: #f0f0f0 !important; 
+    align-items: center !important; /* Corrected: Centers vertically */
+    justify-content: center !important; /* Corrected: Centers horizontally */
+    background-color: #f0f0f0 !important;
     box-shadow: none !important; 
-    /* border: 0px solid #ddd !important; */
+    /* CRUCIAL ADDITION: Hide any content (like the image) that overflows this container */
+    overflow: hidden !important; 
+    /* Ensure its own dimensions are flexible but respect max limits */
+    width: auto !important; /* Allow width to be determined by max-width or content */
+    height: auto !important; /* Allow height to be determined by max-height or content */
+    /* Add a min-height/width to prevent it from collapsing entirely if no content */
+    min-width: 60px !important; /* Example min-width, adjust as needed */
+    min-height: 60px !important; /* Example min-height, adjust as needed */
+}
+
+/* Ensure client logo in header maintains aspect ratio */
+body.client-dashboard-page .client-logo-container img {
+    /* Scale the image to fill the container while preserving aspect ratio */
+    width: 100% !important; /* Make image fill 100% width of its container */
+    height: 100% !important; /* Make image fill 100% height of its container */
+    object-fit: contain !important; /* Crucial: Preserve aspect ratio and fit within container */
+    /* Ensure the image itself doesn't cause overflow visually by being forced */
+    display: block !important; /* Ensures predictable block-level behavior within flex container */
+    max-width: 100% !important; /* Redundant but safe */
+    max-height: 100% !important; /* Redundant but safe */
 }
 
 body.client-dashboard-page .header-title-section h1 {
-    font-size: 2rem !important; /* Use mockup's font size */
+    font-size: 2rem !important; 
     font-weight: 700 !important;
-    margin: 0 !important; /* Use mockup's margin */
+    margin: 0 !important; 
     color: var(--text-color-dark) !important;
     font-family: var(--font-family) !important;
-    line-height: 1.2 !important; /* Use mockup's line-height */
+    line-height: 1.2 !important; 
 }
 
 body.client-dashboard-page .duration-select {
     display: flex !important;
     align-items: center !important;
     font-size: 0.9rem !important;
-    font-weight: 500 !important; /* Use mockup's font-weight */
+    font-weight: 500 !important; 
     color: var(--text-color-light) !important;
-    margin-top: 5px !important; /* Use mockup's margin-top */
-    gap: 10px !important; /* Add gap for consistency with mockup's spacing */
+    margin-top: 5px !important; 
+    gap: 10px !important; 
 }
 
 body.client-dashboard-page .duration-select select {

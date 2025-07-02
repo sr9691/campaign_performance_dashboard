@@ -89,11 +89,11 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                 <div class="header-title-section">
                     <h1>Digital Marketing Report</h1>
                     <div class="duration-select">
-                        <span>Date Range:</span>
+                        <span>Dates:</span>
                         <select id="duration-selector">
-                            <option value="campaign">Campaign Duration</option>
-                            <option value="30">30 days</option>
-                            <option value="7">7 days</option>
+                            <option value="campaign">Campaign Dates</option>
+                            <option value="30">Past 30 days</option>
+                            <option value="7">Past 7 days</option>
                         </select>
                     </div>
                 </div>

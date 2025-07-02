@@ -72,8 +72,8 @@ class CPD_Admin {
         // Handle dashboard redirect
         add_action( 'admin_init', array( $this, 'handle_dashboard_redirect' ) );
         
-        // DEBUG: Add action to show current screen info
-        add_action( 'admin_notices', array( $this, 'debug_screen_info' ) );
+        // Add action to show current screen info
+        // add_action( 'admin_notices', array( $this, 'debug_screen_info' ) );
     }
 
     /**
@@ -589,11 +589,21 @@ class CPD_Admin {
         $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $client_id, $start_date, $end_date );
         $visitor_data = $this->data_provider->get_visitor_data( $client_id ); // This one needs special handling if 'all visitors' makes sense.
 
+        // --- Get client logo URL ---
+        $client_logo_url = CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png'; // Default
+        if ( $client_id !== null ) { // If a specific client is selected
+            $client_obj = $this->data_provider->get_client_by_account_id( $client_id );
+            if ( $client_obj && ! empty( $client_obj->logo_url ) ) {
+                $client_logo_url = esc_url( $client_obj->logo_url );
+            }
+        }
+        
         wp_send_json_success( array(
             'summary_metrics' => $summary_metrics,
             'campaign_data' => $campaign_data_by_ad_group,
             'campaign_data_by_date' => $campaign_data_by_date,
             'visitor_data' => $visitor_data,
+            'client_logo_url' => $client_logo_url,
         ) );
     }
 

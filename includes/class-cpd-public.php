@@ -148,7 +148,8 @@ class CPD_Public {
                     'cpd_admin_ajax', // This matches the name used in cpd-dashboard.js
                     array(
                         'ajax_url' => admin_url( 'admin-ajax.php' ),
-                        'nonce' => wp_create_nonce( 'cpd_admin_nonce' ),
+                        'nonce' => wp_create_nonce( 'cpd_visitor_nonce' ),
+                        'memo_seal_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Seal.png',
                     )
                 );
             }
