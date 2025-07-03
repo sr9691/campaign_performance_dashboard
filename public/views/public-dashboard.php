@@ -171,10 +171,15 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
             // This is primarily for the first page load before AJAX updates.
             // For admins, this might initially be empty if "All Clients" is selected.
             if ( ! empty( $visitor_data ) ) :
-                foreach ( $visitor_data as $visitor ) : 
+                foreach ( $visitor_data as $visitor ) :
                 error_log('Debug: Visitor ID before HTML generation: ' . (isset($visitor->id) ? $visitor->id : 'ID NOT SET') . ' | Visitor object: ' . print_r($visitor, true));
                 ?>
-                <div class="visitor-card" data-visitor-id="<?php echo esc_attr( $visitor->id ); ?>">
+                <div class="visitor-card"
+                    data-visitor-id="<?php echo esc_attr( $visitor->id ); ?>"
+                    data-last-seen-at="<?php echo esc_attr( $visitor->last_seen_at ?? 'N/A' ); ?>"
+                    data-recent-page-count="<?php echo esc_attr( $visitor->recent_page_count ?? '0' ); ?>"
+                    data-recent-page-urls='<?php echo esc_attr( json_encode($visitor->recent_page_urls ?? []) ); ?>'
+                >
                     <div class="visitor-logo">
                         <img src="<?php echo esc_url( $memo_seal_url ); ?>" alt="Referrer Logo">
                     </div>
@@ -182,7 +187,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                         <a href="<?php echo esc_url( $visitor->linkedin_url ?? '#' ); ?>" target="_blank" class="visitor-link">
                             <i class="fas fa-external-link-alt"></i>
                         <p class="visitor-name">
-                            <?php 
+                            <?php
                             $full_name = '';
                             if ( ! empty( $visitor->first_name ) ) {
                                 $full_name .= $visitor->first_name;
@@ -201,8 +206,8 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                             <p><i class="fas fa-briefcase"></i> <?php echo esc_html( $visitor->job_title ?? 'Unknown' ); ?></p>
                             <p><i class="fas fa-building"></i> <?php echo esc_html( $visitor->company_name ?? 'Unknown' ); ?></p>
                             <p>
-                                <i class="fas fa-map-marker-alt"></i> 
-                                <?php 
+                                <i class="fas fa-map-marker-alt"></i>
+                                <?php
                                 $location_parts = [];
                                 if ( ! empty( $visitor->city ) ) {
                                     $location_parts[] = $visitor->city;
@@ -220,6 +225,14 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                         </div>
                     </div>
                     <div class="visitor-actions">
+                        <?php if (!empty($visitor->linkedin_url)) : // Only show LinkedIn icon if URL exists ?>
+                            <a href="<?php echo esc_url( $visitor->linkedin_url ); ?>" target="_blank" class="icon linkedin-icon" title="View LinkedIn Profile">
+                                <i class="fab fa-linkedin"></i>
+                            </a>
+                        <?php endif; ?>
+                        <span class="icon info-icon" title="More Info">
+                            <i class="fas fa-info-circle"></i>
+                        </span>
                         <span class="icon add-crm-icon" title="Add to CRM">
                             <i class="fas fa-plus-square"></i>
                         </span>
@@ -233,6 +246,22 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                 ?>
                 <div class="no-data">No visitor data found for initial display.</div>
             <?php endif; ?>
+        </div>
+    </div>
+</div>
+
+<div id="visitor-info-modal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Visitor Details</h2>
+        <div class="modal-body">
+            <p><strong>Last Seen At:</strong> <span id="modal-last-seen-at"></span></p>
+            <p><strong>Recent Page Count:</strong> <span id="modal-recent-page-count"></span></p>
+            <div id="modal-recent-page-urls-container">
+                <strong>Recent Page URLs:</strong>
+                <ul id="modal-recent-page-urls">
+                    </ul>
+            </div>
         </div>
     </div>
 </div>

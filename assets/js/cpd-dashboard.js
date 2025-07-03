@@ -378,12 +378,15 @@ jQuery(document).ready(function($) {
         });
     }
 
-    // --- ADMIN-SPECIFIC UI & INTERACTION (Wrapped in isAdminPage check) ---
+    /*  --- ADMIN-SPECIFIC UI & INTERACTION (Wrapped in isAdminPage check) ---
     const isAdminPage = document.body.classList.contains('toplevel_page_cpd-dashboard-management') ||
                         document.body.classList.contains('toplevel_page_cpd-dashboard-settings') ||
                         document.body.classList.contains('toplevel_page_cpd-dashboard') ||
                         document.body.classList.contains('toplevel_page_cpd-dashboard-crm-emails'); // Or whatever the exact slug is for the CRM Emails page
+    */ 
 
+    const isAdminPage = document.body.classList.contains('campaign-dashboard_page_cpd-dashboard-management'); 
+    
     if (isAdminPage) {
         console.log('cpd-dashboard.js: Admin-specific UI listeners attaching.');
         // --- AJAX for Dashboard Filtering (Client list and date range) ---
@@ -451,9 +454,11 @@ jQuery(document).ready(function($) {
 
                     // Load eligible visitors if CRM email management section is active
                     // This function will be defined later in the CRM section update
+                    console.log("setActiveSection: Checking if CRM Emails section is active for loading visitors.");
                     if (targetHashId === 'crm-email-management') {
                         // Make sure loadEligibleVisitors is defined within scope or globally accessible if called here
                         if (typeof loadEligibleVisitors === 'function') {
+                            console.log("setActiveSection: Activating CRM Emails section, calling loadEligibleVisitors.");
                             loadEligibleVisitors();
                         } else {
                             console.warn("loadEligibleVisitors function not found when trying to activate CRM Emails section.");

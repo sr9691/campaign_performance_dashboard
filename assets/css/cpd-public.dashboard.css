@@ -182,7 +182,6 @@ body.client-dashboard-page .brand-bottom-section {
     text-align: center !important; /* Keep for button content alignment if not flex */
     border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
     flex-shrink: 0 !important;
-    background-color: var(--card-bg) !important;
     display: flex !important; /* Ensure flex for centering buttons */
     flex-direction: column !important;
     align-items: center !important;
@@ -302,9 +301,9 @@ body.client-dashboard-page .client-logo-container {
     align-items: center !important; /* Corrected: Centers vertically */
     justify-content: center !important; /* Corrected: Centers horizontally */
     background-color: #f0f0f0 !important;
-    box-shadow: none !important; 
+    box-shadow: none !important;
     /* CRUCIAL ADDITION: Hide any content (like the image) that overflows this container */
-    overflow: hidden !important; 
+    overflow: hidden !important;
     /* Ensure its own dimensions are flexible but respect max limits */
     width: auto !important; /* Allow width to be determined by max-width or content */
     height: auto !important; /* Allow height to be determined by max-height or content */
@@ -326,22 +325,22 @@ body.client-dashboard-page .client-logo-container img {
 }
 
 body.client-dashboard-page .header-title-section h1 {
-    font-size: 2rem !important; 
+    font-size: 2rem !important;
     font-weight: 700 !important;
-    margin: 0 !important; 
+    margin: 0 !important;
     color: var(--text-color-dark) !important;
     font-family: var(--font-family) !important;
-    line-height: 1.2 !important; 
+    line-height: 1.2 !important;
 }
 
 body.client-dashboard-page .duration-select {
     display: flex !important;
     align-items: center !important;
     font-size: 0.9rem !important;
-    font-weight: 500 !important; 
+    font-weight: 500 !important;
     color: var(--text-color-light) !important;
-    margin-top: 5px !important; 
-    gap: 10px !important; 
+    margin-top: 5px !important;
+    gap: 10px !important;
 }
 
 body.client-dashboard-page .duration-select select {
@@ -510,8 +509,9 @@ body.client-dashboard-page .visitor-panel .visitor-list {
 
 body.client-dashboard-page .visitor-panel .visitor-card {
     display: flex !important;
-    align-items: center !important; /* Use mockup's align-items */
-    gap: 15px !important;
+    flex-direction: column !important; /* Make visitor card a column to stack details and actions */
+    align-items: flex-start !important; /* Align content to the left within the card */
+    gap: 0 !important; /* Remove gap from main card flex container */
     padding: 15px 20px !important; /* Use mockup's padding */
     margin-bottom: 10px !important;
     border-radius: var(--border-radius) !important;
@@ -530,6 +530,7 @@ body.client-dashboard-page .visitor-panel .visitor-logo {
     overflow: hidden !important;
     flex-shrink: 0 !important;
     box-shadow: none !important; /* Ensure no custom box-shadow */
+    margin-bottom: 15px !important; /* Space below the logo */
 }
 
 body.client-dashboard-page .visitor-panel .visitor-logo img {
@@ -541,6 +542,7 @@ body.client-dashboard-page .visitor-panel .visitor-logo img {
 body.client-dashboard-page .visitor-details {
     flex: 1 !important;
     overflow: hidden !important;
+    margin-bottom: 15px !important; /* Space between details and actions */
 }
 
 body.client-dashboard-page .visitor-name {
@@ -569,22 +571,158 @@ body.client-dashboard-page .visitor-info p {
     white-space: nowrap !important;
 }
 
+/* Revert visitor-actions to row layout at bottom right */
 body.client-dashboard-page .visitor-actions {
     display: flex !important;
-    gap: 5px !important;
+    flex-direction: row !important; /* Arrange icons horizontally */
+    gap: 8px !important; /* Space between icons */
     font-size: 1.2rem !important;
     color: var(--text-color-light) !important;
     flex-shrink: 0 !important;
+    align-self: flex-end !important; /* Push the entire icon row to the right */
+    margin-top: auto !important; /* Push icon row to the bottom of the card */
 }
 
 body.client-dashboard-page .visitor-actions .icon {
     cursor: pointer !important;
     transition: color 0.2s ease !important;
     padding: 5px !important;
+    display: flex !important; /* Make each icon a flex item to center its content */
+    align-items: center !important;
+    justify-content: center !important;
+    text-decoration: none !important; /* Remove underline from LinkedIn link */
 }
 
 body.client-dashboard-page .visitor-actions .icon:hover {
-    color: var(--secondary-color) !important;
+    color: var(--secondary-color) !important; /* Default hover color */
+}
+
+/* Specific styles for LinkedIn and Info icons (unchanged) */
+body.client-dashboard-page .visitor-actions .linkedin-icon i {
+    color: #0077B5 !important; /* LinkedIn blue */
+}
+
+body.client-dashboard-page .visitor-actions .linkedin-icon:hover i {
+    color: #005582 !important;
+}
+
+body.client-dashboard-page .visitor-actions .info-icon i {
+    color: #ffc107 !important; /* Info icon yellow */
+}
+
+body.client-dashboard-page .visitor-actions .info-icon:hover i {
+    color: #e0a800 !important;
+}
+
+/* CRM icon color and hover */
+body.client-dashboard-page .visitor-actions .add-crm-icon i {
+    color: #28a745 !important; /* Green color for CRM */
+}
+
+body.client-dashboard-page .visitor-actions .add-crm-icon:hover i {
+    color: #6c757d !important; /* Grey on hover */
+}
+
+/* Trash icon color and hover */
+body.client-dashboard-page .visitor-actions .delete-icon i {
+    color: #dc3545 !important; /* Red color for trash */
+}
+
+body.client-dashboard-page .visitor-actions .delete-icon:hover i {
+    color: #6c757d !important; /* Grey on hover */
+}
+
+
+/* MODAL Styles */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 100001; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.5); /* Black w/ opacity */
+    justify-content: center; /* Center horizontally */
+    align-items: center; /* Center vertically */
+    font-family: var(--font-family) !important;
+}
+
+.modal-content {
+    background-color: var(--card-bg);
+    margin: auto; /* Auto margin for centering */
+    padding: 30px;
+    border: 1px solid #888;
+    width: 90%; /* Could be more responsive */
+    max-width: 500px;
+    border-radius: var(--border-radius);
+    position: relative;
+    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2),0 6px 20px 0 rgba(0,0,0,0.19);
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: var(--primary-color);
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.modal-content .close {
+    color: #aaa;
+    position: absolute;
+    right: 15px;
+    top: 10px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.modal-content .close:hover,
+.modal-content .close:focus {
+    color: #333;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.modal-body p {
+    margin-bottom: 10px;
+    font-size: 0.95rem;
+    color: var(--text-color-dark);
+}
+
+.modal-body strong {
+    color: var(--primary-color);
+}
+
+#modal-recent-page-urls-container {
+    margin-top: 20px;
+}
+
+#modal-recent-page-urls {
+    list-style-type: disc;
+    margin-left: 20px;
+    padding-left: 0;
+    margin-top: 10px;
+    max-height: 200px; /* Limit height to prevent modal from growing too large */
+    overflow-y: auto; /* Enable scrolling for long lists of URLs */
+}
+
+#modal-recent-page-urls li {
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+    color: var(--text-color-light);
+    word-wrap: break-word; /* Ensure long URLs break correctly */
+}
+
+#modal-recent-page-urls li a {
+    color: var(--secondary-color);
+    text-decoration: none;
+}
+
+#modal-recent-page-urls li a:hover {
+    text-decoration: underline;
 }
 
 /* Ensure the canvas element itself correctly fits its container */

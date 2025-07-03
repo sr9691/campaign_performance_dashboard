@@ -272,13 +272,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     visitorListContainer.innerHTML = '';
                     if (data.visitor_data && data.visitor_data.length > 0) {
                         data.visitor_data.forEach(visitor => {
-                            const memoSealUrl = localizedData.memo_seal_url; 
+                            const memoSealUrl = localizedData.memo_seal_url;
                             const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
                             const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
                             const email = visitor.email || '';
+                            const linkedinUrl = visitor.linkedin_url || '#'; // Get LinkedIn URL
+                            const hasLinkedIn = visitor.linkedin_url && visitor.linkedin_url.trim() !== ''; // Check if LinkedIn URL is present
+                            const recentPageUrlsString = visitor.recent_page_urls ? visitor.recent_page_urls : '';
+
+
                             console.log("Adding visitor card for:", fullName, "with ID:", visitor.id);
                             visitorListContainer.insertAdjacentHTML('beforeend', `
-                                <div class="visitor-card" data-visitor-id="${visitor.id}">
+                                <div class="visitor-card"
+                                    data-visitor-id="${visitor.id}"
+                                    data-last-seen-at="${visitor.last_seen_at || 'N/A'}"
+                                    data-recent-page-count="${visitor.recent_page_count || '0'}"
+                                    data-recent-page-urls='${JSON.stringify(visitor.recent_page_urls || [])}'
+                                >
                                     <div class="visitor-logo">
                                         <img src="${memoSealUrl}" alt="Referrer Logo">
                                     </div>
@@ -292,6 +302,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                         </div>
                                     </div>
                                     <div class="visitor-actions">
+                                        ${hasLinkedIn ? `<a href="${linkedinUrl}" target="_blank" class="icon linkedin-icon" title="View LinkedIn Profile"><i class="fab fa-linkedin"></i></a>` : ''}
+                                        <span class="icon info-icon" title="More Info">
+                                            <i class="fas fa-info-circle"></i>
+                                        </span>
                                         <span class="icon add-crm-icon" title="Add to CRM">
                                             <i class="fas fa-plus-square"></i>
                                         </span>
@@ -306,7 +320,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         visitorListContainer.insertAdjacentHTML('beforeend', '<div class="no-data">No visitor data found.</div>');
                     }
                 }
-
                 console.log('loadClientDashboardData: Dashboard updated successfully.');
             } else {
                 console.error('loadClientDashboardData: AJAX response success is false:', responseData.data);
@@ -321,14 +334,70 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event listener for the "Add CRM" and "Delete" buttons on Visitor Panel.
     const visitorPanel = document.querySelector('.visitor-panel');
+    const visitorInfoModal = document.getElementById('visitor-info-modal');
+    const modalCloseButton = visitorInfoModal ? visitorInfoModal.querySelector('.close') : null;
+
     if (visitorPanel) {
         visitorPanel.addEventListener('click', async (event) => {
-            const button = event.target.closest('.add-crm-icon, .delete-icon');
+            const button = event.target.closest('.add-crm-icon, .delete-icon, .info-icon, .linkedin-icon');
 
             if (button) {
                 const visitorCard = button.closest('.visitor-card');
                 const visitorId = visitorCard.dataset.visitorId;
-                
+
+                // Handle LinkedIn icon click
+                if (button.classList.contains('linkedin-icon')) {
+                    const linkedinUrl = button.getAttribute('href');
+                    if (linkedinUrl && linkedinUrl !== '#') {
+                        window.open(linkedinUrl, '_memo');
+                    }
+                    return; // Exit to prevent further processing for this click
+                }
+
+                // Handle Info icon click
+                if (button.classList.contains('info-icon')) {
+                    const lastSeenAt = visitorCard.dataset.lastSeenAt || 'N/A';
+                    const recentPageCount = visitorCard.dataset.recentPageCount || '0';
+                    let recentPageUrls = [];
+                    const recentPageUrlsString = visitorCard.dataset.recentPageUrls;
+
+                    // Split the comma-separated string into an array, filter out empty strings, and trim whitespace
+                    if (recentPageUrlsString) {
+                        recentPageUrls = recentPageUrlsString.split(',').map(url => url.trim()).filter(url => url !== '');
+                    }
+
+                    document.getElementById('modal-last-seen-at').textContent = lastSeenAt;
+                    document.getElementById('modal-recent-page-count').textContent = recentPageCount;
+
+                    const pageUrlsList = document.getElementById('modal-recent-page-urls');
+                    pageUrlsList.innerHTML = ''; // Clear previous URLs
+                    if (recentPageUrls.length > 0) {
+                        recentPageUrls.forEach(url => {
+                            const li = document.createElement('li');
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.textContent = url;
+                            a.target = '_blank';
+                            li.appendChild(a);
+                            pageUrlsList.appendChild(li);
+                        });
+                        document.getElementById('modal-recent-page-urls-container').style.display = 'block';
+                    } else {
+                        // If no URLs, display a "No recent pages" message
+                        const li = document.createElement('li');
+                        li.textContent = 'No recent pages.';
+                        pageUrlsList.appendChild(li);
+                        document.getElementById('modal-recent-page-urls-container').style.display = 'block'; // Still show the container
+                    }
+
+                    if (visitorInfoModal) {
+                        visitorInfoModal.style.display = 'flex'; // Use flex to center the modal
+                    }
+                    return; // Exit to prevent further processing for this click
+                }
+
+
+
                 let updateAction = '';
                 if (button.classList.contains('add-crm-icon')) {
                     updateAction = 'add_crm';
@@ -341,7 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 button.style.pointerEvents = 'none';
                 button.style.opacity = '0.6';
 
-                const success = await sendAjaxRequestForVisitorStatus(updateAction, visitorId); 
+                const success = await sendAjaxRequestForVisitorStatus(updateAction, visitorId);
 
                 if (success) {
                     await loadClientDashboardData(); // Reload data after update
@@ -353,6 +422,24 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+    }
+
+    // Modal close functionality
+    if (modalCloseButton) {
+        modalCloseButton.addEventListener('click', () => {
+            if (visitorInfoModal) {
+                visitorInfoModal.style.display = 'none';
+            }
+        });
+    }
+
+    // Close modal if clicked outside
+    if (visitorInfoModal) {
+        visitorInfoModal.addEventListener('click', (event) => {
+            if (event.target === visitorInfoModal) {
+                visitorInfoModal.style.display = 'none';
+            }
+        });
     }
 
     // Event listener for Client List clicks (Admin view only)

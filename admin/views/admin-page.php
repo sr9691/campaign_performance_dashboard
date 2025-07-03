@@ -29,7 +29,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
         <div class="logo-container">
             <img src="<?php echo esc_url( $memo_logo_url ); ?>" alt="MEMO Marketing Group">
         </div>
-        
+
         <nav>
             <ul>
                 <li>
@@ -50,7 +50,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         Settings
                     </a>
                 </li>
-                
+
                 <li>
                     <a href="#crm-emails" class="nav-link" data-target="crm-email-management-section">
                         <i class="fas fa-envelope"></i>
@@ -74,7 +74,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                 <?php endif; ?>
             </ul>
         </nav>
-        
+
         <div class="logout-container">
             <a href="<?php echo wp_logout_url(); ?>">
                 <i class="fas fa-sign-out-alt"></i>
@@ -88,7 +88,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
 
         <div id="clients-section" class="card section-content active">
             <h2>Client Management</h2>
-            
+
             <div class="add-form-section">
                 <h3>Add New Client</h3>
                 <form id="add-client-form">
@@ -185,7 +185,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
 
         <div id="users-section" class="card section-content">
             <h2>User Management</h2>
-            
+
             <div class="add-form-section">
                 <h3>Add New User</h3>
                 <form id="add-user-form">
@@ -242,7 +242,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         </thead>
                         <tbody>
                             <?php if ( ! empty( $all_users ) ) : ?>
-                                <?php foreach ( $all_users as $user ) : 
+                                <?php foreach ( $all_users as $user ) :
                                     $user_client_account_id = $data_provider->get_account_id_by_user_id( $user->ID );
                                     $linked_client_name = 'N/A';
                                     if ($user_client_account_id) {
@@ -286,22 +286,22 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
 
         <div id="settings-section" class="card section-content">
             <h2>Dashboard Settings</h2>
-            
+
             <div class="settings-section">
                 <h3>General Settings</h3>
-                <form id="settings-form" method="post" action="options.php"> 
-                    <?php settings_fields( 'cpd-dashboard-settings-group' ); ?>
-                    <?php do_settings_sections( 'cpd-dashboard-settings-group' ); ?>
+                <form id="settings-form" method="post" action="<?php echo esc_url( admin_url('admin-post.php') ); ?>">
+                    <input type="hidden" name="action" value="cpd_save_general_settings">
+                    <?php wp_nonce_field('cpd_save_general_settings_nonce', '_wpnonce_cpd_settings'); ?>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="client_dashboard_url">Client Dashboard URL</label>
-                            <input type="url" id="client_dashboard_url" name="cpd_client_dashboard_url" 
-                                   value="<?php echo esc_url( get_option( 'cpd_client_dashboard_url', '' ) ); ?>" 
+                            <input type="url" id="client_dashboard_url" name="cpd_client_dashboard_url"
+                                   value="<?php echo esc_url( get_option( 'cpd_client_dashboard_url', '' ) ); ?>"
                                    placeholder="https://memomarketinggroup.com/dashboarddev/wp-admin/admin.php?page=cpd-dashboard">
                             <small class="form-help">Enter the full URL of the page where you added the [campaign_dashboard] shortcode.</small>
                         </div>
                         <div class="form-group">
-                            <label for="cpd_report_problem_email">Report Problem Email</label> 
+                            <label for="cpd_report_problem_email">Report Problem Email</label>
                             <input type="email" id="cpd_report_problem_email" name="cpd_report_problem_email"
                                    value="<?php echo esc_attr( get_option('cpd_report_problem_email', 'support@memomarketinggroup.com') ); ?>"
                                    placeholder="support@memomarketinggroup.com">
@@ -310,8 +310,8 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         <div class="form-group">
                             <label for="cpd_api_key_field">REST API Key</label>
                             <div class="api-key-input-group">
-                                <input type="text" id="cpd_api_key_field" name="cpd_api_key" 
-                                       value="<?php echo esc_attr( get_option('cpd_api_key', '') ); ?>" 
+                                <input type="text" id="cpd_api_key_field" name="cpd_api_key"
+                                       value="<?php echo esc_attr( get_option('cpd_api_key', '') ); ?>"
                                        readonly>
                                 <button type="button" id="generate_api_key_button" class="button button-secondary">Generate New Key</button>
                             </div>
@@ -320,20 +320,20 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         <div class="form-group">
                             <label for="default_campaign_duration">Default Campaign Duration</label>
                             <select id="default_campaign_duration" name="default_campaign_duration">
-                                <option value="campaign">Campaign Duration</option>
-                                <option value="30">30 days</option>
-                                <option value="7">7 days</option>
+                                <option value="campaign" <?php selected( get_option('default_campaign_duration', 'campaign'), 'campaign' ); ?>>Campaign Duration</option>
+                                <option value="30" <?php selected( get_option('default_campaign_duration', 'campaign'), '30' ); ?>>30 days</option>
+                                <option value="7" <?php selected( get_option('default_campaign_duration', 'campaign'), '7' ); ?>>7 days</option>
                             </select>
                         </div>
 
                         <div class="form-group">
                             <label for="enable_notifications">Enable Email Notifications</label>
                             <select id="enable_notifications" name="enable_notifications">
-                                <option value="yes">Yes</option>
-                                <option value="no">No</option>
+                                <option value="yes" <?php selected( get_option('enable_notifications', 'yes'), 'yes' ); ?>>Yes</option>
+                                <option value="no" <?php selected( get_option('enable_notifications', 'yes'), 'no' ); ?>>No</option>
                             </select>
                         </div>
-                        
+
                         <div class="form-group">
                             <label for="cpd_crm_email_schedule_hour">Daily CRM Email Schedule Time</label>
                             <select id="cpd_crm_email_schedule_hour" name="cpd_crm_email_schedule_hour">
@@ -362,7 +362,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                 </form>
             </div>
 
-            
+
             <div class="settings-section">
                 <h3>Data Management</h3>
                 <div class="data-management-actions">
@@ -382,7 +382,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
 
         <div id="crm-email-management-section" class="card section-content">
             <h2>CRM Email Management</h2>
-            
+
             <div class="add-form-section">
                 <h3>On-Demand CRM Email Send</h3>
                 <div class="form-grid">
@@ -554,60 +554,68 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
 document.addEventListener('DOMContentLoaded', function() {
     const navLinks = document.querySelectorAll('.nav-link');
     const sections = document.querySelectorAll('.section-content');
-    
+
     // Determine initial active section based on hash or default to clients-section
-    const initialHash = window.location.hash ? window.location.hash.substring(1) : 'clients-section';
-    
-    // Set initial active state
-    navLinks.forEach(link => {
-        // Correctly handle "crm-emails" hash to point to "crm-email-management-section"
-        let targetDataAttribute = link.getAttribute('data-target');
-        let expectedHash = targetDataAttribute.replace('-section', ''); // Convert 'section-id' to 'section-id'
+    const initialHash = window.location.hash ? window.location.hash.substring(1) : 'clients'; // Changed default to 'clients' for consistency
+    let activeSectionId = initialHash + '-section'; // Initialize with the full section ID
 
-        if (expectedHash === initialHash) {
-            link.classList.add('active');
-            const targetSection = document.getElementById(targetDataAttribute);
-            if (targetSection) {
-                targetSection.classList.add('active');
-            }
-        } else {
-            link.classList.remove('active');
-            const targetSection = document.getElementById(targetDataAttribute);
-            if (targetSection) {
-                targetSection.classList.remove('active');
-            }
+    // Fallback if the initial hash doesn't correspond to a valid section
+    if (!document.getElementById(activeSectionId)) {
+        activeSectionId = 'clients-section'; // Default to clients-section
+    }
+
+    // Function to set active section based on ID
+    function setActiveSection(targetSectionId) {
+        // Remove active class from all nav links and sections
+        navLinks.forEach(link => link.classList.remove('active'));
+        sections.forEach(section => section.classList.remove('active'));
+
+        // Find and activate the target section
+        const targetElement = document.getElementById(targetSectionId);
+        if (targetElement) {
+            targetElement.classList.add('active');
         }
-    });
 
+        // Find and activate the corresponding nav link
+        const targetNavLink = document.querySelector(`a[data-target="${targetSectionId}"]`);
+        if (targetNavLink) {
+            targetNavLink.classList.add('active');
+        }
 
+        // Update URL hash without jumping
+        const cleanedHash = targetSectionId.replace('-section', '');
+        if (history.pushState) {
+            history.pushState(null, null, '#' + cleanedHash);
+        } else {
+            window.location.hash = '#' + cleanedHash;
+        }
+
+        // If CRM Emails section is active, trigger loadEligibleVisitors (assuming it's defined in cpd-dashboard.js)
+        if (cleanedHash === 'crm-emails' && typeof loadEligibleVisitors === 'function') {
+            loadEligibleVisitors();
+        }
+    }
+
+    // Set initial active state on load
+    setActiveSection(activeSectionId);
+
+    // Add click listeners to navigation links
     navLinks.forEach(link => {
         link.addEventListener('click', function(e) {
             const targetSectionId = this.getAttribute('data-target');
-            
-            // Only prevent default if it's a section navigation link, not the dashboard link
-            if (targetSectionId) {
+
+            // Only prevent default if it's a section navigation link (has data-target attribute and is not a dashboard link)
+            if (targetSectionId && !this.classList.contains('admin-dashboard-link')) {
                 e.preventDefault();
-                
-                // Remove active class from all nav links and sections
-                navLinks.forEach(nav => nav.classList.remove('active'));
-                sections.forEach(section => section.classList.remove('active'));
-                
-                // Add active class to clicked nav link
-                this.classList.add('active');
-                
-                // Show target section
-                const targetElement = document.getElementById(targetSectionId);
-                if (targetElement) {
-                    targetElement.classList.add('active');
-                }
-                // Update URL hash without jumping
-                if (history.pushState) {
-                    history.pushState(null, null, '#' + targetSectionId.replace('-section', ''));
-                } else {
-                    window.location.hash = '#' + targetSectionId.replace('-section', '');
-                }
+                setActiveSection(targetSectionId);
             }
         });
+    });
+
+    // Handle hash changes from browser back/forward buttons or manual hash entry
+    window.addEventListener('hashchange', function() {
+        const newHash = window.location.hash ? window.location.hash.substring(1) : 'clients'; // Default to 'clients'
+        setActiveSection(newHash + '-section');
     });
 });
 </script>

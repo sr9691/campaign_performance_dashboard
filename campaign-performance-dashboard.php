@@ -7,7 +7,7 @@
  * Author:            ANSA Solutions
  * Author URI:        https://ansa.solutions/
  * License:           GPL-2.0+
- * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
+ * License URI:       http://www.gnu.gnu.org/licenses/gpl-2.0.txt
  * Text Domain:       cpd-dashboard
  * Domain Path:       /languages
  */
@@ -26,23 +26,29 @@ define( 'CPD_DASHBOARD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
  * The core plugin class that is used to define internationalization,
  * admin-specific hooks, and public-facing site hooks.
  */
-require CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-dashboard.php';
+require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-dashboard.php';
+
+// Include the admin class as well
+require_once CPD_DASHBOARD_PLUGIN_DIR . 'admin/class-cpd-admin.php';
 
 /**
  * Register activation and deactivation hooks.
  * This is the activation hook for the plugin, which will create the database tables and roles.
  */
-
 function cpd_dashboard_activate() {
     require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-database.php';
     $cpd_database = new CPD_Database();
     $cpd_database->create_tables();
-    
+
     // Register the custom client role on activation.
     cpd_dashboard_register_roles();
-    
+
     // Add custom capabilities to existing roles
     cpd_dashboard_add_capabilities();
+
+    // Schedule the daily CRM email event on activation
+    require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-email-handler.php';
+    CPD_Email_Handler::schedule_daily_crm_email();
 }
 
 /**
@@ -51,6 +57,10 @@ function cpd_dashboard_activate() {
 function cpd_dashboard_deactivate() {
     // Remove the custom client role upon deactivation.
     remove_role( 'client' );
+
+    // Clear scheduled cron events on deactivation
+    require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-email-handler.php';
+    CPD_Email_Handler::unschedule_daily_crm_email();
 }
 
 register_activation_hook( __FILE__, 'cpd_dashboard_activate' );
@@ -78,7 +88,7 @@ function cpd_dashboard_add_capabilities() {
     if ($admin_role) {
         $admin_role->add_cap('cpd_view_dashboard');
     }
-    
+
     // Give the client role the dashboard capability (in case role already exists)
     $client_role = get_role('client');
     if ($client_role) {
@@ -90,7 +100,12 @@ function cpd_dashboard_add_capabilities() {
  * The main function responsible for initializing the plugin.
  */
 function cpd_dashboard_run() {
-	$plugin = new CPD_Dashboard();
-	$plugin->run();
+    $plugin = new CPD_Dashboard();
+    $plugin->run();
+
+    // Instantiate your admin class here
+    $plugin_name = 'cpd-dashboard';
+    $version = CPD_DASHBOARD_VERSION;
+    $cpd_admin = new CPD_Admin( $plugin_name, $version );
 }
-cpd_dashboard_run();
+add_action( 'plugins_loaded', 'cpd_dashboard_run' );

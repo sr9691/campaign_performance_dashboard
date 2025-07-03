@@ -20,6 +20,7 @@ class CPD_Admin {
     private $log_table;
     private $client_table;
     private $user_client_table;
+    private static $page_content_rendered = false;
 
     public function __construct( $plugin_name, $version ) {
         global $wpdb;
@@ -40,6 +41,10 @@ class CPD_Admin {
         add_action( 'admin_post_cpd_add_user', array( $this, 'handle_add_user_submission' ) );
         add_action( 'admin_post_cpd_delete_user', array( $this, 'handle_delete_user_submission' ) );
         
+        // NEW: Hook for manual settings submission
+        add_action( 'admin_post_cpd_save_general_settings', array( $this, 'handle_save_general_settings' ) );
+        add_action( 'admin_post_nopriv_cpd_save_general_settings', array( $this, 'handle_save_general_settings' ) ); // For logged out users, though settings are admin only
+
         // AJAX hooks for Admin dashboard interactivity
         add_action( 'wp_ajax_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
         add_action( 'wp_ajax_cpd_ajax_add_client', array( $this, 'ajax_handle_add_client' ) );
@@ -70,8 +75,8 @@ class CPD_Admin {
         // Add admin menus
         add_action( 'admin_menu', array( $this, 'add_plugin_admin_menu' ) );
 
-        // Register settings
-        add_action( 'admin_init', array( $this, 'register_settings' ) );
+        // Register settings (This line should be commented out or removed if you're not using the WP Settings API)
+        // add_action( 'admin_init', array( $this, 'register_settings' ) );
 
         // Add the new setting for Report Problem Email (already there)
         // register_setting( 'cpd-dashboard-settings-group', 'cpd_report_problem_email', 'sanitize_email' ); 
@@ -272,6 +277,7 @@ class CPD_Admin {
             array( $this, 'render_admin_management_page' ) // Callback for management content
         );
         
+        /*
         add_submenu_page(
             $this->plugin_name,
             'Dashboard Settings',
@@ -280,6 +286,7 @@ class CPD_Admin {
             $this->plugin_name . '-settings',
             array( $this, 'render_settings_page' )
         );
+        */
     }
 
     /**
@@ -296,7 +303,7 @@ class CPD_Admin {
             } else {
                 // If URL is not set, display a message on the admin page itself
                 add_action( 'admin_notices', function() {
-                    echo '<div class="notice notice-error is-dismissible"><p><strong>Campaign Dashboard Error:</strong> Public Dashboard URL is not set. Please go to <a href="' . esc_url( admin_url( 'admin.php?page=' . $this->plugin_name . '-settings' ) ) . '">Settings</a> to configure it.</p></div>';
+                    echo '<div class="notice notice-error is-dismissible"><p><strong>Campaign Dashboard Error:</strong> Public Dashboard URL is not set. Please go to <a href="' . esc_url( admin_url( 'admin.php?page=' . $this->plugin_name . '-management#settings' ) ) . '">Settings</a> to configure it.</p></div>';
                 });
             }
         }
@@ -307,17 +314,33 @@ class CPD_Admin {
      * This will now contain ONLY management sections.
      */
     public function render_admin_management_page() {
+        
+        // Add a unique identifier each time this function is called
+        static $call_count = 0;
+        $call_count++;
+        error_log("render_admin_management_page called. Count: " . $call_count); 
+        
         // Ensure user has capability to view this page
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_die( 'You do not have sufficient permissions to access this page.' );
         }
 
+        static $template_included = false;
+
+        if ( $template_included ) {
+            error_log("render_admin_management_page: Template already included in this request. Skipping.");
+            return; // Already included, prevent re-inclusion
+        }
+
+        // Set the flag to true before including
+        $template_included = true;
+
         $plugin_name = $this->plugin_name;
-        $all_clients = $this->data_provider->get_all_client_accounts(); //
+        $all_clients = $this->data_provider->get_all_client_accounts();
         $logs = $this->get_all_logs();
         $all_users = get_users( array( 'role__in' => array( 'administrator', 'client' ) ) );
-        $all_client_accounts_for_dropdown = $this->data_provider->get_all_client_accounts(); //
-        $data_provider = $this->data_provider; 
+        $all_client_accounts_for_dropdown = $this->data_provider->get_all_client_accounts();
+        $data_provider = $this->data_provider;
 
         // Include the admin page template (this should now contain only management sections)
         include CPD_DASHBOARD_PLUGIN_DIR . 'admin/views/admin-page.php';
@@ -334,152 +357,44 @@ class CPD_Admin {
         // The actual content is handled by the redirect or the admin_notices.
     }
     
+    
     /**
-     * Renders the settings page content.
+     * Handles the form submission for general settings.
+     * This replaces the WordPress Settings API for these options.
      */
-    public function render_settings_page() {
-        // This is a placeholder for the settings page content.
-        // It will contain a form to set the client dashboard URL.
-        $dashboard_page_url = get_option( 'cpd_client_dashboard_url', '' );
-        $api_key = get_option( 'cpd_api_key', '' ); // NEW: Get API Key
-        $all_clients = $this->data_provider->get_all_client_accounts();
-        $scheduled_hour = get_option('cpd_crm_email_schedule_hour', '09'); // Default to 9 AM
-        $selected_ampm = get_option('cpd_crm_email_schedule_ampm', 'am'); // Default to AM
+    public function handle_save_general_settings() {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( 'You do not have sufficient permissions to access this page.' );
+        }
 
-        ?>
-        <div class="wrap">
-            <h1>Dashboard Settings</h1>
-            <form method="post" action="options.php">
-                <?php settings_fields( 'cpd-dashboard-settings-group' ); ?>
-                <?php do_settings_sections( 'cpd-dashboard-settings-group' ); ?>
-                <table class="form-table">
-                    <tr valign="top">
-                        <th scope="row">Client Dashboard URL</th>
-                        <td>
-                            <input type="url" name="cpd_client_dashboard_url" value="<?php echo esc_url( $dashboard_page_url ); ?>" size="50" />
-                            <p class="description">Enter the full URL of the page where you added the <code>[campaign_dashboard]</code> shortcode.</p>
-                        </td>
-                    </tr>
-                    <tr valign="top">
-                        <th scope="row">Report Problem Email</th>
-                        <td>
-                            <input type="email" name="cpd_report_problem_email" value="<?php echo esc_attr( get_option('cpd_report_problem_email', 'support@memomarketinggroup.com') ); ?>" size="50" />
-                            <p class="description">Email address for the "Report a Problem" button on the dashboard.</p>
-                        </td>
-                    </tr>
-                    <tr valign="top">
-                        <th scope="row">REST API Key</th>
-                        <td>
-                            <input type="text" id="cpd_api_key_field" name="cpd_api_key" value="<?php echo esc_attr( $api_key ); ?>" size="60" readonly />
-                            <button type="button" id="generate_api_key_button" class="button button-secondary">Generate New Key</button>
-                            <p class="description">This key is used for secure API data imports (e.g., from Make.com). Regenerating will invalidate the old key.</p>
-                        </td>
-                    </tr>
-                    <tr valign="top">
-                        <th scope="row">Daily CRM Email Schedule Time</th>
-                        <td>
-                            <select id="cpd_crm_email_schedule_hour" name="cpd_crm_email_schedule_hour">
-                                <?php
-                                for ($i = 0; $i < 24; $i++) {
-                                    $hour_24 = str_pad($i, 2, '0', STR_PAD_LEFT);
-                                    $hour_12 = ( $i == 0 || $i == 12 ) ? 12 : ($i % 12);
-                                    $ampm = ( $i < 12 ) ? 'am' : 'pm';
-                                    printf(
-                                        '<option value="%s" %s>%s %s</option>',
-                                        esc_attr($hour_24),
-                                        selected($scheduled_hour, $hour_24, false),
-                                        esc_html($hour_12),
-                                        esc_html(strtoupper($ampm))
-                                    );
-                                }
-                                ?>
-                            </select>
-                            <p class="description">Select the hour of the day to send automatic CRM emails.</p>
-                        </td>
-                    </tr>
-                </table>
-                <?php submit_button(); ?>
-            </form>
+        // Verify nonce for security
+        if ( ! isset( $_POST['_wpnonce_cpd_settings'] ) || ! wp_verify_nonce( $_POST['_wpnonce_cpd_settings'], 'cpd_save_general_settings_nonce' ) ) {
+            wp_die( 'Security check failed.' );
+        }
 
-            <div id="crm-email-settings-section" class="card section-content active">
-                <h2>CRM Email Management</h2>
-                <div class="add-form-section">
-                    <h3>On-Demand CRM Email Send</h3>
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="on_demand_client_select">Select Client Account</label>
-                            <select id="on_demand_client_select" class="searchable-select">
-                                <option value="all">All Clients (Note: Only sends to clients with eligible data)</option>
-                                <?php foreach ( $all_clients as $client_option ) : ?>
-                                    <option value="<?php echo esc_attr( $client_option->account_id ); ?>">
-                                        <?php echo esc_html( $client_option->client_name ); ?> (<?php echo esc_html( $client_option->account_id ); ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" id="trigger_on_demand_send" class="button action-button-large">
-                            <i class="fas fa-paper-plane"></i> Send On-Demand CRM Email
-                        </button>
-                    </div>
-                </div>
+        // Retrieve and sanitize each option
+        $client_dashboard_url = isset( $_POST['cpd_client_dashboard_url'] ) ? esc_url_raw( $_POST['cpd_client_dashboard_url'] ) : '';
+        $report_problem_email = isset( $_POST['cpd_report_problem_email'] ) ? sanitize_email( $_POST['cpd_report_problem_email'] ) : '';
+        $api_key = isset( $_POST['cpd_api_key'] ) ? sanitize_text_field( $_POST['cpd_api_key'] ) : ''; // API key is typically managed by the generate button
+        $default_campaign_duration = isset( $_POST['default_campaign_duration'] ) ? sanitize_text_field( $_POST['default_campaign_duration'] ) : 'campaign';
+        $enable_notifications = isset( $_POST['enable_notifications'] ) ? sanitize_text_field( $_POST['enable_notifications'] ) : 'yes';
+        $crm_email_schedule_hour = isset( $_POST['cpd_crm_email_schedule_hour'] ) ? sanitize_text_field( $_POST['cpd_crm_email_schedule_hour'] ) : '09';
 
-                <div class="table-section">
-                    <h3>Eligible Visitors for CRM Email</h3>
-                    <div class="form-grid" style="grid-template-columns: 1fr;">
-                        <div class="form-group">
-                            <label for="eligible_visitors_client_filter">Filter by Client Account</label>
-                            <select id="eligible_visitors_client_filter" class="searchable-select">
-                                <option value="all">-- All Clients --</option>
-                                <?php foreach ( $all_clients as $client_option ) : ?>
-                                    <option value="<?php echo esc_attr( $client_option->account_id ); ?>">
-                                        <?php echo esc_html( $client_option->client_name ); ?> (<?php echo esc_html( $client_option->account_id ); ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="table-container">
-                        <table class="data-table" id="eligible-visitors-table">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Company Name</th>
-                                    <th>LinkedIn URL</th>
-                                    <th>City</th>
-                                    <th>State</th>
-                                    <th>Zip</th>
-                                    <th>Last Seen At</th>
-                                    <th>Pages Visited</th>
-                                    <th>Account ID</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr><td colspan="10" class="no-data">Loading eligible visitors...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php
-    }
+        // Update options using WordPress's Options API
+        update_option( 'cpd_client_dashboard_url', $client_dashboard_url );
+        update_option( 'cpd_report_problem_email', $report_problem_email );
+        // Do NOT update cpd_api_key here, as it's generated via AJAX, not direct form submission
+        update_option( 'default_campaign_duration', $default_campaign_duration );
+        update_option( 'enable_notifications', $enable_notifications );
+        update_option( 'cpd_crm_email_schedule_hour', $crm_email_schedule_hour );
 
-    /**
-     * Register settings for the plugin.
-     */
-    public function register_settings() {
-        register_setting( 'cpd-dashboard-settings-group', 'cpd_client_dashboard_url', 'esc_url_raw' );
-        register_setting( 'cpd-dashboard-settings-group', 'cpd_report_problem_email', 'sanitize_email' );
-        register_setting( 'cpd-dashboard-settings-group', 'cpd_api_key', 'sanitize_text_field' );
-        // NEW: Register the CRM email schedule hour
-        register_setting( 'cpd-dashboard-settings-group', 'cpd_crm_email_schedule_hour', array(
-            'type' => 'string',
-            'sanitize_callback' => 'sanitize_text_field',
-            'default' => '09', // Default to 9 AM (24-hour format)
-        ) );
+
+        // Log the action
+        $this->log_action( get_current_user_id(), 'SETTINGS_UPDATED', 'General dashboard settings were updated.' );
+
+        // Redirect back to the settings page with a success message
+        wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management#settings&message=settings_saved' ) );
+        exit;
     }
 
     /**
@@ -715,7 +630,7 @@ class CPD_Admin {
         // Allow 'all' or null for client_id to indicate aggregation across all clients
         $client_id = isset( $_POST['client_id'] ) && $_POST['client_id'] !== 'all' ? sanitize_text_field( $_POST['client_id'] ) : null;
         
-        $duration = isset( $_POST['duration'] ) ? sanitize_text_field( $_POST['duration'] ) : 'Campaign Duration';
+        $duration = isset( $_POST['duration'] ) ? sanitize_text_field( $_POST['duration'] ) : 'campaign'; // Default to 'campaign'
         $end_date = date('Y-m-d');
         $start_date = '2025-01-01'; // Default for 'Campaign Duration'
 
