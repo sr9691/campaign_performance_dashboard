@@ -152,6 +152,7 @@ class CPD_Public {
                         'ajax_url' => admin_url( 'admin-ajax.php' ),
                         'nonce' => wp_create_nonce( 'cpd_admin_nonce' ), // Admin specific nonce for admin management actions
                         'memo_seal_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Seal.png',
+                        'dashboard_url' => get_option( 'cpd_client_dashboard_url', '' ), // Pass the dashboard URL to JS
                     )
                 );
 
@@ -314,24 +315,75 @@ class CPD_Public {
         global $wpdb;
         $visitor_table = $wpdb->prefix . 'cpd_visitors';
         $log_table = $wpdb->prefix . 'cpd_action_logs';
-        
+
         // Ensure this nonce check matches 'cpd_visitor_nonce'
         if ( ! check_ajax_referer( 'cpd_visitor_nonce', 'nonce', false ) ) { 
+            error_log('update_visitor_status_callback: Nonce check failed.');
             wp_send_json_error( 'Invalid security nonce.', 403 ); 
         }
-        $visitor_id = isset( $_POST['visitor_id'] ) ? sanitize_text_field( $_POST['visitor_id'] ) : '';
+
+        // Get the internal ID (primary key) from the POST data
+        $visitor_internal_id = isset( $_POST['visitor_id'] ) ? intval( $_POST['visitor_id'] ) : 0;
         $update_action = isset( $_POST['update_action'] ) ? sanitize_text_field( $_POST['update_action'] ) : '';
         $user_id = get_current_user_id();
-        if ( empty( $visitor_id ) || ! in_array( $update_action, array( 'add_crm', 'archive' ) ) ) { wp_send_json_error( 'Invalid data provided.', 400 ); }
-        $update_column = ''; $log_description = '';
-        if ( 'add_crm' === $update_action ) { $update_column = 'is_crm_added'; $log_description = 'Visitor ID ' . $visitor_id . ' flagged for CRM addition.'; } elseif ( 'archive' === $update_action ) { $update_column = 'is_archived'; $log_description = 'Visitor ID ' . $visitor_id . ' archived.'; }
-        $updated = $wpdb->update( $visitor_table, array( $update_column => 1 ), array( 'visitor_id' => $visitor_id ), array( '%d' ), array( '%s' ) );
-        if ( $updated === false ) {
-            $log_description = 'Failed to update visitor status for ' . $visitor_id . ' (Action: ' . $update_action . ').'; $log_type = 'UPDATE_FAILED';
-            wp_send_json_error( 'Database update failed.', 500 );
+
+        error_log('update_visitor_status_callback: Received request - Visitor ID: ' . $visitor_internal_id . ', Action: ' . $update_action);
+
+        // Validate the internal ID and action
+        if ( $visitor_internal_id <= 0 || ! in_array( $update_action, array( 'add_crm', 'archive' ) ) ) { 
+            error_log('update_visitor_status_callback: Validation failed - Invalid ID or Action.');
+            wp_send_json_error( 'Invalid data provided or missing internal visitor ID.', 400 ); 
+        }
+
+        $update_column = ''; 
+        $log_description = '';
+
+        if ( 'add_crm' === $update_action ) { 
+            $update_column = 'is_crm_added'; 
+            $log_description = 'Visitor Internal ID ' . $visitor_internal_id . ' flagged for CRM addition.'; 
+        } elseif ( 'archive' === $update_action ) { 
+            $update_column = 'is_archived'; 
+            $log_description = 'Visitor Internal ID ' . $visitor_internal_id . ' archived.'; 
+        }
+
+        // Perform the update
+        // Check current status before updating to see if a change is needed
+        $current_status_column = ('add_crm' === $update_action) ? 'is_crm_added' : 'is_archived';
+        $current_status_value = $wpdb->get_var( $wpdb->prepare(
+            "SELECT %i FROM %i WHERE id = %d",
+            $current_status_column,
+            $visitor_table,
+            $visitor_internal_id
+        ) );
+        error_log('update_visitor_status_callback: Visitor ' . $visitor_internal_id . ' current ' . $current_status_column . ' status: ' . $current_status_value);
+
+        $updated_rows = 0;
+        if ( (int)$current_status_value === 0 ) { // Only attempt update if current status is 0 (not yet added/archived)
+            $updated_rows = $wpdb->update( 
+                $visitor_table, 
+                array( $update_column => 1 ), // Data to update: set column to 1
+                array( 'id' => $visitor_internal_id ), // WHERE clause: match by internal 'id'
+                array( '%d' ), // Format for update value (1 is integer)
+                array( '%d' )  // Format for WHERE value (id is integer)
+            );
         } else {
+            error_log('update_visitor_status_callback: Visitor ' . $visitor_internal_id . ' already has ' . $current_status_column . ' set to 1. No update performed.');
+        }
+
+        error_log('update_visitor_status_callback: $wpdb->update returned ' . print_r($updated_rows, true) . ' rows affected. Last DB Error: ' . $wpdb->last_error);
+
+        if ( $updated_rows === false ) { // Query failed
+            $log_description = 'Failed to update visitor status for Internal ID ' . $visitor_internal_id . ' (Action: ' . $update_action . '). Database Error: ' . $wpdb->last_error;
+            error_log($log_description); // Log the detailed DB error
+            wp_send_json_error( 'Database update failed: ' . $wpdb->last_error, 500 );
+        } elseif ( $updated_rows === 0 ) { // 0 rows affected
+            $log_description = 'Visitor Internal ID ' . $visitor_internal_id . ' status already updated or not found for action ' . $update_action . '. 0 rows affected.';
+            error_log($log_description); // Log the 0 rows affected scenario
+            wp_send_json_success( 'Status unchanged or visitor not found.', 200 ); // Send success, but with a nuanced message
+        } else { // 1 or more rows affected (success)
             $log_data = array( 'user_id' => $user_id, 'action_type' => 'VISITOR_' . strtoupper($update_action), 'description' => $log_description, );
             $wpdb->insert( $log_table, $log_data );
+            error_log('update_visitor_status_callback: Success - ' . $log_description); // Log success
             wp_send_json_success( 'Status updated successfully.', 200 );
         }
     }

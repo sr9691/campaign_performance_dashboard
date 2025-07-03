@@ -20,6 +20,20 @@ class CPD_Data_Provider {
     }
 
     /**
+     * Helper function to normalize account_id input.
+     * Converts string 'null' or 'all' to actual PHP null for consistent filtering.
+     *
+     * @param string|null $account_id The raw account ID from input.
+     * @return string|null Normalized account ID.
+     */
+    private function normalize_account_id( $account_id ) {
+        if ( is_string( $account_id ) && ( strtolower( $account_id ) === 'null' || strtolower( $account_id ) === 'all' ) ) {
+            return null;
+        }
+        return $account_id;
+    }
+
+    /**
      * Get all client accounts from the database.
      *
      * @return array An array of client objects.
@@ -73,34 +87,34 @@ class CPD_Data_Provider {
      * @return array An array of campaign data rows aggregated by ad group.
      */
     public function get_campaign_data_by_ad_group( $account_id, $start_date, $end_date ) {
+        $account_id = $this->normalize_account_id( $account_id ); // Normalize input
         $table_name = 'dashdev_cpd_campaign_data'; // Using fixed table name as per your setup
 
-        $where_clauses = ["date BETWEEN %s AND %s"];
-        $prepare_args = [$start_date, $end_date];
+        $sql_select_group_order = "
+            SELECT
+                ad_group_name,
+                SUM(impressions) AS impressions,
+                SUM(daily_reach) AS reach,
+                SUM(clicks) AS clicks,
+                (SUM(clicks) / NULLIF(SUM(impressions), 0)) * 100 AS ctr,
+                MAX(date) AS last_updated
+            FROM %i
+            WHERE date BETWEEN %s AND %s";
 
-        if ( $account_id !== null ) { // Only add account_id filter if it's explicitly provided
-            $where_clauses[] = "account_id = %s";
+        $prepare_args = [$table_name, $start_date, $end_date];
+
+        if ( $account_id !== null ) { // Check for normalized null
+            $sql_select_group_order .= " AND account_id = %s";
             $prepare_args[] = $account_id;
         }
 
-        $sql = "SELECT
-                    ad_group_name,
-                    SUM(impressions) AS impressions,
-                    SUM(daily_reach) AS reach,
-                    SUM(clicks) AS clicks,
-                    (SUM(clicks) / NULLIF(SUM(impressions), 0)) * 100 AS ctr,
-                    MAX(date) AS last_updated
-                 FROM %i";
+        $sql_select_group_order .= " GROUP BY ad_group_name ORDER BY ad_group_name ASC";
         
-        if ( ! empty( $where_clauses ) ) {
-            $sql .= " WHERE " . implode( " AND ", $where_clauses );
-        }
-
-        $sql .= " GROUP BY ad_group_name
-                 ORDER BY ad_group_name ASC";
-
-        $query = $this->wpdb->prepare( $sql, $table_name, ...$prepare_args );
+        $query = $this->wpdb->prepare( $sql_select_group_order, ...$prepare_args );
         
+        error_log('CPD_Data_Provider::get_campaign_data_by_ad_group - Account ID: ' . ($account_id ?? 'NULL') . ' | Start Date: ' . $start_date . ' | End Date: ' . $end_date);
+        error_log('SQL Query for ad group: ' . $query); // Log the actual prepared query
+
         $results = $this->wpdb->get_results( $query );
 
         if ( $this->wpdb->last_error ) {
@@ -120,30 +134,30 @@ class CPD_Data_Provider {
      * @return array An array of campaign data rows aggregated by date.
      */
     public function get_campaign_data_by_date( $account_id, $start_date, $end_date ) {
+        $account_id = $this->normalize_account_id( $account_id ); // Normalize input
         $table_name = 'dashdev_cpd_campaign_data'; // Using fixed table name as per your setup
 
-        $where_clauses = ["date BETWEEN %s AND %s"];
-        $prepare_args = [$start_date, $end_date];
+        $sql_select_group_order = "
+            SELECT
+                date,
+                SUM(impressions) AS impressions
+            FROM %i
+            WHERE date BETWEEN %s AND %s";
 
-        if ( $account_id !== null ) { // Only add account_id filter if it's explicitly provided
-            $where_clauses[] = "account_id = %s";
+        $prepare_args = [$table_name, $start_date, $end_date];
+
+        if ( $account_id !== null ) { // Check for normalized null
+            $sql_select_group_order .= " AND account_id = %s";
             $prepare_args[] = $account_id;
         }
 
-        $sql = "SELECT
-                    date,
-                    SUM(impressions) AS impressions
-                 FROM %i";
+        $sql_select_group_order .= " GROUP BY date ORDER BY date ASC";
         
-        if ( ! empty( $where_clauses ) ) {
-            $sql .= " WHERE " . implode( " AND ", $where_clauses );
-        }
-
-        $sql .= " GROUP BY date
-                 ORDER BY date ASC";
-
-        $query = $this->wpdb->prepare( $sql, $table_name, ...$prepare_args );
+        $query = $this->wpdb->prepare( $sql_select_group_order, ...$prepare_args );
         
+        error_log('CPD_Data_Provider::get_campaign_data_by_date - Account ID: ' . ($account_id ?? 'NULL') . ' | Start Date: ' . $start_date . ' | End Date: ' . $end_date);
+        error_log('SQL Query for campaign by date: ' . $query); // Log the actual prepared query
+
         $results = $this->wpdb->get_results( $query );
 
         if ( $this->wpdb->last_error ) {
@@ -160,23 +174,25 @@ class CPD_Data_Provider {
      * @return array An array of visitor data rows.
      */
     public function get_visitor_data( $account_id ) {
+        $account_id = $this->normalize_account_id( $account_id ); // Normalize input
         $table_name = $this->wpdb->prefix . 'cpd_visitors';
         
-        // Filter: Only show visitors that are NOT archived (is_archived = 0)
-        // AND NOT flagged for CRM (is_crm_added = 0).
-        $where_clauses = ["is_archived = %d", "is_crm_added = %d"];
-        $prepare_args = [0, 0]; // 0 for not archived, 0 for not CRM-added
+        $sql_select_order = "SELECT * FROM %i WHERE is_archived = %d AND is_crm_added = %d";
+        $prepare_args = [$table_name, 0, 0]; // 0 for not archived, 0 for not CRM-added
 
-        if ( $account_id !== null ) { // Only add account_id filter if it's explicitly provided
-            $where_clauses[] = "account_id = %s";
+        // Only add account_id filter if it's explicitly provided (not null)
+        if ( $account_id !== null ) { // Check for normalized null
+            $sql_select_order .= " AND account_id = %s";
             $prepare_args[] = $account_id;
         }
         
-        $sql_query = $this->wpdb->prepare(
-            "SELECT * FROM %i WHERE " . implode(" AND ", $where_clauses) . " ORDER BY last_seen_at DESC",
-            $table_name,
-            ...$prepare_args
-        );
+        $sql_select_order .= " ORDER BY last_seen_at DESC";
+
+        // Prepare the query
+        $sql_query = $this->wpdb->prepare( $sql_select_order, ...$prepare_args );
+        
+        error_log('CPD_Data_Provider::get_visitor_data - Account ID Passed: ' . ($account_id ?? 'NULL (All Clients)'));
+        error_log('CPD_Data_Provider::get_visitor_data - Final SQL Query: ' . $sql_query); // Log the actual prepared query
 
         $results = $this->wpdb->get_results( $sql_query );
 
@@ -191,6 +207,43 @@ class CPD_Data_Provider {
     }
 
     /**
+     * NEW: Get eligible visitor data for CRM emails (is_crm_added = 1 AND crm_sent IS NULL).
+     * This is used for the CRM Email Management section in admin settings.
+     *
+     * @param string|null $account_id Optional. Filter by account ID. Null for all eligible visitors across all accounts.
+     * @return array An array of eligible visitor data rows.
+     */
+    public function get_eligible_crm_visitors( $account_id = null ) {
+        $account_id = $this->normalize_account_id( $account_id ); // Normalize input
+        $table_name = $this->wpdb->prefix . 'cpd_visitors';
+        
+        $sql_select_order = "SELECT id, first_name, last_name, company_name, linkedin_url, city, state, zipcode, last_seen_at, recent_page_count, account_id FROM %i WHERE is_crm_added = %d AND crm_sent IS NULL";
+        $prepare_args = [$table_name, 1]; // is_crm_added = 1
+
+        if ( $account_id !== null ) { // Check for normalized null
+            $sql_select_order .= " AND account_id = %s";
+            $prepare_args[] = $account_id;
+        }
+        
+        $sql_select_order .= " ORDER BY last_seen_at DESC";
+
+        // Prepare the query
+        $sql_query = $this->wpdb->prepare( $sql_select_order, ...$prepare_args );
+
+        error_log('CPD_Data_Provider::get_eligible_crm_visitors - Account ID Passed: ' . ($account_id ?? 'NULL (All Clients)'));
+        error_log('CPD_Data_Provider::get_eligible_crm_visitors - Final SQL Query: ' . $sql_query); // Log the actual prepared query
+
+        $results = $this->wpdb->get_results( $sql_query );
+
+        if ( $this->wpdb->last_error ) {
+            error_log('CPD_Data_Provider: Database error for eligible CRM visitors: ' . $this->wpdb->last_error);
+        }
+
+        return $results;
+    }
+
+
+    /**
      * Get summary metrics for a specific account and date range.
      *
      * @param string $account_id The account ID.
@@ -199,56 +252,39 @@ class CPD_Data_Provider {
      * @return array An associative array of aggregated metrics.
      */
     public function get_summary_metrics( $account_id, $start_date, $end_date ) {
+        $account_id = $this->normalize_account_id( $account_id ); // Normalize input
         $campaign_table = 'dashdev_cpd_campaign_data';
         $visitor_table = $this->wpdb->prefix . 'cpd_visitors';
 
-        // Build WHERE clause for campaign data
-        $campaign_where_clauses = ["date BETWEEN %s AND %s"];
-        $campaign_prepare_args = [$start_date, $end_date];
-        if ( $account_id !== null ) {
-            $campaign_where_clauses[] = "account_id = %s";
-            $campaign_prepare_args[] = $account_id;
+        // Campaign metrics query construction
+        $campaign_metrics_sql = "SELECT SUM(impressions) as total_impressions, SUM(daily_reach) as total_reach, SUM(clicks) as total_clicks FROM %i WHERE date BETWEEN %s AND %s";
+        $campaign_metrics_prepare_args = [$campaign_table, $start_date, $end_date];
+        if ( $account_id !== null ) { // Check for normalized null
+            $campaign_metrics_sql .= " AND account_id = %s";
+            $campaign_metrics_prepare_args[] = $account_id;
         }
-        $campaign_where_sql = implode(" AND ", $campaign_where_clauses);
-
-        // Sum up metrics from the campaign data table.
-        $metrics = $this->wpdb->get_row(
-            $this->wpdb->prepare(
-                "SELECT SUM(impressions) as total_impressions, SUM(daily_reach) as total_reach, SUM(clicks) as total_clicks
-                 FROM %i WHERE " . $campaign_where_sql,
-                $campaign_table,
-                ...$campaign_prepare_args
-            )
-        );
-
-        // Build WHERE clause for visitor data (using last_seen_at for date range for CRM additions)
-        $visitor_where_clauses = ["last_seen_at BETWEEN %s AND %s"];
-        $visitor_prepare_args = [$start_date, $end_date];
-        if ( $account_id !== null ) {
-            $visitor_where_clauses[] = "account_id = %s";
-            $visitor_prepare_args[] = $account_id;
-        }
-        $visitor_where_sql = implode(" AND ", $visitor_where_clauses);
-
-        // Count new contacts and CRM additions from the visitors table.
-        // SUM(is_crm_added) correctly sums 1s for true and 0s for false.
-
-        $crm_additions_sql = $this->wpdb->prepare(
-            "SELECT SUM(new_profile) as new_contacts, SUM(CASE WHEN is_crm_added = 1 THEN 1 ELSE 0 END) as crm_additions_count
-             FROM %i WHERE " . $visitor_where_sql,
-            $visitor_table,
-            ...$visitor_prepare_args
-        );
-        error_log('CPD_Data_Provider: CRM Additions SQL Query: ' . $crm_additions_sql); // Log the CRM SQL query
-
-        $contact_counts = $this->wpdb->get_row( $crm_additions_sql );
+        $metrics = $this->wpdb->get_row( $this->wpdb->prepare( $campaign_metrics_sql, ...$campaign_metrics_prepare_args ) );
         
+        error_log('CPD_Data_Provider::get_summary_metrics - Account ID: ' . ($account_id ?? 'NULL'));
+        error_log('SQL Query for summary campaign metrics: ' . $this->wpdb->prepare( $campaign_metrics_sql, ...$campaign_metrics_prepare_args ) );
+
+        // Visitor metrics query construction
+        // Count CRM additions as any profile flagged is_crm_added = 1, regardless of crm_sent status
+        $visitor_metrics_sql = "SELECT SUM(new_profile) as new_contacts, SUM(CASE WHEN is_crm_added = 1 THEN 1 ELSE 0 END) as crm_additions_count FROM %i WHERE last_seen_at BETWEEN %s AND %s";
+        $visitor_metrics_prepare_args = [$visitor_table, $start_date, $end_date];
+        if ( $account_id !== null ) { // Check for normalized null
+            $visitor_metrics_sql .= " AND account_id = %s";
+            $visitor_metrics_prepare_args[] = $account_id;
+        }
+        $contact_counts = $this->wpdb->get_row( $this->wpdb->prepare( $visitor_metrics_sql, ...$visitor_metrics_prepare_args ) );
+        
+        error_log('SQL Query for summary contact counts: ' . $this->wpdb->prepare( $visitor_metrics_sql, ...$visitor_metrics_prepare_args ) );
+
         $total_clicks = isset($metrics->total_clicks) ? $metrics->total_clicks : 0;
         $total_impressions = isset($metrics->total_impressions) ? $metrics->total_impressions : 0;
         $total_reach = isset($metrics->total_reach) ? $metrics->total_reach : 0;
         $new_contacts = isset($contact_counts->new_contacts) ? $contact_counts->new_contacts : 0;
         $crm_additions = isset($contact_counts->crm_additions_count) ? $contact_counts->crm_additions_count : 0;
-        error_log('CPD_Data_Provider: Summary Metrics - Impressions: ' . $metrics->total_impressions . ', Reach: ' . $metrics->total_reach . ', Clicks: ' . $metrics->total_clicks . ', New Contacts: ' . $contact_counts->new_contacts . ', CRM Additions: ' . $contact_counts->crm_additions_count);
 
         $ctr = ($total_impressions > 0) ? ($total_clicks / $total_impressions) * 100 : 0;
 

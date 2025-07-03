@@ -21,6 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 $memo_logo_url = CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png';
 $current_page = isset($_GET['page']) ? $_GET['page'] : '';
+$client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the dashboard URL for the new link
 ?>
 
 <div class="admin-page-container">
@@ -32,29 +33,45 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
         <nav>
             <ul>
                 <li>
-                    <a href="#clients-section" class="nav-link active" data-section="clients">
+                    <a href="#clients" class="nav-link active" data-target="clients-section">
                         <i class="fas fa-users"></i>
                         Client Management
                     </a>
                 </li>
                 <li>
-                    <a href="#users-section" class="nav-link" data-section="users">
+                    <a href="#users" class="nav-link" data-target="users-section">
                         <i class="fas fa-user-cog"></i>
                         User Management
                     </a>
                 </li>
                 <li>
-                    <a href="#settings-section" class="nav-link" data-section="settings">
+                    <a href="#settings" class="nav-link" data-target="settings-section">
                         <i class="fas fa-cog"></i>
                         Settings
                     </a>
                 </li>
+                
                 <li>
-                    <a href="#logs-section" class="nav-link" data-section="logs">
+                    <a href="#crm-emails" class="nav-link" data-target="crm-email-management-section">
+                        <i class="fas fa-envelope"></i>
+                        CRM Emails
+                    </a>
+                </li>
+
+                <li>
+                    <a href="#logs" class="nav-link" data-target="logs-section">
                         <i class="fas fa-list-alt"></i>
                         Action Logs
                     </a>
                 </li>
+                <?php if ( !empty( $client_dashboard_url ) ) : ?>
+                <li class="admin-dashboard-link">
+                    <a href="<?php echo esc_url( $client_dashboard_url ); ?>" target="_blank" class="nav-link">
+                        <i class="fas fa-chart-bar"></i>
+                        View Dashboard
+                    </a>
+                </li>
+                <?php endif; ?>
             </ul>
         </nav>
         
@@ -226,10 +243,10 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
                         <tbody>
                             <?php if ( ! empty( $all_users ) ) : ?>
                                 <?php foreach ( $all_users as $user ) : 
-                                    $user_client_account_id = $data_provider->get_account_id_by_user_id( $user->ID ); //
+                                    $user_client_account_id = $data_provider->get_account_id_by_user_id( $user->ID );
                                     $linked_client_name = 'N/A';
                                     if ($user_client_account_id) {
-                                        $linked_client_obj = $data_provider->get_client_by_account_id($user_client_account_id); //
+                                        $linked_client_obj = $data_provider->get_client_by_account_id($user_client_account_id);
                                         if ($linked_client_obj) {
                                             $linked_client_name = $linked_client_obj->client_name;
                                         }
@@ -280,14 +297,14 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
                             <label for="client_dashboard_url">Client Dashboard URL</label>
                             <input type="url" id="client_dashboard_url" name="cpd_client_dashboard_url" 
                                    value="<?php echo esc_url( get_option( 'cpd_client_dashboard_url', '' ) ); ?>" 
-                                   placeholder="https://yoursite.com/dashboard">
+                                   placeholder="https://memomarketinggroup.com/dashboarddev/wp-admin/admin.php?page=cpd-dashboard">
                             <small class="form-help">Enter the full URL of the page where you added the [campaign_dashboard] shortcode.</small>
                         </div>
                         <div class="form-group">
                             <label for="cpd_report_problem_email">Report Problem Email</label> 
                             <input type="email" id="cpd_report_problem_email" name="cpd_report_problem_email"
                                    value="<?php echo esc_attr( get_option('cpd_report_problem_email', 'support@memomarketinggroup.com') ); ?>"
-                                   placeholder="support@yourcompany.com">
+                                   placeholder="support@memomarketinggroup.com">
                             <small class="form-help">Email address for the "Report a Problem" button.</small>
                         </div>
                         <div class="form-group">
@@ -316,6 +333,28 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
                                 <option value="no">No</option>
                             </select>
                         </div>
+                        
+                        <div class="form-group">
+                            <label for="cpd_crm_email_schedule_hour">Daily CRM Email Schedule Time</label>
+                            <select id="cpd_crm_email_schedule_hour" name="cpd_crm_email_schedule_hour">
+                                <?php
+                                $scheduled_hour = get_option('cpd_crm_email_schedule_hour', '09'); // Get current setting
+                                for ($i = 0; $i < 24; $i++) {
+                                    $hour_24 = str_pad($i, 2, '0', STR_PAD_LEFT);
+                                    $hour_12 = ( $i == 0 || $i == 12 ) ? 12 : ($i % 12);
+                                    $ampm = ( $i < 12 ) ? 'am' : 'pm';
+                                    printf(
+                                        '<option value="%s" %s>%s %s</option>',
+                                        esc_attr($hour_24),
+                                        selected($scheduled_hour, $hour_24, false),
+                                        esc_html($hour_12),
+                                        esc_html(strtoupper($ampm))
+                                    );
+                                }
+                                ?>
+                            </select>
+                            <small class="form-help">Select the hour of the day for automatic CRM email feeds.</small>
+                        </div>
                     </div>
                     <div class="form-actions">
                         <button type="submit">Save Settings</button>
@@ -338,8 +377,72 @@ $current_page = isset($_GET['page']) ? $_GET['page'] : '';
 
                 </div>
             </div>
-        </div>
+            </div>
 
+
+        <div id="crm-email-management-section" class="card section-content">
+            <h2>CRM Email Management</h2>
+            
+            <div class="add-form-section">
+                <h3>On-Demand CRM Email Send</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="on_demand_client_select">Select Client Account</label>
+                        <select id="on_demand_client_select" class="searchable-select">
+                            <option value="all">-- All Clients -- (Note: Only sends to clients with eligible data)</option>
+                            <?php foreach ( $all_clients as $client_option ) : ?>
+                                <option value="<?php echo esc_attr( $client_option->account_id ); ?>">
+                                    <?php echo esc_html( $client_option->client_name ); ?> (<?php echo esc_html( $client_option->account_id ); ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="trigger_on_demand_send" class="button">
+                        <i class="fas fa-paper-plane"></i> Send On-Demand CRM Email
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-section">
+                <h3>Eligible Visitors for CRM Email</h3>
+                <div class="form-grid" style="grid-template-columns: 1fr;">
+                    <div class="form-group">
+                        <label for="eligible_visitors_client_filter">Filter by Client Account</label>
+                        <select id="eligible_visitors_client_filter" class="searchable-select">
+                            <option value="all">-- All Clients --</option>
+                            <?php foreach ( $all_clients as $client_option ) : ?>
+                                <option value="<?php echo esc_attr( $client_option->account_id ); ?>">
+                                    <?php echo esc_html( $client_option->client_name ); ?> (<?php echo esc_html( $client_option->account_id ); ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="eligible-visitors-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Company Name</th>
+                                <th>LinkedIn URL</th>
+                                <th>City</th>
+                                <th>State</th>
+                                <th>Zip</th>
+                                <th>Last Seen At</th>
+                                <th>Pages Visited</th>
+                                <th>Account ID</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="10" class="no-data">Loading eligible visitors...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
         <div id="logs-section" class="card section-content">
             <h2>Action Logs</h2>
             <div class="table-container">
@@ -452,11 +555,37 @@ document.addEventListener('DOMContentLoaded', function() {
     const navLinks = document.querySelectorAll('.nav-link');
     const sections = document.querySelectorAll('.section-content');
     
+    // Determine initial active section based on hash or default to clients-section
+    const initialHash = window.location.hash ? window.location.hash.substring(1) : 'clients-section';
+    
+    // Set initial active state
+    navLinks.forEach(link => {
+        // Correctly handle "crm-emails" hash to point to "crm-email-management-section"
+        let targetDataAttribute = link.getAttribute('data-target');
+        let expectedHash = targetDataAttribute.replace('-section', ''); // Convert 'section-id' to 'section-id'
+
+        if (expectedHash === initialHash) {
+            link.classList.add('active');
+            const targetSection = document.getElementById(targetDataAttribute);
+            if (targetSection) {
+                targetSection.classList.add('active');
+            }
+        } else {
+            link.classList.remove('active');
+            const targetSection = document.getElementById(targetDataAttribute);
+            if (targetSection) {
+                targetSection.classList.remove('active');
+            }
+        }
+    });
+
+
     navLinks.forEach(link => {
         link.addEventListener('click', function(e) {
-            const targetSection = this.getAttribute('data-section');
+            const targetSectionId = this.getAttribute('data-target');
             
-            if (targetSection) {
+            // Only prevent default if it's a section navigation link, not the dashboard link
+            if (targetSectionId) {
                 e.preventDefault();
                 
                 // Remove active class from all nav links and sections
@@ -467,9 +596,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.classList.add('active');
                 
                 // Show target section
-                const targetElement = document.getElementById(targetSection + '-section');
+                const targetElement = document.getElementById(targetSectionId);
                 if (targetElement) {
                     targetElement.classList.add('active');
+                }
+                // Update URL hash without jumping
+                if (history.pushState) {
+                    history.pushState(null, null, '#' + targetSectionId.replace('-section', ''));
+                } else {
+                    window.location.hash = '#' + targetSectionId.replace('-section', '');
                 }
             }
         });

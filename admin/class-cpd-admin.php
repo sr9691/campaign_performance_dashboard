@@ -54,6 +54,11 @@ class CPD_Admin {
         // NEW: AJAX for API token generation
         add_action( 'wp_ajax_cpd_generate_api_token', array( $this, 'ajax_generate_api_token' ) );
 
+        // NEW: CRM Email AJAX actions
+        add_action( 'wp_ajax_cpd_get_eligible_visitors', array( 'CPD_Email_Handler', 'ajax_get_eligible_visitors' ) );
+        add_action( 'wp_ajax_cpd_trigger_on_demand_send', array( 'CPD_Email_Handler', 'ajax_trigger_on_demand_send' ) );
+        add_action( 'wp_ajax_cpd_undo_crm_added', array( 'CPD_Email_Handler', 'ajax_undo_crm_added' ) );
+
 
         // Enqueue styles/scripts - FIXED: Use global hooks for all admin pages
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
@@ -77,9 +82,9 @@ class CPD_Admin {
         // Add action to show current screen info
         // add_action( 'admin_notices', array( $this, 'debug_screen_info' ) );
 
-        // NEW: Register REST API endpoints
-        // Removed from here to be managed by CPD_API class (new approach)
-        // add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
+        // Hook for scheduling daily CRM emails
+        add_action( 'cpd_daily_crm_email_event', array( 'CPD_Email_Handler', 'daily_crm_email_cron_callback' ) );
+
     }
 
     /**
@@ -211,6 +216,7 @@ class CPD_Admin {
             array(
                 'ajax_url' => admin_url( 'admin-ajax.php' ),
                 'nonce' => wp_create_nonce( 'cpd_admin_nonce' ),
+                'dashboard_url' => get_option( 'cpd_client_dashboard_url', '' ), // Pass the dashboard URL to JS
             )
         );
 
@@ -336,6 +342,9 @@ class CPD_Admin {
         // It will contain a form to set the client dashboard URL.
         $dashboard_page_url = get_option( 'cpd_client_dashboard_url', '' );
         $api_key = get_option( 'cpd_api_key', '' ); // NEW: Get API Key
+        $all_clients = $this->data_provider->get_all_client_accounts();
+        $scheduled_hour = get_option('cpd_crm_email_schedule_hour', '09'); // Default to 9 AM
+        $selected_ampm = get_option('cpd_crm_email_schedule_ampm', 'am'); // Default to AM
 
         ?>
         <div class="wrap">
@@ -366,9 +375,94 @@ class CPD_Admin {
                             <p class="description">This key is used for secure API data imports (e.g., from Make.com). Regenerating will invalidate the old key.</p>
                         </td>
                     </tr>
+                    <tr valign="top">
+                        <th scope="row">Daily CRM Email Schedule Time</th>
+                        <td>
+                            <select id="cpd_crm_email_schedule_hour" name="cpd_crm_email_schedule_hour">
+                                <?php
+                                for ($i = 0; $i < 24; $i++) {
+                                    $hour_24 = str_pad($i, 2, '0', STR_PAD_LEFT);
+                                    $hour_12 = ( $i == 0 || $i == 12 ) ? 12 : ($i % 12);
+                                    $ampm = ( $i < 12 ) ? 'am' : 'pm';
+                                    printf(
+                                        '<option value="%s" %s>%s %s</option>',
+                                        esc_attr($hour_24),
+                                        selected($scheduled_hour, $hour_24, false),
+                                        esc_html($hour_12),
+                                        esc_html(strtoupper($ampm))
+                                    );
+                                }
+                                ?>
+                            </select>
+                            <p class="description">Select the hour of the day to send automatic CRM emails.</p>
+                        </td>
+                    </tr>
                 </table>
                 <?php submit_button(); ?>
             </form>
+
+            <div id="crm-email-settings-section" class="card section-content active">
+                <h2>CRM Email Management</h2>
+                <div class="add-form-section">
+                    <h3>On-Demand CRM Email Send</h3>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="on_demand_client_select">Select Client Account</label>
+                            <select id="on_demand_client_select" class="searchable-select">
+                                <option value="all">All Clients (Note: Only sends to clients with eligible data)</option>
+                                <?php foreach ( $all_clients as $client_option ) : ?>
+                                    <option value="<?php echo esc_attr( $client_option->account_id ); ?>">
+                                        <?php echo esc_html( $client_option->client_name ); ?> (<?php echo esc_html( $client_option->account_id ); ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" id="trigger_on_demand_send" class="button action-button-large">
+                            <i class="fas fa-paper-plane"></i> Send On-Demand CRM Email
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-section">
+                    <h3>Eligible Visitors for CRM Email</h3>
+                    <div class="form-grid" style="grid-template-columns: 1fr;">
+                        <div class="form-group">
+                            <label for="eligible_visitors_client_filter">Filter by Client Account</label>
+                            <select id="eligible_visitors_client_filter" class="searchable-select">
+                                <option value="all">-- All Clients --</option>
+                                <?php foreach ( $all_clients as $client_option ) : ?>
+                                    <option value="<?php echo esc_attr( $client_option->account_id ); ?>">
+                                        <?php echo esc_html( $client_option->client_name ); ?> (<?php echo esc_html( $client_option->account_id ); ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table" id="eligible-visitors-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Company Name</th>
+                                    <th>LinkedIn URL</th>
+                                    <th>City</th>
+                                    <th>State</th>
+                                    <th>Zip</th>
+                                    <th>Last Seen At</th>
+                                    <th>Pages Visited</th>
+                                    <th>Account ID</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="10" class="no-data">Loading eligible visitors...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
         <?php
     }
@@ -379,8 +473,13 @@ class CPD_Admin {
     public function register_settings() {
         register_setting( 'cpd-dashboard-settings-group', 'cpd_client_dashboard_url', 'esc_url_raw' );
         register_setting( 'cpd-dashboard-settings-group', 'cpd_report_problem_email', 'sanitize_email' );
-        // NEW: Register the API key setting. We'll sanitize it as text, as it's a random string.
         register_setting( 'cpd-dashboard-settings-group', 'cpd_api_key', 'sanitize_text_field' );
+        // NEW: Register the CRM email schedule hour
+        register_setting( 'cpd-dashboard-settings-group', 'cpd_crm_email_schedule_hour', array(
+            'type' => 'string',
+            'sanitize_callback' => 'sanitize_text_field',
+            'default' => '09', // Default to 9 AM (24-hour format)
+        ) );
     }
 
     /**
@@ -621,13 +720,13 @@ class CPD_Admin {
         $start_date = '2025-01-01'; // Default for 'Campaign Duration'
 
         switch ($duration) {
-            case '7 days':
+            case '7': // Changed to '7' and '30' for simplicity as per HTML option values
                 $start_date = date('Y-m-d', strtotime('-7 days'));
                 break;
-            case '30 days':
+            case '30': // Changed to '7' and '30'
                 $start_date = date('Y-m-d', strtotime('-30 days'));
                 break;
-            case 'Campaign Duration':
+            case 'campaign': // Changed from 'Campaign Duration'
             default:
                 $start_date = '2025-01-01'; // This should probably be dynamic based on *earliest* campaign date if 'Campaign Duration' means 'all time'
                 break;

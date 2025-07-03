@@ -161,64 +161,78 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
         <?php endif; ?>
     </div>
 
-    <?php if ( ! empty( $visitor_data ) ) : ?>
     <div class="visitor-panel">
         <div class="header">All Visitors</div>
         <div class="visitor-list">
-            <?php foreach ( $visitor_data as $visitor ) : ?>
-            <div class="visitor-card" data-visitor-id="<?php echo esc_attr( $visitor->visitor_id ); ?>">
-                <div class="visitor-logo">
-                    <img src="<?php echo esc_url( $memo_seal_url ); ?>" alt="Referrer Logo">
-                </div>
-                <div class="visitor-details">
-                    <p class="visitor-name">
-                        <?php 
-                        $full_name = '';
-                        if ( ! empty( $visitor->first_name ) ) {
-                            $full_name .= $visitor->first_name;
-                        }
-                        if ( ! empty( $visitor->last_name ) ) {
-                            if ( ! empty( $full_name ) ) {
-                                $full_name .= ' ';
-                            }
-                            $full_name .= $visitor->last_name;
-                        }
-                        echo esc_html( ! empty( $full_name ) ? $full_name : 'Unknown Visitor' );
-                        ?>
-                    </p>
-                    <div class="visitor-info">
-                        <p><i class="fas fa-briefcase"></i> <?php echo esc_html( $visitor->job_title ?? 'Unknown' ); ?></p>
-                        <p><i class="fas fa-building"></i> <?php echo esc_html( $visitor->company_name ?? 'Unknown' ); ?></p>
-                        <p>
-                            <i class="fas fa-map-marker-alt"></i> 
+            <?php // The JavaScript will dynamically load content here ?>
+            <div class="no-data">Loading visitor data...</div>
+            <?php
+            // Initial render: If $visitor_data is not empty, display it.
+            // This is primarily for the first page load before AJAX updates.
+            // For admins, this might initially be empty if "All Clients" is selected.
+            if ( ! empty( $visitor_data ) ) :
+                foreach ( $visitor_data as $visitor ) : 
+                error_log('Debug: Visitor ID before HTML generation: ' . (isset($visitor->id) ? $visitor->id : 'ID NOT SET') . ' | Visitor object: ' . print_r($visitor, true));
+                ?>
+                <div class="visitor-card" data-visitor-id="<?php echo esc_attr( $visitor->id ); ?>">
+                    <div class="visitor-logo">
+                        <img src="<?php echo esc_url( $memo_seal_url ); ?>" alt="Referrer Logo">
+                    </div>
+                    <div class="visitor-details">
+                        <a href="<?php echo esc_url( $visitor->linkedin_url ?? '#' ); ?>" target="_blank" class="visitor-link">
+                            <i class="fas fa-external-link-alt"></i>
+                        <p class="visitor-name">
                             <?php 
-                            $location_parts = [];
-                            if ( ! empty( $visitor->city ) ) {
-                                $location_parts[] = $visitor->city;
+                            $full_name = '';
+                            if ( ! empty( $visitor->first_name ) ) {
+                                $full_name .= $visitor->first_name;
                             }
-                            if ( ! empty( $visitor->state ) ) {
-                                $location_parts[] = $visitor->state;
+                            if ( ! empty( $visitor->last_name ) ) {
+                                if ( ! empty( $full_name ) ) {
+                                    $full_name .= ' ';
+                                }
+                                $full_name .= $visitor->last_name;
                             }
-                            if ( ! empty( $visitor->zipcode ) ) {
-                                $location_parts[] = $visitor->zipcode;
-                            }
-                            echo esc_html( ! empty( $location_parts ) ? implode(', ', $location_parts) : 'Unknown' );
+                            echo esc_html( ! empty( $full_name ) ? $full_name : 'Unknown Visitor' );
                             ?>
                         </p>
-                        <p><i class="fas fa-envelope"></i> <?php echo esc_html( $visitor->email ?? 'Unknown' ); ?></p>
+                        </a>
+                        <div class="visitor-info">
+                            <p><i class="fas fa-briefcase"></i> <?php echo esc_html( $visitor->job_title ?? 'Unknown' ); ?></p>
+                            <p><i class="fas fa-building"></i> <?php echo esc_html( $visitor->company_name ?? 'Unknown' ); ?></p>
+                            <p>
+                                <i class="fas fa-map-marker-alt"></i> 
+                                <?php 
+                                $location_parts = [];
+                                if ( ! empty( $visitor->city ) ) {
+                                    $location_parts[] = $visitor->city;
+                                }
+                                if ( ! empty( $visitor->state ) ) {
+                                    $location_parts[] = $visitor->state;
+                                }
+                                if ( ! empty( $visitor->zipcode ) ) {
+                                    $location_parts[] = $visitor->zipcode;
+                                }
+                                echo esc_html( ! empty( $location_parts ) ? implode(', ', $location_parts) : 'Unknown' );
+                                ?>
+                            </p>
+                            <p><i class="fas fa-envelope"></i> <?php echo esc_html( $visitor->email ?? 'Unknown' ); ?></p>
+                        </div>
+                    </div>
+                    <div class="visitor-actions">
+                        <span class="icon add-crm-icon" title="Add to CRM">
+                            <i class="fas fa-plus-square"></i>
+                        </span>
+                        <span class="icon delete-icon" title="Archive">
+                            <i class="fas fa-trash-alt"></i>
+                        </span>
                     </div>
                 </div>
-                <div class="visitor-actions">
-                    <span class="icon add-crm-icon" title="Add to CRM">
-                        <i class="fas fa-plus-square"></i>
-                    </span>
-                    <span class="icon delete-icon" title="Archive">
-                        <i class="fas fa-trash-alt"></i>
-                    </span>
-                </div>
-            </div>
-            <?php endforeach; ?>
+                <?php endforeach;
+            else : // Add this else block for initial "no data" message
+                ?>
+                <div class="no-data">No visitor data found for initial display.</div>
+            <?php endif; ?>
         </div>
     </div>
-    <?php endif; ?>
 </div>

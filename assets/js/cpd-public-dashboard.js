@@ -159,14 +159,32 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     // --- Client-specific function to load all dashboard data via AJAX ---
-    async function loadClientDashboardData() {
-        const clientId = localizedData.current_client_account_id;
-        const duration = 'Campaign Duration'; // Default for client view, or from a selector if implemented
+    async function loadClientDashboardData(explicitClientId = null, explicitDuration = null) {
 
-        if (!clientId) {
-            console.warn('loadClientDashboardData: No client ID available for client view.');
+        // 1. Determine the Client ID to use for the AJAX call
+        let clientIdToUse;
+        if (explicitClientId !== null) {
+            clientIdToUse = explicitClientId; // Prioritize explicitly passed ID (from client list click)
+        } else {
+            // Fallback: Check URL parameter first (for page loads/refreshes where admin sets client_id)
+            const urlParams = new URLSearchParams(window.location.search);
+            let selectedClientIdFromUrl = urlParams.get('client_id');
+
+            // If admin, use URL param if present, otherwise localizedData.current_client_account_id (for client users)
+            clientIdToUse = isAdminUser && selectedClientIdFromUrl ? selectedClientIdFromUrl : localizedData.current_client_account_id;
+        }
+
+        // 2. Determine the Duration to use for the AJAX call
+        const durationToUse = explicitDuration !== null ? explicitDuration : document.getElementById('duration-selector').value;
+
+        // Defensive check: If no client ID is determined and it's not an admin, warn and exit.
+        if (!clientIdToUse && !isAdminUser) {
+            console.warn('loadClientDashboardData: No client ID available for client view. Cannot load data.');
             return;
         }
+
+        // 3. Handle "All Clients" selection: Convert 'all' string to null for the data provider
+        const actualClientIdForAjax = (clientIdToUse === 'all') ? null : clientIdToUse;
 
         const mainContent = document.querySelector('.main-content');
         if (mainContent) mainContent.style.opacity = '0.5';
@@ -180,8 +198,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: new URLSearchParams({
                     action: 'cpd_get_dashboard_data',
                     nonce: localizedData.dashboard_nonce,
-                    client_id: clientId,
-                    duration: duration
+                    client_id: actualClientIdForAjax,
+                    duration: durationToUse 
                 }).toString()
             });
 
@@ -193,13 +211,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (responseData.success) {
                 const data = responseData.data;
+                console.log("Data received for update:", data);
+
+                // Update Client Logo in Header (Only applicable if a specific client is selected)
+                if (actualClientIdForAjax  !== 'all' && data.client_logo_url) {
+                    const clientLogoImg = document.querySelector('.dashboard-header .client-logo-container img');
+                    console.log("Updating client logo with URL:", data.client_logo_url);
+                    if (clientLogoImg) {
+                        clientLogoImg.src = data.client_logo_url;
+                    }
+                } else if (actualClientIdForAjax  === 'all') {
+                    // If "All Clients" is selected, revert to default logo
+                    const clientLogoImg = document.querySelector('.dashboard-header .client-logo-container img');
+                    if (clientLogoImg) {
+                        clientLogoImg.src = localizedData.memo_seal_url; // Or a generic "all clients" logo
+                    }
+                }
+
 
                 // Update Summary Cards (MODIFIED TO USE data-summary-key)
                 document.querySelectorAll('.summary-card .value').forEach(el => {
                     const dataKey = el.nextElementSibling.dataset.summaryKey; // Get from new data-key attribute
+                    console.log("Updating summary cards with metrics:", data.summary_metrics);
                     if (dataKey && data.summary_metrics && data.summary_metrics[dataKey]) {
                         el.textContent = data.summary_metrics[dataKey];
                     } else {
+                        el.textContent = '0'; // Default to 0 if no data
                         // console.warn(`Summary data not found for key: ${dataKey}`); // Optional debug
                     }
                 });
@@ -239,9 +276,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
                             const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
                             const email = visitor.email || '';
-
+                            console.log("Adding visitor card for:", fullName, "with ID:", visitor.id);
                             visitorListContainer.insertAdjacentHTML('beforeend', `
-                                <div class="visitor-card" data-visitor-id="${visitor.visitor_id}">
+                                <div class="visitor-card" data-visitor-id="${visitor.id}">
                                     <div class="visitor-logo">
                                         <img src="${memoSealUrl}" alt="Referrer Logo">
                                     </div>
@@ -283,102 +320,89 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // Event listener for the "Add CRM" and "Delete" buttons on Visitor Panel.
-    // ONLY attach if NOT an admin, as cpd-dashboard.js handles admin events.
-    if (!isAdminUser) {
-        const visitorPanel = document.querySelector('.visitor-panel');
-        if (visitorPanel) {
-            visitorPanel.addEventListener('click', async (event) => {
-                const button = event.target.closest('.add-crm-icon, .delete-icon');
+    const visitorPanel = document.querySelector('.visitor-panel');
+    if (visitorPanel) {
+        visitorPanel.addEventListener('click', async (event) => {
+            const button = event.target.closest('.add-crm-icon, .delete-icon');
 
-                if (button) {
-                    const visitorCard = button.closest('.visitor-card');
-                    const visitorId = visitorCard.dataset.visitorId;
-                    
-                    let updateAction = '';
-                    if (button.classList.contains('add-crm-icon')) {
-                        updateAction = 'add_crm';
-                        if (!confirm('Are you sure you want to flag this visitor for CRM addition?')) return;
-                    } else if (button.classList.contains('delete-icon')) {
-                        updateAction = 'archive';
-                        if (!confirm('Are you sure you want to archive this visitor? They will no longer appear in the list.')) return;
-                    }
-
-                    button.style.pointerEvents = 'none';
-                    button.style.opacity = '0.6';
-
-                    const success = await sendAjaxRequestForVisitorStatus(updateAction, visitorId); 
-
-                    if (success) {
-                        await loadClientDashboardData();
-                    } else {
-                        alert('Failed to update visitor status. Please check console for details.');
-                    }
-                    button.style.pointerEvents = 'auto';
-                    button.style.opacity = '1';
+            if (button) {
+                const visitorCard = button.closest('.visitor-card');
+                const visitorId = visitorCard.dataset.visitorId;
+                
+                let updateAction = '';
+                if (button.classList.contains('add-crm-icon')) {
+                    updateAction = 'add_crm';
+                    if (!confirm('Are you sure you want to flag this visitor for CRM addition?')) return;
+                } else if (button.classList.contains('delete-icon')) {
+                    updateAction = 'archive';
+                    if (!confirm('Are you sure you want to archive this visitor? They will no longer appear in the list.')) return;
                 }
-            });
-        }
 
-    }
+                button.style.pointerEvents = 'none';
+                button.style.opacity = '0.6';
 
-    // --- Fetch initial data and render charts on page load for CLIENTS ONLY ---
-    if (!isAdminUser) {
-        const campaignDataByDate = localizedData.campaign_data_by_date || [];
-        const campaignDataByAdGroup = localizedData.campaign_data_by_ad_group || [];
-        const summaryMetrics = localizedData.summary_metrics || {};
-        const visitorData = localizedData.visitor_data || [];
+                const success = await sendAjaxRequestForVisitorStatus(updateAction, visitorId); 
 
-        renderImpressionsChart(campaignDataByDate);
-        renderImpressionsByAdGroupChart(campaignDataByAdGroup);
-        
-        // Initial update of summary cards from localized data (MODIFIED TO USE data-summary-key)
-        document.querySelectorAll('.summary-card .value').forEach(el => {
-            const dataKey = el.nextElementSibling.dataset.summaryKey; // Get from new data-key attribute
-            if (dataKey && summaryMetrics[dataKey]) {
-                el.textContent = summaryMetrics[dataKey];
-                console.log(`Summary card updated for key: ${dataKey} with value: ${summaryMetrics[dataKey]}`);
+                if (success) {
+                    await loadClientDashboardData(); // Reload data after update
+                } else {
+                    alert('Failed to update visitor status. Please check console for details.');
+                }
+                button.style.pointerEvents = 'auto';
+                button.style.opacity = '1';
             }
         });
 
-        // Initial update of visitor list from localized data
-        const visitorListContainer = document.querySelector('.visitor-panel .visitor-list');
-        if (visitorListContainer) {
-            visitorListContainer.innerHTML = '';
-            if (visitorData.length > 0) {
-                visitorData.forEach(visitor => {
-                    const memoSealUrl = localizedData.memo_seal_url; 
-                    const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
-                    const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
-                    const email = visitor.email || '';
+    }
 
-                    visitorListContainer.insertAdjacentHTML('beforeend', `
-                        <div class="visitor-card" data-visitor-id="${visitor.visitor_id}">
-                            <div class="visitor-logo">
-                                <img src="${memoSealUrl}" alt="Referrer Logo">
-                            </div>
-                            <div class="visitor-details">
-                                <p class="visitor-name">${fullName.trim() || 'Unknown Visitor'}</p>
-                                <div class="visitor-info">
-                                    <p><i class="fas fa-briefcase"></i> ${visitor.job_title || 'Unknown'}</p>
-                                    <p><i class="fas fa-building"></i> ${visitor.company_name || 'Unknown'}</p>
-                                    <p><i class="fas fa-map-marker-alt"></i> ${location || 'Unknown'}</p>
-                                    <p><i class="fas fa-envelope"></i> ${email || 'Unknown'}</p>
-                                </div>
-                            </div>
-                            <div class="visitor-actions">
-                                <span class="icon add-crm-icon" title="Add to CRM">
-                                    <i class="fas fa-plus-square"></i>
-                                </span>
-                                <span class="icon delete-icon" title="Archive">
-                                    <i class="fas fa-trash-alt"></i>
-                                </span>
-                            </div>
-                        </div>
-                    `);
-                });
-            } else {
-                visitorListContainer.insertAdjacentHTML('beforeend', '<div class="no-data">No visitor data found.</div>');
-            }
+    // Event listener for Client List clicks (Admin view only)
+    if (isAdminUser) {
+        const clientList = document.querySelector('.account-list');
+        if (clientList) {
+            clientList.addEventListener('click', async (event) => {
+                const listItem = event.target.closest('.account-list-item');
+                if (listItem) {
+                    const clientId = listItem.dataset.clientId;
+                    
+                    // Update active class
+                    document.querySelectorAll('.account-list-item').forEach(item => item.classList.remove('active'));
+                    listItem.classList.add('active');
+
+                    // Update URL
+                    const currentUrl = new URL(window.location.href);
+                    if (clientId === 'all') {
+                        currentUrl.searchParams.delete('client_id');
+                    } else {
+                        currentUrl.searchParams.set('client_id', clientId);
+                    }
+                    window.history.pushState({}, '', currentUrl.toString());
+
+                    // Load data for the selected client
+                    const duration = document.getElementById('duration-selector').value; // Get current duration
+                    await loadClientDashboardData(clientId, duration); // Pass explicit clientId and duration
+                }
+            });
         }
     }
+    
+    // Event listener for Date Range Select changes (both Admin and Client views)
+    const durationSelector = document.getElementById('duration-selector');
+    if (durationSelector) {
+        durationSelector.addEventListener('change', async () => {
+            // When duration changes, use current client from URL/localized data, but use new duration
+            const urlParams = new URLSearchParams(window.location.search);
+            let currentClientIdFromUrl = urlParams.get('client_id');
+            const currentClientId = isAdminUser && currentClientIdFromUrl ? currentClientIdFromUrl : localizedData.current_client_account_id;
+
+            await loadClientDashboardData(currentClientId, durationSelector.value); // Pass explicit clientId and new duration
+        });
+    }
+
+
+    // --- Initial Data Load ---
+    // This is the primary function call when the public dashboard loads.
+    // It will fetch data based on whether it's an admin viewing "all" or a specific client,
+    // or a regular client.
+    console.log('cpd-public-dashboard.js: Initializing dashboard data load.');
+    loadClientDashboardData();
 });
