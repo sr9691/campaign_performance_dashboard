@@ -267,6 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // Update Visitor Panel
+                // Update Visitor Panel
                 const visitorListContainer = document.querySelector('.visitor-panel .visitor-list');
                 if (visitorListContainer) {
                     visitorListContainer.innerHTML = '';
@@ -274,12 +275,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         data.visitor_data.forEach(visitor => {
                             const memoSealUrl = localizedData.memo_seal_url;
                             const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
-                            const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
-                            const email = visitor.email || '';
+                            const companyName = visitor.company_name || 'Unknown Company'; // Get company name
+                            const jobTitle = visitor.job_title || 'Unknown';
+                            const email = visitor.email || 'Unknown';
                             const linkedinUrl = visitor.linkedin_url || '#'; // Get LinkedIn URL
                             const hasLinkedIn = visitor.linkedin_url && visitor.linkedin_url.trim() !== ''; // Check if LinkedIn URL is present
-                            const recentPageUrlsString = visitor.recent_page_urls ? visitor.recent_page_urls : '';
+                            const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
 
+                            // Ensure recent_page_urls is always a string for the data attribute
+                            const recentPageUrlsString = visitor.recent_page_urls ? visitor.recent_page_urls : 'None';
 
                             console.log("Adding visitor card for:", fullName, "with ID:", visitor.id);
                             visitorListContainer.insertAdjacentHTML('beforeend', `
@@ -287,31 +291,34 @@ document.addEventListener('DOMContentLoaded', () => {
                                     data-visitor-id="${visitor.id}"
                                     data-last-seen-at="${visitor.last_seen_at || 'N/A'}"
                                     data-recent-page-count="${visitor.recent_page_count || '0'}"
-                                    data-recent-page-urls='${JSON.stringify(visitor.recent_page_urls || [])}'
+                                    data-recent-page-urls="${recentPageUrlsString}"
                                 >
-                                    <div class="visitor-logo">
-                                        <img src="${memoSealUrl}" alt="Referrer Logo">
-                                    </div>
-                                    <div class="visitor-details">
-                                        <p class="visitor-name">${fullName.trim() || 'Unknown Visitor'}</p>
-                                        <div class="visitor-info">
-                                            <p><i class="fas fa-briefcase"></i> ${visitor.job_title || 'Unknown'}</p>
-                                            <p><i class="fas fa-building"></i> ${visitor.company_name || 'Unknown'}</p>
-                                            <p><i class="fas fa-map-marker-alt"></i> ${location || 'Unknown'}</p>
-                                            <p><i class="fas fa-envelope"></i> ${email || 'Unknown'}</p>
+                                    <div class="visitor-top-row">
+                                        <div class="visitor-logo">
+                                            <img src="${memoSealUrl}" alt="Referrer Logo">
+                                        </div>
+                                        <div class="visitor-actions">
+                                            <span class="icon add-crm-icon" title="Add to CRM">
+                                                <i class="fas fa-plus-square"></i>
+                                            </span>
+                                            ${hasLinkedIn ? `<a href="${linkedinUrl}" target="_blank" class="icon linkedin-icon" title="View LinkedIn Profile"><i class="fab fa-linkedin"></i></a>` : ''}
+                                            <span class="icon info-icon" title="More Info">
+                                                <i class="fas fa-info-circle"></i>
+                                            </span>
+                                            <span class="icon delete-icon" title="Archive">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </span>
                                         </div>
                                     </div>
-                                    <div class="visitor-actions">
-                                        ${hasLinkedIn ? `<a href="${linkedinUrl}" target="_blank" class="icon linkedin-icon" title="View LinkedIn Profile"><i class="fab fa-linkedin"></i></a>` : ''}
-                                        <span class="icon info-icon" title="More Info">
-                                            <i class="fas fa-info-circle"></i>
-                                        </span>
-                                        <span class="icon add-crm-icon" title="Add to CRM">
-                                            <i class="fas fa-plus-square"></i>
-                                        </span>
-                                        <span class="icon delete-icon" title="Archive">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </span>
+
+                                    <p class="visitor-name">${fullName.trim() || 'Unknown Visitor'}</p>
+                                    <p class="visitor-company-main">${companyName}</p>
+
+                                    <div class="visitor-details-body">
+                                        <p><i class="fas fa-briefcase"></i> ${jobTitle}</p>
+                                        <p><i class="fas fa-building"></i> ${companyName}</p>
+                                        <p><i class="fas fa-map-marker-alt"></i> ${location}</p>
+                                        <p><i class="fas fa-envelope"></i> ${email}</p>
                                     </div>
                                 </div>
                             `);
@@ -320,9 +327,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         visitorListContainer.insertAdjacentHTML('beforeend', '<div class="no-data">No visitor data found.</div>');
                     }
                 }
+
                 console.log('loadClientDashboardData: Dashboard updated successfully.');
             } else {
-                console.error('loadClientDashboardData: AJAX response success is false:', responseData.data);
+                console.error('loadClientDashboardData: AJAX response success is false:', data.data);
             }
         } catch (error) {
             console.error('loadClientDashboardData: Fetch error:', error);
@@ -363,7 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Split the comma-separated string into an array, filter out empty strings, and trim whitespace
                     if (recentPageUrlsString) {
-                        recentPageUrls = recentPageUrlsString.split(',').map(url => url.trim()).filter(url => url !== '');
+                        recentPageUrls = recentPageUrlsString.split(',').map(url => url.trim()).filter(url => url !== 'None');
                     }
 
                     document.getElementById('modal-last-seen-at').textContent = lastSeenAt;

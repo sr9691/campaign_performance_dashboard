@@ -242,6 +242,37 @@ class CPD_Data_Provider {
         return $results;
     }
 
+    /**
+     * Retrieves the earliest and latest campaign dates for a given account ID.
+     * If account_id is null, it fetches for all accounts.
+     *
+     * @param string|null $account_id The account ID or null for all accounts.
+     * @return object|null An object with 'min_date' and 'max_date' properties, or null if no data.
+     */
+    public function get_campaign_date_range( $account_id = null ) {
+        $account_id = $this->normalize_account_id( $account_id );
+        $table_name = 'dashdev_cpd_campaign_data'; // Your campaign data table
+
+        $sql = "SELECT MIN(date) AS min_date, MAX(date) AS max_date FROM %i";
+        $prepare_args = [$table_name];
+
+        if ( $account_id !== null ) {
+            $sql .= " WHERE account_id = %s";
+            $prepare_args[] = $account_id;
+        }
+
+        $query = $this->wpdb->prepare( $sql, ...$prepare_args );
+        error_log('CPD_Data_Provider::get_campaign_date_range - Account ID: ' . ($account_id ?? 'NULL') . ' | Query: ' . $query);
+
+        $result = $this->wpdb->get_row( $query );
+
+        if ( $this->wpdb->last_error ) {
+            error_log('CPD_Data_Provider: Database error for campaign date range: ' . $this->wpdb->last_error);
+        }
+
+        return $result;
+    }
+
 
     /**
      * Get summary metrics for a specific account and date range.

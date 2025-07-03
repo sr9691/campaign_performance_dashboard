@@ -298,8 +298,8 @@ body.client-dashboard-page .client-logo-container {
     max-height: 100px !important; /* Updated max-height to 100px as requested */
     flex-shrink: 0 !important;
     display: flex !important;
-    align-items: center !important; /* Corrected: Centers vertically */
-    justify-content: center !important; /* Corrected: Centers horizontally */
+    align-items: center !important;
+    justify-content: center !important;
     background-color: #f0f0f0 !important;
     box-shadow: none !important;
     /* CRUCIAL ADDITION: Hide any content (like the image) that overflows this container */
@@ -509,19 +509,29 @@ body.client-dashboard-page .visitor-panel .visitor-list {
 
 body.client-dashboard-page .visitor-panel .visitor-card {
     display: flex !important;
-    flex-direction: column !important; /* Make visitor card a column to stack details and actions */
-    align-items: flex-start !important; /* Align content to the left within the card */
-    gap: 0 !important; /* Remove gap from main card flex container */
-    padding: 15px 20px !important; /* Use mockup's padding */
+    flex-direction: column !important; /* Stack sections vertically */
+    padding: 15px !important; /* Adjusted padding as per image */
     margin-bottom: 10px !important;
     border-radius: var(--border-radius) !important;
     background-color: #fafafa !important;
     border: 1px solid #eee !important;
+    /* remove position: relative here if top-row handles absolute actions */
+    /* min-height: 150px; /* Ensure a minimum height for cards to prevent collapse */
+    align-items: flex-start !important; /* Align content to the left */
+}
+
+/* NEW: Visitor Card Top Row - Logo and Action Icons */
+body.client-dashboard-page .visitor-top-row {
+    display: flex !important;
+    justify-content: space-between !important; /* Pushes logo left, actions right */
+    align-items: center !important; /* Vertically centers items in this row */
+    width: 100% !important; /* Spans full width of the card */
+    margin-bottom: 15px !important; /* Space below the top row */
 }
 
 body.client-dashboard-page .visitor-panel .visitor-logo {
-    width: 45px !important;
-    height: 45px !important;
+    width: 50px !important; /* Slightly larger logo size */
+    height: 50px !important; /* Slightly larger logo size */
     background-color: #fff !important;
     border-radius: 50% !important;
     display: flex !important;
@@ -529,8 +539,8 @@ body.client-dashboard-page .visitor-panel .visitor-logo {
     justify-content: center !important;
     overflow: hidden !important;
     flex-shrink: 0 !important;
-    box-shadow: none !important; /* Ensure no custom box-shadow */
-    margin-bottom: 15px !important; /* Space below the logo */
+    box-shadow: none !important;
+    border: 1px solid var(--line-color) !important; /* Add a subtle border to the logo circle */
 }
 
 body.client-dashboard-page .visitor-panel .visitor-logo img {
@@ -539,48 +549,16 @@ body.client-dashboard-page .visitor-panel .visitor-logo img {
     object-fit: contain !important;
 }
 
-body.client-dashboard-page .visitor-details {
-    flex: 1 !important;
-    overflow: hidden !important;
-    margin-bottom: 15px !important; /* Space between details and actions */
-}
-
-body.client-dashboard-page .visitor-name {
-    font-weight: 600 !important;
-    font-size: 0.95rem !important; /* Use mockup's font-size */
-    margin: 0 !important;
-    line-height: 1.2 !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-}
-
-body.client-dashboard-page .visitor-info {
-    font-size: 0.8rem !important;
-    color: var(--text-color-light) !important;
-    margin-top: 5px !important;
-    line-height: 1.3 !important;
-    white-space: normal !important;
-    display: block !important;
-}
-
-body.client-dashboard-page .visitor-info p {
-    margin: 0 !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-}
-
-/* Revert visitor-actions to row layout at bottom right */
+/* Visitor actions moved to top-row, right-aligned */
 body.client-dashboard-page .visitor-actions {
     display: flex !important;
     flex-direction: row !important; /* Arrange icons horizontally */
     gap: 8px !important; /* Space between icons */
-    font-size: 1.2rem !important;
+    font-size: 1.1rem !important; /* Slightly smaller icons */
     color: var(--text-color-light) !important;
     flex-shrink: 0 !important;
-    align-self: flex-end !important; /* Push the entire icon row to the right */
-    margin-top: auto !important; /* Push icon row to the bottom of the card */
+    /* No absolute positioning needed here, flexbox does the job */
+    /* No margin-left: auto; needed here because of justify-content: space-between on parent */
 }
 
 body.client-dashboard-page .visitor-actions .icon {
@@ -591,13 +569,15 @@ body.client-dashboard-page .visitor-actions .icon {
     align-items: center !important;
     justify-content: center !important;
     text-decoration: none !important; /* Remove underline from LinkedIn link */
+    border-radius: 4px !important; /* Small border-radius for icons */
 }
 
 body.client-dashboard-page .visitor-actions .icon:hover {
+    background-color: rgba(0,0,0,0.05) !important; /* Subtle hover background */
     color: var(--secondary-color) !important; /* Default hover color */
 }
 
-/* Specific styles for LinkedIn and Info icons (unchanged) */
+/* Specific styles for LinkedIn and Info icons */
 body.client-dashboard-page .visitor-actions .linkedin-icon i {
     color: #0077B5 !important; /* LinkedIn blue */
 }
@@ -630,6 +610,50 @@ body.client-dashboard-page .visitor-actions .delete-icon i {
 
 body.client-dashboard-page .visitor-actions .delete-icon:hover i {
     color: #6c757d !important; /* Grey on hover */
+}
+
+/* Visitor Name and Company */
+body.client-dashboard-page .visitor-name {
+    font-weight: 700 !important; /* Make name bolder */
+    font-size: 1rem !important; /* Slightly larger name font size */
+    margin: 0 0 5px 0 !important; /* Space below name */
+    line-height: 1.2 !important;
+    color: var(--primary-color) !important; /* Name color */
+    width: 100% !important; /* Ensure it takes full width for wrapping */
+    white-space: normal !important; /* Allow text to wrap */
+}
+
+body.client-dashboard-page .visitor-company-main { /* NEW class for the primary company name */
+    font-size: 0.9rem !important; /* Company font size */
+    color: var(--text-color-dark) !important; /* Company color */
+    margin: 0 0 15px 0 !important; /* Space below company name and above details body */
+    width: 100% !important; /* Ensure it takes full width for wrapping */
+    white-space: normal !important; /* Allow text to wrap */
+}
+
+/* Visitor Details Body (Job Title, Location, Email) */
+body.client-dashboard-page .visitor-details-body {
+    flex: 1 !important; /* Allows this section to grow */
+    overflow: hidden !important;
+    /* No padding-left needed here, as it's below the logo */
+    width: 100% !important; /* Occupy full width */
+    box-sizing: border-box !important;
+}
+
+body.client-dashboard-page .visitor-details-body p {
+    margin: 4px 0 !important; /* Adjust line spacing */
+    font-size: 0.85rem !important;
+    color: var(--text-color-light) !important;
+    font-family: var(--font-family) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+body.client-dashboard-page .visitor-details-body p i {
+    width: 20px !important; /* Give icons fixed width for alignment */
+    text-align: center !important;
+    margin-right: 5px !important;
+    color: var(--secondary-color) !important; /* Icon color */
 }
 
 

@@ -19,6 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 // $campaign_data
 // $visitor_data
 // $passed_selected_client_id_from_url <--- This variable is now passed
+// $duration_param <--- This variable is now passed
 
 $current_user = wp_get_current_user();
 $is_admin = current_user_can( 'manage_options' ); // Check if the current user is an admin
@@ -42,13 +43,13 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
     <?php if ( $is_admin ) : ?>
     <div class="account-panel">
         <ul class="account-list">
-            <li class="account-list-item <?php echo ( $passed_selected_client_id_from_url === 'all' || ( !$passed_selected_client_id_from_url && !$client_account ) ) ? 'active' : ''; ?>" 
+            <li class="account-list-item <?php echo ( $passed_selected_client_id_from_url === 'all' || ( !$passed_selected_client_id_from_url && !$client_account ) ) ? 'active' : ''; ?>"
                 data-client-id="all">
                 All Clients
             </li>
             <?php if (!empty($all_clients)) : ?>
                 <?php foreach ($all_clients as $client) : ?>
-                    <li class="account-list-item <?php echo ( $passed_selected_client_id_from_url === $client->account_id ) ? 'active' : ''; ?>" 
+                    <li class="account-list-item <?php echo ( $passed_selected_client_id_from_url === $client->account_id ) ? 'active' : ''; ?>"
                         data-client-id="<?php echo esc_attr($client->account_id); ?>">
                         <?php echo esc_html($client->client_name); ?>
                     </li>
@@ -56,7 +57,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
             <?php else : ?>
                 <?php endif; ?>
         </ul>
-        
+
         <div class="brand-bottom-section">
             <?php
             // The $report_problem_email variable will be passed from display_dashboard()
@@ -71,7 +72,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                 </a>
             <?php endif; ?>
         </div>
-        
+
     </div>
     <?php endif; ?>
 
@@ -86,9 +87,9 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                     <div class="duration-select">
                         <span>Dates:</span>
                         <select id="duration-selector">
-                            <option value="campaign">Campaign Dates</option>
-                            <option value="30">Past 30 days</option>
-                            <option value="7">Past 7 days</option>
+                            <option value="campaign" <?php selected( $duration_param, 'campaign' ); ?>>Campaign Dates</option>
+                            <option value="30" <?php selected( $duration_param, '30' ); ?>>Past 30 days</option>
+                            <option value="7" <?php selected( $duration_param, '7' ); ?>>Past 7 days</option>
                         </select>
                     </div>
                 </div>
@@ -148,7 +149,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                 <tbody>
                     <?php foreach ( $campaign_data as $ad_group ) : ?>
                     <tr>
-                        <td><?php echo esc_html( $ad_group->ad_group_name ); ?></td>
+                        <td><?php echo esc_html( ( $ad_group->ad_group_name ) ); ?></td>
                         <td><?php echo esc_html( number_format( $ad_group->impressions ) ); ?></td>
                         <td><?php echo esc_html( number_format( $ad_group->reach ) ); ?></td>
                         <td><?php echo esc_html( number_format( $ad_group->ctr, 2 ) ); ?>%</td>
@@ -178,67 +179,70 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                     data-visitor-id="<?php echo esc_attr( $visitor->id ); ?>"
                     data-last-seen-at="<?php echo esc_attr( $visitor->last_seen_at ?? 'N/A' ); ?>"
                     data-recent-page-count="<?php echo esc_attr( $visitor->recent_page_count ?? '0' ); ?>"
-                    data-recent-page-urls='<?php echo esc_attr( json_encode($visitor->recent_page_urls ?? []) ); ?>'
+                    data-recent-page-urls='<?php echo esc_attr( $visitor->recent_page_urls ?? 'None' ); ?>'
                 >
-                    <div class="visitor-logo">
-                        <img src="<?php echo esc_url( $memo_seal_url ); ?>" alt="Referrer Logo">
-                    </div>
-                    <div class="visitor-details">
-                        <a href="<?php echo esc_url( $visitor->linkedin_url ?? '#' ); ?>" target="_blank" class="visitor-link">
-                            <i class="fas fa-external-link-alt"></i>
-                        <p class="visitor-name">
-                            <?php
-                            $full_name = '';
-                            if ( ! empty( $visitor->first_name ) ) {
-                                $full_name .= $visitor->first_name;
-                            }
-                            if ( ! empty( $visitor->last_name ) ) {
-                                if ( ! empty( $full_name ) ) {
-                                    $full_name .= ' ';
-                                }
-                                $full_name .= $visitor->last_name;
-                            }
-                            echo esc_html( ! empty( $full_name ) ? $full_name : 'Unknown Visitor' );
-                            ?>
-                        </p>
-                        </a>
-                        <div class="visitor-info">
-                            <p><i class="fas fa-briefcase"></i> <?php echo esc_html( $visitor->job_title ?? 'Unknown' ); ?></p>
-                            <p><i class="fas fa-building"></i> <?php echo esc_html( $visitor->company_name ?? 'Unknown' ); ?></p>
-                            <p>
-                                <i class="fas fa-map-marker-alt"></i>
-                                <?php
-                                $location_parts = [];
-                                if ( ! empty( $visitor->city ) ) {
-                                    $location_parts[] = $visitor->city;
-                                }
-                                if ( ! empty( $visitor->state ) ) {
-                                    $location_parts[] = $visitor->state;
-                                }
-                                if ( ! empty( $visitor->zipcode ) ) {
-                                    $location_parts[] = $visitor->zipcode;
-                                }
-                                echo esc_html( ! empty( $location_parts ) ? implode(', ', $location_parts) : 'Unknown' );
-                                ?>
-                            </p>
-                            <p><i class="fas fa-envelope"></i> <?php echo esc_html( $visitor->email ?? 'Unknown' ); ?></p>
+                    <div class="visitor-top-row">
+                        <div class="visitor-logo">
+                            <img src="<?php echo esc_url( $memo_seal_url ); ?>" alt="Referrer Logo">
+                        </div>
+                        <div class="visitor-actions">
+                            <span class="icon add-crm-icon" title="Add to CRM">
+                                <i class="fas fa-plus-square"></i>
+                            </span>
+                            <?php if (!empty($visitor->linkedin_url)) : // Only show LinkedIn icon if URL exists ?>
+                                <a href="<?php echo esc_url( $visitor->linkedin_url ); ?>" target="_blank" class="icon linkedin-icon" title="View LinkedIn Profile">
+                                    <i class="fab fa-linkedin"></i>
+                                </a>
+                            <?php endif; ?>
+                            <span class="icon info-icon" title="More Info">
+                                <i class="fas fa-info-circle"></i>
+                            </span>
+                            <span class="icon delete-icon" title="Archive">
+                                <i class="fas fa-trash-alt"></i>
+                            </span>
                         </div>
                     </div>
-                    <div class="visitor-actions">
-                        <?php if (!empty($visitor->linkedin_url)) : // Only show LinkedIn icon if URL exists ?>
-                            <a href="<?php echo esc_url( $visitor->linkedin_url ); ?>" target="_blank" class="icon linkedin-icon" title="View LinkedIn Profile">
-                                <i class="fab fa-linkedin"></i>
-                            </a>
+
+                    <p class="visitor-name">
+                        <?php
+                        $full_name = '';
+                        if ( ! empty( $visitor->first_name ) ) {
+                            $full_name .= $visitor->first_name;
+                        }
+                        if ( ! empty( $visitor->last_name ) ) {
+                            if ( ! empty( $full_name ) ) {
+                                $full_name .= ' ';
+                            }
+                            $full_name .= $visitor->last_name;
+                        }
+                        echo esc_html( ! empty( $full_name ) ? $full_name : 'Unknown Visitor' );
+                        ?>
+                    </p>
+                    <p class="visitor-company-main"><?php echo esc_html( $visitor->company_name ?? 'Unknown Company' ); ?></p>
+
+
+                    <div class="visitor-details-body">
+                        <p><i class="fas fa-briefcase"></i> <?php echo esc_html( $visitor->job_title ?? 'Unknown Title' ); ?></p>
+                        <?php if ( !empty($visitor->company_name) ) : // Assuming full company name or specific detail needed here ?>
+                            <p><i class="fas fa-building"></i> <?php echo esc_html( $visitor->company_name ); ?></p>
                         <?php endif; ?>
-                        <span class="icon info-icon" title="More Info">
-                            <i class="fas fa-info-circle"></i>
-                        </span>
-                        <span class="icon add-crm-icon" title="Add to CRM">
-                            <i class="fas fa-plus-square"></i>
-                        </span>
-                        <span class="icon delete-icon" title="Archive">
-                            <i class="fas fa-trash-alt"></i>
-                        </span>
+                        <p>
+                            <i class="fas fa-map-marker-alt"></i>
+                            <?php
+                            $location_parts = [];
+                            if ( ! empty( $visitor->city ) ) {
+                                $location_parts[] = $visitor->city;
+                            }
+                            if ( ! empty( $visitor->state ) ) {
+                                $location_parts[] = $visitor->state;
+                            }
+                            if ( ! empty( $visitor->zipcode ) ) {
+                                $location_parts[] = $visitor->zipcode;
+                            }
+                            echo esc_html( ! empty( $location_parts ) ? implode(', ', $location_parts) : 'Unknown Location' );
+                            ?>
+                        </p>
+                        <p><i class="fas fa-envelope"></i> <?php echo esc_html( $visitor->email ?? 'Unknown Email' ); ?></p>
                     </div>
                 </div>
                 <?php endforeach;
