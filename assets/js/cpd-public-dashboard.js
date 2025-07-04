@@ -207,34 +207,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Client-specific function to load all dashboard data via AJAX ---
     async function loadClientDashboardData(explicitClientId = null, explicitDuration = null) {
+        console.log('=== loadClientDashboardData DEBUG ===');
+        console.log('explicitClientId:', explicitClientId);
+        console.log('explicitDuration:', explicitDuration);
 
         // 1. Determine the Client ID to use for the AJAX call
         let clientIdToUse;
         if (explicitClientId !== null) {
-            clientIdToUse = explicitClientId; // Prioritize explicitly passed ID (from client list click)
+            clientIdToUse = explicitClientId;
         } else {
-            // Fallback: Check URL parameter first (for page loads/refreshes where admin sets client_id)
             const urlParams = new URLSearchParams(window.location.search);
             let selectedClientIdFromUrl = urlParams.get('client_id');
-
-            // If admin, use URL param if present, otherwise localizedData.current_client_account_id (for client users)
             clientIdToUse = isAdminUser && selectedClientIdFromUrl ? selectedClientIdFromUrl : localizedData.current_client_account_id;
         }
 
         // 2. Determine the Duration to use for the AJAX call
         const durationToUse = explicitDuration !== null ? explicitDuration : document.getElementById('duration-selector').value;
-
-        // Defensive check: If no client ID is determined and it's not an admin, warn and exit.
-        if (!clientIdToUse && !isAdminUser) {
-            console.warn('loadClientDashboardData: No client ID available for client view. Cannot load data.');
-            return;
+        
+        console.log('clientIdToUse:', clientIdToUse);
+        console.log('durationToUse:', durationToUse, '(type:', typeof durationToUse, ')');
+        
+        // Check dropdown value directly
+        const dropdown = document.getElementById('duration-selector');
+        if (dropdown) {
+            console.log('Dropdown current value:', dropdown.value, '(type:', typeof dropdown.value, ')');
+            console.log('Dropdown options:');
+            Array.from(dropdown.options).forEach(opt => {
+                console.log(`  - Value: "${opt.value}" (selected: ${opt.selected})`);
+            });
         }
 
-        // 3. Handle "All Clients" selection: Convert 'all' string to null for the data provider
+        // 3. Handle "All Clients" selection
         const actualClientIdForAjax = (clientIdToUse === 'all') ? null : clientIdToUse;
+        
+        console.log('actualClientIdForAjax:', actualClientIdForAjax);
 
         const mainContent = document.querySelector('.main-content');
         if (mainContent) mainContent.style.opacity = '0.5';
+
+        const requestData = {
+            action: 'cpd_get_dashboard_data',
+            nonce: localizedData.dashboard_nonce,
+            client_id: actualClientIdForAjax,
+            duration: durationToUse
+        };
+        
+        console.log('Request data being sent:', requestData);
+
 
         try {
             const response = await fetch(localizedData.ajax_url, {

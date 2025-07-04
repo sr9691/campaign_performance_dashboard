@@ -616,12 +616,10 @@ class CPD_Admin {
      * AJAX handler for getting dashboard data.
      */
 
+/**
+     * AJAX handler for getting dashboard data.
+     */
     public function ajax_get_dashboard_data() {
-/*
-        if ( ! current_user_can( 'manage_options' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) {
-            wp_send_json_error( 'Security check failed.' );
-        }
-*/
         // Change the nonce check here to match the new specific nonce
         if ( ! current_user_can( 'read' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_get_dashboard_data_nonce' ) ) { // ALL users (read cap) can get dashboard data
             wp_send_json_error( 'Security check failed.' );
@@ -631,21 +629,41 @@ class CPD_Admin {
         $client_id = isset( $_POST['client_id'] ) && $_POST['client_id'] !== 'all' ? sanitize_text_field( $_POST['client_id'] ) : null;
         
         $duration = isset( $_POST['duration'] ) ? sanitize_text_field( $_POST['duration'] ) : 'campaign'; // Default to 'campaign'
-        $end_date = date('Y-m-d');
-        $start_date = '2025-01-01'; // Default for 'Campaign Duration'
+        
+        // Add debug logging
+        error_log('ADMIN AJAX: Duration received: ' . $duration . ' (type: ' . gettype($duration) . ')');
+        
+        // Determine start and end dates based on duration
+        $start_date = null;
+        $end_date = null;
 
-        switch ($duration) {
-            case '7': // Changed to '7' and '30' for simplicity as per HTML option values
-                $start_date = date('Y-m-d', strtotime('-7 days'));
-                break;
-            case '30': // Changed to '7' and '30'
-                $start_date = date('Y-m-d', strtotime('-30 days'));
-                break;
-            case 'campaign': // Changed from 'Campaign Duration'
-            default:
-                $start_date = '2025-01-01'; // This should probably be dynamic based on *earliest* campaign date if 'Campaign Duration' means 'all time'
-                break;
+        if ( $duration === 'campaign' ) {
+            // For campaign duration, get the actual campaign date range
+            $campaign_date_range = $this->data_provider->get_campaign_date_range( $client_id );
+            $start_date = $campaign_date_range->min_date ?? '2025-01-01';
+            $end_date = $campaign_date_range->max_date ?? date('Y-m-d');
+            error_log('ADMIN AJAX: Campaign duration - Start: ' . $start_date . ', End: ' . $end_date);
+        } elseif ( $duration === '30' || $duration == 30 ) {
+            $start_date = date('Y-m-d', strtotime('-30 days'));
+            $end_date = date('Y-m-d');
+            error_log('ADMIN AJAX: 30 days - Start: ' . $start_date . ', End: ' . $end_date);
+        } elseif ( $duration === '7' || $duration == 7 ) {
+            $start_date = date('Y-m-d', strtotime('-7 days'));
+            $end_date = date('Y-m-d');
+            error_log('ADMIN AJAX: 7 days - Start: ' . $start_date . ', End: ' . $end_date);
+        } elseif ( $duration === '1' || $duration == 1 ) {
+            $start_date = date('Y-m-d', strtotime('yesterday'));
+            $end_date = date('Y-m-d', strtotime('yesterday'));
+            error_log('ADMIN AJAX: YESTERDAY - Start: ' . $start_date . ', End: ' . $end_date);
+        } else {
+            // Default fallback
+            error_log('ADMIN AJAX: Unknown duration, falling back to campaign dates');
+            $campaign_date_range = $this->data_provider->get_campaign_date_range( $client_id );
+            $start_date = $campaign_date_range->min_date ?? '2025-01-01';
+            $end_date = $campaign_date_range->max_date ?? date('Y-m-d');
         }
+
+        error_log('ADMIN AJAX: Final dates - Start: ' . $start_date . ', End: ' . $end_date);
 
         // No more error if $client_id is null; we now handle 'all clients' case.
         
@@ -671,7 +689,7 @@ class CPD_Admin {
             'client_logo_url' => $client_logo_url,
         ) );
     }
-
+    
     /**
      * AJAX handler to get the updated client list.
      */

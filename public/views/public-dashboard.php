@@ -1,12 +1,4 @@
 <?php
-/**
- * Updated HTML template for the public-facing campaign performance dashboard.
- * This creates the three-column layout: Left sidebar, Main content, Right sidebar
- *
- * This version conditionally displays the left sidebar based on user role
- * and adds a link to the admin management page for administrators.
- */
-
 // Exit if accessed directly.
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -87,6 +79,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                             <option value="campaign" <?php selected( $duration_param, 'campaign' ); ?>>Campaign Dates</option>
                             <option value="30" <?php selected( $duration_param, '30' ); ?>>Past 30 days</option>
                             <option value="7" <?php selected( $duration_param, '7' ); ?>>Past 7 days</option>
+                            <option value="1" <?php selected( $duration_param, '1' ); ?>>Yesterday</option>
                         </select>
                     </div>
                 </div>
@@ -167,42 +160,35 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
             // This is primarily for the first page load before AJAX updates.
             if ( ! empty( $visitor_data ) ) :
                 foreach ( $visitor_data as $visitor ) :
-                    // Prepare recent page URLs BEFORE the HTML generation
-                    $recent_urls = [];
-                    if (!empty($visitor->recent_page_urls)) {
-                        if (is_string($visitor->recent_page_urls)) {
-                            $decoded = json_decode($visitor->recent_page_urls, true);
-                            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                                $recent_urls = $decoded;
-                            } else {
-                                $recent_urls = array_map('trim', explode(',', $visitor->recent_page_urls));
-                            }
-                        } elseif (is_array($visitor->recent_page_urls)) {
-                            $recent_urls = $visitor->recent_page_urls;
-                        }
-                        
-                        // Clean URLs
-                        $recent_urls = array_filter($recent_urls, function($url) {
-                            return !empty($url) && $url !== 'None' && filter_var($url, FILTER_VALIDATE_URL);
-                        });
-                        
-                        // Limit to 3 URLs and truncate long ones
-                        $recent_urls = array_slice($recent_urls, 0, 3);
-                        $recent_urls = array_map(function($url) {
-                            return strlen($url) > 80 ? substr($url, 0, 77) . '...' : $url;
-                        }, $recent_urls);
-                        
-                        $recent_urls = array_values($recent_urls);
-                    }
-                    
-                    // Create the JSON string safely
-                    $recent_urls_json = json_encode($recent_urls, JSON_UNESCAPED_SLASHES | JSON_HEX_QUOT | JSON_HEX_APOS);
+                // error_log('Debug: Visitor ID before HTML generation: ' . (isset($visitor->id) ? $visitor->id : 'ID NOT SET') . ' | Visitor object: ' . print_r($visitor, true));
                 ?>
                     <div class="visitor-card"
                         data-visitor-id="<?php echo esc_attr( $visitor->id ); ?>"
                         data-last-seen-at="<?php echo esc_attr( $visitor->last_seen_at ?? 'N/A' ); ?>"
                         data-recent-page-count="<?php echo esc_attr( $visitor->recent_page_count ?? '0' ); ?>"
-                        data-recent-page-urls='<?php echo esc_attr( $recent_urls_json ); ?>'
+                        data-recent-page-urls="<?php
+                            $recent_urls = [];
+                            if (!empty($visitor->recent_page_urls)) {
+                                // If it's already an array (e.g., from json_decode by data provider), use it directly.
+                                if (is_array($visitor->recent_page_urls)) {
+                                    $recent_urls = $visitor->recent_page_urls;
+                                } elseif (is_string($visitor->recent_page_urls)) {
+                                    // Attempt to decode as JSON first, in case it's a JSON string from the database
+                                    $decoded = json_decode($visitor->recent_page_urls, true);
+                                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                                        $recent_urls = $decoded;
+                                    } else {
+                                        // Fallback: If not valid JSON, treat as comma-separated string
+                                        $recent_urls = array_map('trim', explode(',', $visitor->recent_page_urls));
+                                        $recent_urls = array_filter($recent_urls); // Remove any empty string elements
+                                    }
+                                }
+                            }
+                            // Ensure all elements are strings and re-index the array numerically (important for JSON arrays)
+                            $recent_urls = array_map('strval', array_values($recent_urls));
+                            // Finally, JSON encode the array and then escape it for the HTML attribute
+                            echo esc_attr( json_encode( $recent_urls ) );
+                        ?>"
                     >
                     <div class="visitor-top-row">
                         <div class="visitor-logo">
@@ -212,7 +198,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                             <span class="icon add-crm-icon" title="Add to CRM">
                                 <i class="fas fa-plus-square"></i>
                             </span>
-                            <?php if (!empty($visitor->linkedin_url)) : ?>
+                            <?php if (!empty($visitor->linkedin_url)) : // Only show LinkedIn icon if URL exists ?>
                                 <a href="<?php echo esc_url( $visitor->linkedin_url ); ?>" target="_blank" class="icon linkedin-icon" title="View LinkedIn Profile">
                                     <i class="fab fa-linkedin"></i>
                                 </a>
@@ -243,9 +229,10 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                     </p>
                     <p class="visitor-company-main"><?php echo esc_html( $visitor->company_name ?? 'Unknown Company' ); ?></p>
 
+
                     <div class="visitor-details-body">
                         <p><i class="fas fa-briefcase"></i> <?php echo esc_html( $visitor->job_title ?? 'Unknown Title' ); ?></p>
-                        <?php if ( !empty($visitor->company_name) ) : ?>
+                        <?php if ( !empty($visitor->company_name) ) : // Assuming full company name or specific detail needed here ?>
                             <p><i class="fas fa-building"></i> <?php echo esc_html( $visitor->company_name ); ?></p>
                         <?php endif; ?>
                         <p>
@@ -267,8 +254,9 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                         <p><i class="fas fa-envelope"></i> <?php echo esc_html( $visitor->email ?? 'Unknown Email' ); ?></p>
                     </div>
                 </div>
-                <?php endforeach; ?>
-            <?php else : ?>
+                <?php endforeach;
+            else : // Add this else block for initial "no data" message
+                ?>
                 <div class="no-data">No visitor data found for initial display.</div>
             <?php endif; ?>
         </div>

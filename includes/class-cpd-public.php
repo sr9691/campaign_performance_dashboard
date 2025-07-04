@@ -207,16 +207,33 @@ class CPD_Public {
             $end_date = null;
             $duration_param = isset($_GET['duration']) ? sanitize_text_field($_GET['duration']) : 'campaign'; // Default to 'campaign'
 
-            if ($duration_param === 'campaign') {
-                $campaign_date_range = $this->data_provider->get_campaign_date_range( $target_account_id_for_data );
-                $start_date = $campaign_date_range->min_date ?? null;
-                $end_date = $campaign_date_range->max_date ?? null;
-            } elseif ($duration_param === '30') {
-                $start_date = date('Y-m-d', strtotime('-30 days'));
-                $end_date = date('Y-m-d');
-            } elseif ($duration_param === '7') {
-                $start_date = date('Y-m-d', strtotime('-7 days'));
-                $end_date = date('Y-m-d');
+            switch (strval($duration_param)) {
+                case 'campaign':
+                    $campaign_date_range = $this->data_provider->get_campaign_date_range( $target_account_id_for_data );
+                    $start_date = $campaign_date_range->min_date ?? null;
+                    $end_date = $campaign_date_range->max_date ?? null;
+                    break;
+                case '30':
+                case 30:
+                    $start_date = date('Y-m-d', strtotime('-30 days'));
+                    $end_date = date('Y-m-d');
+                    break;
+                case '7':
+                case 7:
+                    $start_date = date('Y-m-d', strtotime('-7 days'));
+                    $end_date = date('Y-m-d');
+                    break;
+                case '1':
+                case 1:
+                    $start_date = date('Y-m-d', strtotime('yesterday'));
+                    $end_date = date('Y-m-d', strtotime('yesterday'));
+                    break;
+                default:
+                    // Fallback to campaign duration if unknown value
+                    $campaign_date_range = $this->data_provider->get_campaign_date_range( $target_account_id_for_data );
+                    $start_date = $campaign_date_range->min_date ?? null;
+                    $end_date = $campaign_date_range->max_date ?? null;
+                    break;
             }
 
             // Only fetch initial data if dates are determined and it's NOT an admin OR if an admin is viewing a specific client's data on the public page (not 'all')
@@ -254,59 +271,78 @@ class CPD_Public {
         }
     }
 
-    /**
-     * AJAX callback to fetch dashboard data.
+/**
+     * AJAX handler for getting dashboard data.
      */
-    public function get_dashboard_data_callback() {
-        if ( ! check_ajax_referer( 'cpd_get_dashboard_data_nonce', 'nonce', false ) ) {
-            wp_send_json_error( 'Invalid security nonce.', 403 );
+    public function ajax_get_dashboard_data() {
+        // Change the nonce check here to match the new specific nonce
+        if ( ! current_user_can( 'read' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_get_dashboard_data_nonce' ) ) { // ALL users (read cap) can get dashboard data
+            wp_send_json_error( 'Security check failed.' );
         }
 
-        $client_id_param = isset( $_POST['client_id'] ) ? sanitize_text_field( $_POST['client_id'] ) : null;
+        // Allow 'all' or null for client_id to indicate aggregation across all clients
+        $client_id = isset( $_POST['client_id'] ) && $_POST['client_id'] !== 'all' ? sanitize_text_field( $_POST['client_id'] ) : null;
+        
         $duration = isset( $_POST['duration'] ) ? sanitize_text_field( $_POST['duration'] ) : 'campaign'; // Default to 'campaign'
-
+        
+        // Add debug logging
+        error_log('PUBLIC AJAX: Duration received: ' . $duration . ' (type: ' . gettype($duration) . ')');
+        
         // Determine start and end dates based on duration
         $start_date = null;
         $end_date = null;
 
         if ( $duration === 'campaign' ) {
-            $campaign_date_range = $this->data_provider->get_campaign_date_range( $client_id_param );
-            $start_date = $campaign_date_range->min_date ?? null;
-            $end_date = $campaign_date_range->max_date ?? null;
-        } elseif ( $duration === '30' ) {
+            // For campaign duration, get the actual campaign date range
+            $campaign_date_range = $this->data_provider->get_campaign_date_range( $client_id );
+            $start_date = $campaign_date_range->min_date ?? '2025-01-01';
+            $end_date = $campaign_date_range->max_date ?? date('Y-m-d');
+            error_log('PUBLIC AJAX: Campaign duration - Start: ' . $start_date . ', End: ' . $end_date);
+        } elseif ( $duration === '30' || $duration == 30 ) {
             $start_date = date('Y-m-d', strtotime('-30 days'));
             $end_date = date('Y-m-d');
-        } elseif ( $duration === '7' ) {
+            error_log('PUBLIC AJAX: 30 days - Start: ' . $start_date . ', End: ' . $end_date);
+        } elseif ( $duration === '7' || $duration == 7 ) {
             $start_date = date('Y-m-d', strtotime('-7 days'));
             $end_date = date('Y-m-d');
+            error_log('PUBLIC AJAX: 7 days - Start: ' . $start_date . ', End: ' . $end_date);
+        } elseif ( $duration === '1' || $duration == 1 ) {
+            $start_date = date('Y-m-d', strtotime('yesterday'));
+            $end_date = date('Y-m-d', strtotime('yesterday'));
+            error_log('PUBLIC AJAX: YESTERDAY - Start: ' . $start_date . ', End: ' . $end_date);
         } else {
-             wp_send_json_error( 'Invalid duration parameter.', 400 );
+            // Default fallback
+            error_log('PUBLIC AJAX: Unknown duration, falling back to campaign dates');
+            $campaign_date_range = $this->data_provider->get_campaign_date_range( $client_id );
+            $start_date = $campaign_date_range->min_date ?? '2025-01-01';
+            $end_date = $campaign_date_range->max_date ?? date('Y-m-d');
         }
 
-        // Fetch data using the determined dates and client_id
-        $summary_metrics = $this->data_provider->get_summary_metrics( $client_id_param, $start_date, $end_date );
-        $campaign_data_by_ad_group = $this->data_provider->get_campaign_data_by_ad_group( $client_id_param, $start_date, $end_date );
-        $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $client_id_param, $start_date, $end_date );
-        $visitor_data = $this->data_provider->get_visitor_data( $client_id_param );
+        error_log('PUBLIC AJAX: Final dates - Start: ' . $start_date . ', End: ' . $end_date);
 
-        // Determine client logo URL for specific client or default for 'all'
+        $summary_metrics = $this->data_provider->get_summary_metrics( $client_id, $start_date, $end_date );
+        $campaign_data_by_ad_group = $this->data_provider->get_campaign_data_by_ad_group( $client_id, $start_date, $end_date );
+        $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $client_id, $start_date, $end_date );
+        $visitor_data = $this->data_provider->get_visitor_data( $client_id );
+
+        // --- Get client logo URL ---
         $client_logo_url = CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png'; // Default
-        if ( $client_id_param && $client_id_param !== 'all' ) {
-            $client_account_for_logo = $this->data_provider->get_client_by_account_id( $client_id_param );
-            if ( $client_account_for_logo && isset($client_account_for_logo->logo_url) ) {
-                $client_logo_url = esc_url($client_account_for_logo->logo_url);
+        if ( $client_id !== null ) { // If a specific client is selected
+            $client_obj = $this->data_provider->get_client_by_account_id( $client_id );
+            if ( $client_obj && ! empty( $client_obj->logo_url ) ) {
+                $client_logo_url = esc_url( $client_obj->logo_url );
             }
         }
-
+        
         wp_send_json_success( array(
-            'summary_metrics'           => $summary_metrics,
-            'campaign_data'             => $campaign_data_by_ad_group,
-            'campaign_data_by_date'     => $campaign_data_by_date,
-            'visitor_data'              => $visitor_data,
-            'client_logo_url'           => $client_logo_url,
+            'summary_metrics' => $summary_metrics,
+            'campaign_data' => $campaign_data_by_ad_group,
+            'campaign_data_by_date' => $campaign_data_by_date,
+            'visitor_data' => $visitor_data,
+            'client_logo_url' => $client_logo_url,
         ) );
     }
-
+    
     /**
      * Renders the campaign dashboard via a shortcode.
      */
@@ -349,16 +385,33 @@ class CPD_Public {
         $start_date = null;
         $end_date = null;
 
-        if ($duration_param === 'campaign') {
+        switch (strval($duration_param)) {
+            case 'campaign':
             $campaign_date_range = $this->data_provider->get_campaign_date_range( $target_account_id_for_data );
             $start_date = $campaign_date_range->min_date ?? null;
             $end_date = $campaign_date_range->max_date ?? null;
-        } elseif ($duration_param === '30') {
+            break;
+            case '30':
+            case 30:
             $start_date = date('Y-m-d', strtotime('-30 days'));
             $end_date = date('Y-m-d');
-        } elseif ($duration_param === '7') {
+            break;
+            case '7':
+            case 7:
             $start_date = date('Y-m-d', strtotime('-7 days'));
             $end_date = date('Y-m-d');
+            break;
+            case '1':
+            case 1:
+            $start_date = date('Y-m-d', strtotime('yesterday'));
+            $end_date = date('Y-m-d', strtotime('yesterday'));
+            break;
+            default:
+            // Fallback to campaign duration if unknown value
+            $campaign_date_range = $this->data_provider->get_campaign_date_range( $target_account_id_for_data );
+            $start_date = $campaign_date_range->min_date ?? null;
+            $end_date = $campaign_date_range->max_date ?? null;
+            break;
         }
 
         // Fetch data using the determined dates and client_id
