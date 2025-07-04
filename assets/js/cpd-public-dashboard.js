@@ -16,6 +16,42 @@ document.addEventListener('DOMContentLoaded', () => {
     const localizedData = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data : {};
     const isAdminUser = localizedData.is_admin_user;
 
+    // Function to prepare URL data for insertion into a data attribute
+    function prepareUrlsForDataAttribute(urlsData) {
+        if (!urlsData) {
+            return '[]'; // Return an empty JSON array string if no data
+        }
+
+        let urlArray = [];
+        if (typeof urlsData === 'string') {
+            // Attempt to parse as JSON first (handles cases where PHP might accidentally JSON encode,
+            // or if it's a malformed JSON string like `[" url "]`)
+            try {
+                const parsed = JSON.parse(urlsData);
+                if (Array.isArray(parsed)) {
+                    // If it's a valid JSON array, use it directly. Trim each URL.
+                    urlArray = parsed.map(url => String(url).trim()).filter(url => url !== '');
+                } else {
+                    // Not an array after JSON.parse, or it was just a string, treat as comma-separated
+                    urlArray = urlsData.split(',').map(url => url.trim()).filter(url => url !== '');
+                }
+            } catch (e) {
+                // Not valid JSON, assume it's a plain comma-separated string
+                urlArray = urlsData.split(',').map(url => url.trim()).filter(url => url !== '');
+            }
+        } else if (Array.isArray(urlsData)) {
+            // If it's already a JS array (unlikely from DB string, but good for robustness)
+            urlArray = urlsData.map(url => String(url).trim()).filter(url => url !== '');
+        }
+
+        // Filter out any "None" strings or empty strings that might have snuck in
+        urlArray = urlArray.filter(url => url !== 'None' && url.trim() !== '');
+
+        // Finally, JSON.stringify the array. This creates a valid string for the data attribute
+        // and correctly escapes any internal quotes or special characters.
+        return JSON.stringify(urlArray);
+    }
+
     // --- Chart Rendering Functionality ---
     let impressionsChartInstance = null;
     let impressionsByAdGroupChartInstance = null;
@@ -110,7 +146,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         position: 'right',
                     },
                     tooltip: {
-                        enabled: false
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || ''; // context.label is the ad_group_name
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed !== null) {
+                                    label += new Intl.NumberFormat().format(context.parsed) + ' Impressions';
+                                }
+                                return label;
+                            }
+                        }
                     }
                 }
             }
@@ -119,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // A simple function to handle AJAX requests for visitor status updates
     const sendAjaxRequestForVisitorStatus = async (action, visitorId) => {
-        const ajaxUrl = localizedData.ajax_url; 
+        const ajaxUrl = localizedData.ajax_url;
         const nonce = localizedData.visitor_nonce;
 
         if (!ajaxUrl || !nonce) {
@@ -146,7 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             
             if (data.success) {
-                console.log(`sendAjaxRequestForVisitorStatus: Visitor ${visitorId} status updated successfully.`);
+                //console.log(`sendAjaxRequestForVisitorStatus: Visitor ${visitorId} status updated successfully.`);
                 return true;
             } else {
                 console.error('sendAjaxRequestForVisitorStatus: AJAX error:', data.data);
@@ -199,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     action: 'cpd_get_dashboard_data',
                     nonce: localizedData.dashboard_nonce,
                     client_id: actualClientIdForAjax,
-                    duration: durationToUse 
+                    duration: durationToUse
                 }).toString()
             });
 
@@ -229,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
 
-                // Update Summary Cards (MODIFIED TO USE data-summary-key)
+                // Update Summary Cards 
                 document.querySelectorAll('.summary-card .value').forEach(el => {
                     const dataKey = el.nextElementSibling.dataset.summaryKey; // Get from new data-key attribute
                     console.log("Updating summary cards with metrics:", data.summary_metrics);
@@ -256,8 +303,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <td>${item.ad_group_name}</td>
                                     <td>${(item.impressions).toLocaleString()}</td>
                                     <td>${(item.reach).toLocaleString()}</td>
-                                    <td>${(item.ctr).toLocaleString()}%</td>
                                     <td>${(item.clicks).toLocaleString()}</td>
+                                    <td>${(item.ctr !== null ? parseFloat(item.ctr) : 0).toFixed(2)}%</td>
                                 </tr>
                             `);
                         });
@@ -267,7 +314,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // Update Visitor Panel
-                // Update Visitor Panel
                 const visitorListContainer = document.querySelector('.visitor-panel .visitor-list');
                 if (visitorListContainer) {
                     visitorListContainer.innerHTML = '';
@@ -275,24 +321,24 @@ document.addEventListener('DOMContentLoaded', () => {
                         data.visitor_data.forEach(visitor => {
                             const memoSealUrl = localizedData.memo_seal_url;
                             const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
-                            const companyName = visitor.company_name || 'Unknown Company'; // Get company name
-                            const jobTitle = visitor.job_title || 'Unknown';
-                            const email = visitor.email || 'Unknown';
-                            const linkedinUrl = visitor.linkedin_url || '#'; // Get LinkedIn URL
-                            const hasLinkedIn = visitor.linkedin_url && visitor.linkedin_url.trim() !== ''; // Check if LinkedIn URL is present
+                            const companyName = visitor.company_name || 'Unknown Company';
+                            const jobTitle = visitor.job_title || 'Unknown Title';
+                            const email = visitor.email || 'Unknown Email';
+                            const linkedinUrl = visitor.linkedin_url || '#';
+                            const hasLinkedIn = visitor.linkedin_url && visitor.linkedin_url.trim() !== '';
                             const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
 
-                            // Ensure recent_page_urls is always a string for the data attribute
-                            const recentPageUrlsString = visitor.recent_page_urls ? visitor.recent_page_urls : 'None';
+                            // Use the AJAX data directly - it's already in the correct format
+                            const recentPageUrls = visitor.recent_page_urls || [];
+                            const safeRecentPageUrlsForAttr = JSON.stringify(recentPageUrls);
 
-                            console.log("Adding visitor card for:", fullName, "with ID:", visitor.id);
+
                             visitorListContainer.insertAdjacentHTML('beforeend', `
                                 <div class="visitor-card"
                                     data-visitor-id="${visitor.id}"
                                     data-last-seen-at="${visitor.last_seen_at || 'N/A'}"
                                     data-recent-page-count="${visitor.recent_page_count || '0'}"
-                                    data-recent-page-urls="${recentPageUrlsString}"
-                                >
+                                    data-recent-page-urls='${safeRecentPageUrlsForAttr}' >
                                     <div class="visitor-top-row">
                                         <div class="visitor-logo">
                                             <img src="${memoSealUrl}" alt="Referrer Logo">
@@ -311,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                         </div>
                                     </div>
 
-                                    <p class="visitor-name">${fullName.trim() || 'Unknown Visitor'}</p>
+                                    <p class="visitor-name">${fullName.trim() || 'Company Visit'}</p>
                                     <p class="visitor-company-main">${companyName}</p>
 
                                     <div class="visitor-details-body">
@@ -366,12 +412,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (button.classList.contains('info-icon')) {
                     const lastSeenAt = visitorCard.dataset.lastSeenAt || 'N/A';
                     const recentPageCount = visitorCard.dataset.recentPageCount || '0';
+                    
                     let recentPageUrls = [];
-                    const recentPageUrlsString = visitorCard.dataset.recentPageUrls;
-
-                    // Split the comma-separated string into an array, filter out empty strings, and trim whitespace
-                    if (recentPageUrlsString) {
-                        recentPageUrls = recentPageUrlsString.split(',').map(url => url.trim()).filter(url => url !== 'None');
+                    // Get the recent page URLs from the data attribute
+                    const recentPageUrlsStringFromAttr = visitorCard.dataset.recentPageUrls; 
+                    
+                    // Parse the JSON string from the data attribute
+                    if (recentPageUrlsStringFromAttr && recentPageUrlsStringFromAttr !== 'None' && recentPageUrlsStringFromAttr.trim() !== '') {
+                        try {
+                            const parsedUrls = JSON.parse(recentPageUrlsStringFromAttr);
+                            
+                            // Use duck typing instead of Array.isArray() which seems to be failing
+                            if (parsedUrls && typeof parsedUrls === 'object' && parsedUrls.length !== undefined) {
+                                // Convert to proper array and filter
+                                recentPageUrls = Array.from(parsedUrls).filter(url => url && url.trim() !== '');
+                            } else if (typeof parsedUrls === 'string') {
+                                // Single URL string
+                                recentPageUrls = [parsedUrls];
+                            }
+                        } catch (e) {
+                            console.error('JSON Parse Error:', e);
+                            
+                            // Fallback: extract URLs using regex
+                            if (recentPageUrlsStringFromAttr.includes('http')) {
+                                const urlMatches = recentPageUrlsStringFromAttr.match(/https?:\/\/[^\s"',\]]+/g);
+                                if (urlMatches) {
+                                    recentPageUrls = urlMatches;
+                                }
+                            }
+                        }
                     }
 
                     document.getElementById('modal-last-seen-at').textContent = lastSeenAt;
@@ -379,23 +448,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const pageUrlsList = document.getElementById('modal-recent-page-urls');
                     pageUrlsList.innerHTML = ''; // Clear previous URLs
+                    
                     if (recentPageUrls.length > 0) {
-                        recentPageUrls.forEach(url => {
+                        
+                        recentPageUrls.forEach((url, index) => {
+                            // Ensure url is a string and clean it up
+                            let cleanUrl = String(url).trim();
+                            
+                            // Remove any remaining brackets or quotes that might be attached
+                            cleanUrl = cleanUrl.replace(/^[\[\"]|[\]\"]$/g, '');
+                            
                             const li = document.createElement('li');
                             const a = document.createElement('a');
-                            a.href = url;
-                            a.textContent = url;
+                            a.href = cleanUrl;
+                            a.textContent = cleanUrl;
                             a.target = '_blank';
                             li.appendChild(a);
                             pageUrlsList.appendChild(li);
                         });
                         document.getElementById('modal-recent-page-urls-container').style.display = 'block';
+                    } else if (recentPageCount > 0) {
+                        // We have a count but no URLs - likely a data issue
+                        const li = document.createElement('li');
+                        li.textContent = `Data issue: ${recentPageCount} pages recorded but URLs not available`;
+                        li.style.color = '#ff6b6b';
+                        li.style.fontStyle = 'italic';
+                        pageUrlsList.appendChild(li);
+                        document.getElementById('modal-recent-page-urls-container').style.display = 'block';
                     } else {
-                        // If no URLs, display a "No recent pages" message
+                        // If no URLs and no count, display a "No recent pages" message
                         const li = document.createElement('li');
                         li.textContent = 'No recent pages.';
                         pageUrlsList.appendChild(li);
-                        document.getElementById('modal-recent-page-urls-container').style.display = 'block'; // Still show the container
+                        document.getElementById('modal-recent-page-urls-container').style.display = 'block';
                     }
 
                     if (visitorInfoModal) {
@@ -403,7 +488,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     return; // Exit to prevent further processing for this click
                 }
-
 
 
                 let updateAction = '';

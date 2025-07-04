@@ -191,18 +191,38 @@ class CPD_Data_Provider {
         // Prepare the query
         $sql_query = $this->wpdb->prepare( $sql_select_order, ...$prepare_args );
         
-        error_log('CPD_Data_Provider::get_visitor_data - Account ID Passed: ' . ($account_id ?? 'NULL (All Clients)'));
-        error_log('CPD_Data_Provider::get_visitor_data - Final SQL Query: ' . $sql_query); // Log the actual prepared query
+        // error_log('CPD_Data_Provider::get_visitor_data - Account ID Passed: ' . ($account_id ?? 'NULL (All Clients)'));
+        // error_log('CPD_Data_Provider::get_visitor_data - Final SQL Query: ' . $sql_query); // Log the actual prepared query
 
         $results = $this->wpdb->get_results( $sql_query );
-
+        // error_log('CPD_Data_Provider::get_visitor_data - Account ID Passed: ' . $results);
         if ( empty( $results ) ) {
             error_log('CPD_Data_Provider: get_visitor_data returned no results for account_id: ' . ($account_id ?? 'ALL'));
         }
         if ( $this->wpdb->last_error ) {
             error_log('CPD_Data_Provider: Database error for visitor data: ' . $this->wpdb->last_error);
         }
-
+/*
+        $visitors = $wpdb->get_results( $wpdb->prepare( $sql, ...$prepare_args ) );
+        // Ensure recent_page_urls is a proper array by splitting the comma-separated string
+        foreach ( $visitors as $visitor ) {
+            if ( isset( $visitor->recent_page_urls ) && is_string( $visitor->recent_page_urls ) ) {
+                // Trim whitespace from the entire string, then explode by comma
+                $urls_string = trim($visitor->recent_page_urls);
+                if ( ! empty( $urls_string ) ) {
+                    // Split the string into an array, then trim whitespace from each URL
+                    $urls_array = array_map('trim', explode(',', $urls_string));
+                    // Remove any empty strings that might result from extra commas or leading/trailing commas
+                    $visitor->recent_page_urls = array_filter($urls_array);
+                } else {
+                    $visitor->recent_page_urls = [];
+                }
+            } else {
+                $visitor->recent_page_urls = []; // Default to empty array if not set or not a string
+            }
+            error_log('CPD_Data_Provider::get_visitor_data - Visitor ID: ' . $visitor->id . ' | Recent Page URLs: ' . implode(', ', $visitor->recent_page_urls));
+        }        
+*/
         return $results;
     }
 
@@ -230,8 +250,8 @@ class CPD_Data_Provider {
         // Prepare the query
         $sql_query = $this->wpdb->prepare( $sql_select_order, ...$prepare_args );
 
-        error_log('CPD_Data_Provider::get_eligible_crm_visitors - Account ID Passed: ' . ($account_id ?? 'NULL (All Clients)'));
-        error_log('CPD_Data_Provider::get_eligible_crm_visitors - Final SQL Query: ' . $sql_query); // Log the actual prepared query
+        // error_log('CPD_Data_Provider::get_eligible_crm_visitors - Account ID Passed: ' . ($account_id ?? 'NULL (All Clients)'));
+        // error_log('CPD_Data_Provider::get_eligible_crm_visitors - Final SQL Query: ' . $sql_query); // Log the actual prepared query
 
         $results = $this->wpdb->get_results( $sql_query );
 
@@ -296,11 +316,10 @@ class CPD_Data_Provider {
         }
         $metrics = $this->wpdb->get_row( $this->wpdb->prepare( $campaign_metrics_sql, ...$campaign_metrics_prepare_args ) );
         
-        error_log('CPD_Data_Provider::get_summary_metrics - Account ID: ' . ($account_id ?? 'NULL'));
-        error_log('SQL Query for summary campaign metrics: ' . $this->wpdb->prepare( $campaign_metrics_sql, ...$campaign_metrics_prepare_args ) );
+        // error_log('CPD_Data_Provider::get_summary_metrics - Account ID: ' . ($account_id ?? 'NULL'));
+        // error_log('SQL Query for summary campaign metrics: ' . $this->wpdb->prepare( $campaign_metrics_sql, ...$campaign_metrics_prepare_args ) );
 
         // Visitor metrics query construction
-        // Count CRM additions as any profile flagged is_crm_added = 1, regardless of crm_sent status
         $visitor_metrics_sql = "SELECT SUM(new_profile) as new_contacts, SUM(CASE WHEN is_crm_added = 1 THEN 1 ELSE 0 END) as crm_additions_count FROM %i WHERE last_seen_at BETWEEN %s AND %s";
         $visitor_metrics_prepare_args = [$visitor_table, $start_date, $end_date];
         if ( $account_id !== null ) { // Check for normalized null
@@ -309,7 +328,7 @@ class CPD_Data_Provider {
         }
         $contact_counts = $this->wpdb->get_row( $this->wpdb->prepare( $visitor_metrics_sql, ...$visitor_metrics_prepare_args ) );
         
-        error_log('SQL Query for summary contact counts: ' . $this->wpdb->prepare( $visitor_metrics_sql, ...$visitor_metrics_prepare_args ) );
+        // error_log('SQL Query for summary contact counts: ' . $this->wpdb->prepare( $visitor_metrics_sql, ...$visitor_metrics_prepare_args ) );
 
         $total_clicks = isset($metrics->total_clicks) ? $metrics->total_clicks : 0;
         $total_impressions = isset($metrics->total_impressions) ? $metrics->total_impressions : 0;

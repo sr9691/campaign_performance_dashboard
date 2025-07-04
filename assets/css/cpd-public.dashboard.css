@@ -325,7 +325,7 @@ body.client-dashboard-page .client-logo-container img {
 }
 
 body.client-dashboard-page .header-title-section h1 {
-    font-size: 2rem !important;
+    font-size: 2.5rem !important;
     font-weight: 700 !important;
     margin: 0 !important;
     color: var(--text-color-dark) !important;
@@ -343,17 +343,21 @@ body.client-dashboard-page .duration-select {
     gap: 10px !important;
 }
 
+body.client-dashboard-page .duration-select span {
+    white-space: nowrap !important; /* Prevents "Date Range" text from wrapping */
+}
+
 body.client-dashboard-page .duration-select select {
-    padding: 5px 10px !important; /* Use mockup's padding */
+    padding: 5px 10px !important;
     border: 1px solid var(--line-color) !important;
-    border-radius: 5px !important; /* Use mockup's border-radius */
+    border-radius: 5px !important;
     background-color: #fff !important; /* Ensure white background */
     font-family: var(--font-family) !important;
-    font-size: 0.8rem !important; /* Use mockup's font size */
-    font-weight: 600 !important; /* Use mockup's font weight */
-    color: var(--text-color-light) !important; /* Use mockup's color */
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    color: var(--text-color-light) !important;
     cursor: pointer !important;
-    margin-left: 10px !important; /* Use mockup's margin-left */
+    margin-left: 10px !important;
 }
 
 body.client-dashboard-page .right-header {
@@ -362,8 +366,9 @@ body.client-dashboard-page .right-header {
     gap: 20px !important;
 }
 
+
 body.client-dashboard-page .right-header .client-brand-logo img {
-    max-height: 75px !important; /* Use mockup's max-width */
+    max-height: 75px !important;
     height: auto !important;
 }
 
@@ -382,12 +387,13 @@ body.client-dashboard-page .summary-cards {
     justify-content: space-between !important;
     gap: 20px !important;
     margin-bottom: 30px !important;
-    flex-wrap: wrap !important;
+    flex-wrap: nowrap !important;
 }
 
 body.client-dashboard-page .summary-card {
     background-color: var(--card-bg) !important;
-    padding: 25px !important; /* Use mockup's padding */
+    /* Adjusted padding dynamically using clamp for responsiveness */
+    padding: clamp(10px, 1.5vw, 25px) !important; /* Min 10px, Preferred 1.5vw, Max 25px */
     border-radius: var(--border-radius) !important;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
     text-align: center !important;
@@ -396,18 +402,20 @@ body.client-dashboard-page .summary-card {
 }
 
 body.client-dashboard-page .summary-card .value {
-    font-size: 2.5rem !important; /* Use mockup's font size */
+    /* Adjusted font size dynamically using clamp for responsiveness */
+    font-size: clamp(1.5rem, 3.5vw, 2.5rem) !important; /* Min 1.5rem, Preferred 3.5vw, Max 2.5rem */
     font-weight: 700 !important;
-    margin: 0 !important; /* Use mockup's margin */
+    margin: 0 !important;
     color: var(--primary-color) !important;
     font-family: var(--font-family) !important;
 }
 
 body.client-dashboard-page .summary-card .label {
-    font-size: 1rem !important; /* Use mockup's font size */
+    /* Adjusted font size dynamically using clamp for responsiveness */
+    font-size: clamp(0.7rem, 1.2vw, 1rem) !important; /* Min 0.7rem, Preferred 1.2vw, Max 1rem */
     color: var(--text-color-light) !important;
     text-transform: uppercase !important;
-    margin-top: 5px !important; /* Use mockup's margin-top */
+    margin-top: 5px !important;
     font-family: var(--font-family) !important;
 }
 
@@ -421,12 +429,13 @@ body.client-dashboard-page .charts-section {
 
 body.client-dashboard-page .chart-container {
     background-color: var(--card-bg) !important;
-    padding: 30px !important; /* Use mockup's padding */
+    padding: 30px !important;
     border-radius: var(--border-radius) !important;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
     flex: 1 !important;
-    height: 250px !important; /* Keep fixed height for charts */
-    max-height: 250px !important;
+    /* Increased height for charts */
+    height: 350px !important; /* Example: Increased height from 250px */
+    max-height: 350px !important; /* Example: Increased max-height */
     display: flex !important;
     flex-direction: column !important;
     justify-content: center !important;
@@ -446,8 +455,8 @@ body.client-dashboard-page .chart-container h3 {
 
 /* Ad Group Table */
 body.client-dashboard-page .ad-group-table {
-    background-color: var(--card-bg) !important; /* Use mockup's background */
-    padding: 30px !important; /* Use mockup's padding */
+    background-color: var(--card-bg) !important;
+    padding: 30px !important;
     border-radius: var(--border-radius) !important;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05) !important;
     margin-bottom: 30px !important;
@@ -464,7 +473,7 @@ body.client-dashboard-page .ad-group-table table {
 
 body.client-dashboard-page .ad-group-table th,
 body.client-dashboard-page .ad-group-table td {
-    padding: 15px 20px !important; /* Use mockup's padding */
+    padding: 15px 20px !important;
     border-bottom: 1px solid var(--line-color) !important;
     font-weight: 500 !important;
 }
@@ -483,10 +492,10 @@ body.client-dashboard-page .ad-group-table tr:hover {
 
 /* Right Visitor Panel */
 body.client-dashboard-page .visitor-panel {
-    width: 350px !important; /* Use mockup's width */
+    width: 350px !important;
     height: 100% !important;
     background-color: var(--card-bg) !important;
-    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1) !important; /* Use mockup's shadow */
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1) !important;
     display: flex !important;
     flex-direction: column !important;
     flex-shrink: 0 !important;
@@ -495,7 +504,7 @@ body.client-dashboard-page .visitor-panel {
 }
 
 body.client-dashboard-page .visitor-panel .header {
-    padding: 25px !important; /* Use mockup's padding */
+    padding: 25px !important;
     font-size: 1.2rem !important;
     font-weight: 600 !important;
     border-bottom: 1px solid var(--line-color) !important;
@@ -504,34 +513,32 @@ body.client-dashboard-page .visitor-panel .header {
 
 body.client-dashboard-page .visitor-panel .visitor-list {
     flex: 1 !important;
-    padding: 10px !important; /* Use mockup's padding */
+    padding: 10px !important;
 }
 
 body.client-dashboard-page .visitor-panel .visitor-card {
     display: flex !important;
-    flex-direction: column !important; /* Stack sections vertically */
-    padding: 15px !important; /* Adjusted padding as per image */
+    flex-direction: column !important;
+    padding: 15px !important;
     margin-bottom: 10px !important;
     border-radius: var(--border-radius) !important;
     background-color: #fafafa !important;
     border: 1px solid #eee !important;
-    /* remove position: relative here if top-row handles absolute actions */
-    /* min-height: 150px; /* Ensure a minimum height for cards to prevent collapse */
-    align-items: flex-start !important; /* Align content to the left */
+    align-items: flex-start !important;
 }
 
 /* NEW: Visitor Card Top Row - Logo and Action Icons */
 body.client-dashboard-page .visitor-top-row {
     display: flex !important;
-    justify-content: space-between !important; /* Pushes logo left, actions right */
-    align-items: center !important; /* Vertically centers items in this row */
-    width: 100% !important; /* Spans full width of the card */
-    margin-bottom: 15px !important; /* Space below the top row */
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+    margin-bottom: 15px !important;
 }
 
 body.client-dashboard-page .visitor-panel .visitor-logo {
-    width: 50px !important; /* Slightly larger logo size */
-    height: 50px !important; /* Slightly larger logo size */
+    width: 50px !important;
+    height: 50px !important;
     background-color: #fff !important;
     border-radius: 50% !important;
     display: flex !important;
@@ -540,7 +547,7 @@ body.client-dashboard-page .visitor-panel .visitor-logo {
     overflow: hidden !important;
     flex-shrink: 0 !important;
     box-shadow: none !important;
-    border: 1px solid var(--line-color) !important; /* Add a subtle border to the logo circle */
+    border: 1px solid var(--line-color) !important;
 }
 
 body.client-dashboard-page .visitor-panel .visitor-logo img {
@@ -552,34 +559,32 @@ body.client-dashboard-page .visitor-panel .visitor-logo img {
 /* Visitor actions moved to top-row, right-aligned */
 body.client-dashboard-page .visitor-actions {
     display: flex !important;
-    flex-direction: row !important; /* Arrange icons horizontally */
-    gap: 8px !important; /* Space between icons */
-    font-size: 1.1rem !important; /* Slightly smaller icons */
+    flex-direction: row !important;
+    gap: 8px !important;
+    font-size: 1.1rem !important;
     color: var(--text-color-light) !important;
     flex-shrink: 0 !important;
-    /* No absolute positioning needed here, flexbox does the job */
-    /* No margin-left: auto; needed here because of justify-content: space-between on parent */
 }
 
 body.client-dashboard-page .visitor-actions .icon {
     cursor: pointer !important;
     transition: color 0.2s ease !important;
     padding: 5px !important;
-    display: flex !important; /* Make each icon a flex item to center its content */
+    display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    text-decoration: none !important; /* Remove underline from LinkedIn link */
-    border-radius: 4px !important; /* Small border-radius for icons */
+    text-decoration: none !important;
+    border-radius: 4px !important;
 }
 
 body.client-dashboard-page .visitor-actions .icon:hover {
-    background-color: rgba(0,0,0,0.05) !important; /* Subtle hover background */
-    color: var(--secondary-color) !important; /* Default hover color */
+    background-color: rgba(0,0,0,0.05) !important;
+    color: var(--secondary-color) !important;
 }
 
 /* Specific styles for LinkedIn and Info icons */
 body.client-dashboard-page .visitor-actions .linkedin-icon i {
-    color: #0077B5 !important; /* LinkedIn blue */
+    color: #0077B5 !important;
 }
 
 body.client-dashboard-page .visitor-actions .linkedin-icon:hover i {
@@ -587,7 +592,7 @@ body.client-dashboard-page .visitor-actions .linkedin-icon:hover i {
 }
 
 body.client-dashboard-page .visitor-actions .info-icon i {
-    color: #ffc107 !important; /* Info icon yellow */
+    color: #ffc107 !important;
 }
 
 body.client-dashboard-page .visitor-actions .info-icon:hover i {
@@ -596,52 +601,51 @@ body.client-dashboard-page .visitor-actions .info-icon:hover i {
 
 /* CRM icon color and hover */
 body.client-dashboard-page .visitor-actions .add-crm-icon i {
-    color: #28a745 !important; /* Green color for CRM */
+    color: #28a745 !important;
 }
 
 body.client-dashboard-page .visitor-actions .add-crm-icon:hover i {
-    color: #6c757d !important; /* Grey on hover */
+    color: #6c757d !important;
 }
 
 /* Trash icon color and hover */
 body.client-dashboard-page .visitor-actions .delete-icon i {
-    color: #dc3545 !important; /* Red color for trash */
+    color: #dc3545 !important;
 }
 
 body.client-dashboard-page .visitor-actions .delete-icon:hover i {
-    color: #6c757d !important; /* Grey on hover */
+    color: #6c757d !important;
 }
 
 /* Visitor Name and Company */
 body.client-dashboard-page .visitor-name {
-    font-weight: 700 !important; /* Make name bolder */
-    font-size: 1rem !important; /* Slightly larger name font size */
-    margin: 0 0 5px 0 !important; /* Space below name */
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    margin: 0 0 5px 0 !important;
     line-height: 1.2 !important;
-    color: var(--primary-color) !important; /* Name color */
-    width: 100% !important; /* Ensure it takes full width for wrapping */
-    white-space: normal !important; /* Allow text to wrap */
+    color: var(--primary-color) !important;
+    width: 100% !important;
+    white-space: normal !important;
 }
 
-body.client-dashboard-page .visitor-company-main { /* NEW class for the primary company name */
-    font-size: 0.9rem !important; /* Company font size */
-    color: var(--text-color-dark) !important; /* Company color */
-    margin: 0 0 15px 0 !important; /* Space below company name and above details body */
-    width: 100% !important; /* Ensure it takes full width for wrapping */
-    white-space: normal !important; /* Allow text to wrap */
+body.client-dashboard-page .visitor-company-main {
+    font-size: 0.9rem !important;
+    color: var(--text-color-dark) !important;
+    margin: 0 0 15px 0 !important;
+    width: 100% !important;
+    white-space: normal !important;
 }
 
 /* Visitor Details Body (Job Title, Location, Email) */
 body.client-dashboard-page .visitor-details-body {
-    flex: 1 !important; /* Allows this section to grow */
+    flex: 1 !important;
     overflow: hidden !important;
-    /* No padding-left needed here, as it's below the logo */
-    width: 100% !important; /* Occupy full width */
+    width: 100% !important;
     box-sizing: border-box !important;
 }
 
 body.client-dashboard-page .visitor-details-body p {
-    margin: 4px 0 !important; /* Adjust line spacing */
+    margin: 4px 0 !important;
     font-size: 0.85rem !important;
     color: var(--text-color-light) !important;
     font-family: var(--font-family) !important;
@@ -650,10 +654,10 @@ body.client-dashboard-page .visitor-details-body p {
     text-overflow: ellipsis !important;
 }
 body.client-dashboard-page .visitor-details-body p i {
-    width: 20px !important; /* Give icons fixed width for alignment */
+    width: 20px !important;
     text-align: center !important;
     margin-right: 5px !important;
-    color: var(--secondary-color) !important; /* Icon color */
+    color: var(--secondary-color) !important;
 }
 
 

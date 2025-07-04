@@ -79,13 +79,10 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
     <div class="main-content <?php echo $is_admin ? 'has-admin-sidebar' : 'no-admin-sidebar'; ?>">
         <div class="dashboard-header">
             <div class="left-header">
-                <div class="client-logo-container">
-                    <img src="<?php echo esc_url( $client_logo_url ); ?>" alt="Client Logo">
-                </div>
                 <div class="header-title-section">
-                    <h1>Digital Marketing Report</h1>
+                    <h1>DirectReach Report</h1>
                     <div class="duration-select">
-                        <span>Dates:</span>
+                        <span>Date Range:</span>
                         <select id="duration-selector">
                             <option value="campaign" <?php selected( $duration_param, 'campaign' ); ?>>Campaign Dates</option>
                             <option value="30" <?php selected( $duration_param, '30' ); ?>>Past 30 days</option>
@@ -94,10 +91,8 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                     </div>
                 </div>
             </div>
-            <div class="right-header">
-                <div class="client-brand-logo">
-                    <img src="<?php echo esc_url( $memo_logo_url ); ?>" alt="MEMO Marketing Group">
-                </div>
+            <div class="client-logo-container">
+                <img src="<?php echo esc_url( $client_logo_url ); ?>" alt="Client Logo">
             </div>
         </div>
 
@@ -142,8 +137,8 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                         <th>Ad Group Name</th>
                         <th>Impressions</th>
                         <th>Reach</th>
-                        <th>CTR</th>
                         <th>Clicks</th>
+                        <th>CTR</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -152,8 +147,8 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                         <td><?php echo esc_html( ( $ad_group->ad_group_name ) ); ?></td>
                         <td><?php echo esc_html( number_format( $ad_group->impressions ) ); ?></td>
                         <td><?php echo esc_html( number_format( $ad_group->reach ) ); ?></td>
-                        <td><?php echo esc_html( number_format( $ad_group->ctr, 2 ) ); ?>%</td>
                         <td><?php echo esc_html( number_format( $ad_group->clicks ) ); ?></td>
+                        <td><?php echo esc_html( number_format( $ad_group->ctr, 2 ) ); ?>%</td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -170,17 +165,45 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
             <?php
             // Initial render: If $visitor_data is not empty, display it.
             // This is primarily for the first page load before AJAX updates.
-            // For admins, this might initially be empty if "All Clients" is selected.
             if ( ! empty( $visitor_data ) ) :
                 foreach ( $visitor_data as $visitor ) :
-                error_log('Debug: Visitor ID before HTML generation: ' . (isset($visitor->id) ? $visitor->id : 'ID NOT SET') . ' | Visitor object: ' . print_r($visitor, true));
+                    // Prepare recent page URLs BEFORE the HTML generation
+                    $recent_urls = [];
+                    if (!empty($visitor->recent_page_urls)) {
+                        if (is_string($visitor->recent_page_urls)) {
+                            $decoded = json_decode($visitor->recent_page_urls, true);
+                            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                                $recent_urls = $decoded;
+                            } else {
+                                $recent_urls = array_map('trim', explode(',', $visitor->recent_page_urls));
+                            }
+                        } elseif (is_array($visitor->recent_page_urls)) {
+                            $recent_urls = $visitor->recent_page_urls;
+                        }
+                        
+                        // Clean URLs
+                        $recent_urls = array_filter($recent_urls, function($url) {
+                            return !empty($url) && $url !== 'None' && filter_var($url, FILTER_VALIDATE_URL);
+                        });
+                        
+                        // Limit to 3 URLs and truncate long ones
+                        $recent_urls = array_slice($recent_urls, 0, 3);
+                        $recent_urls = array_map(function($url) {
+                            return strlen($url) > 80 ? substr($url, 0, 77) . '...' : $url;
+                        }, $recent_urls);
+                        
+                        $recent_urls = array_values($recent_urls);
+                    }
+                    
+                    // Create the JSON string safely
+                    $recent_urls_json = json_encode($recent_urls, JSON_UNESCAPED_SLASHES | JSON_HEX_QUOT | JSON_HEX_APOS);
                 ?>
-                <div class="visitor-card"
-                    data-visitor-id="<?php echo esc_attr( $visitor->id ); ?>"
-                    data-last-seen-at="<?php echo esc_attr( $visitor->last_seen_at ?? 'N/A' ); ?>"
-                    data-recent-page-count="<?php echo esc_attr( $visitor->recent_page_count ?? '0' ); ?>"
-                    data-recent-page-urls='<?php echo esc_attr( $visitor->recent_page_urls ?? 'None' ); ?>'
-                >
+                    <div class="visitor-card"
+                        data-visitor-id="<?php echo esc_attr( $visitor->id ); ?>"
+                        data-last-seen-at="<?php echo esc_attr( $visitor->last_seen_at ?? 'N/A' ); ?>"
+                        data-recent-page-count="<?php echo esc_attr( $visitor->recent_page_count ?? '0' ); ?>"
+                        data-recent-page-urls='<?php echo esc_attr( $recent_urls_json ); ?>'
+                    >
                     <div class="visitor-top-row">
                         <div class="visitor-logo">
                             <img src="<?php echo esc_url( $memo_seal_url ); ?>" alt="Referrer Logo">
@@ -189,7 +212,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                             <span class="icon add-crm-icon" title="Add to CRM">
                                 <i class="fas fa-plus-square"></i>
                             </span>
-                            <?php if (!empty($visitor->linkedin_url)) : // Only show LinkedIn icon if URL exists ?>
+                            <?php if (!empty($visitor->linkedin_url)) : ?>
                                 <a href="<?php echo esc_url( $visitor->linkedin_url ); ?>" target="_blank" class="icon linkedin-icon" title="View LinkedIn Profile">
                                     <i class="fab fa-linkedin"></i>
                                 </a>
@@ -215,15 +238,14 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                             }
                             $full_name .= $visitor->last_name;
                         }
-                        echo esc_html( ! empty( $full_name ) ? $full_name : 'Unknown Visitor' );
+                        echo esc_html( ! empty( $full_name ) ? $full_name : 'Company Visit' );
                         ?>
                     </p>
                     <p class="visitor-company-main"><?php echo esc_html( $visitor->company_name ?? 'Unknown Company' ); ?></p>
 
-
                     <div class="visitor-details-body">
                         <p><i class="fas fa-briefcase"></i> <?php echo esc_html( $visitor->job_title ?? 'Unknown Title' ); ?></p>
-                        <?php if ( !empty($visitor->company_name) ) : // Assuming full company name or specific detail needed here ?>
+                        <?php if ( !empty($visitor->company_name) ) : ?>
                             <p><i class="fas fa-building"></i> <?php echo esc_html( $visitor->company_name ); ?></p>
                         <?php endif; ?>
                         <p>
@@ -245,9 +267,8 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                         <p><i class="fas fa-envelope"></i> <?php echo esc_html( $visitor->email ?? 'Unknown Email' ); ?></p>
                     </div>
                 </div>
-                <?php endforeach;
-            else : // Add this else block for initial "no data" message
-                ?>
+                <?php endforeach; ?>
+            <?php else : ?>
                 <div class="no-data">No visitor data found for initial display.</div>
             <?php endif; ?>
         </div>
