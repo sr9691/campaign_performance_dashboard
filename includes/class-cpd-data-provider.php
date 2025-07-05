@@ -50,6 +50,7 @@ class CPD_Data_Provider {
      * @return object|null The client object or null if not found.
      */
     public function get_client_by_account_id( $account_id ) {
+        // error_log('CPD_Data_Provider::get_client_by_account_id - Account ID Passed: ' . $account_id);
         $table_name = $this->wpdb->prefix . 'cpd_clients';
         return $this->wpdb->get_row( $this->wpdb->prepare( "SELECT * FROM %i WHERE account_id = %s", $table_name, $account_id ) );
     }
@@ -87,6 +88,7 @@ class CPD_Data_Provider {
      * @return array An array of campaign data rows aggregated by ad group.
      */
     public function get_campaign_data_by_ad_group( $account_id, $start_date, $end_date ) {
+        // error_log('CPD_Data_Provider::get_campaign_data_by_ad_group - Account ID Passed: ' . $account_id);
         $account_id = $this->normalize_account_id( $account_id ); // Normalize input
         $table_name = 'dashdev_cpd_campaign_data'; // Using fixed table name as per your setup
 
@@ -112,8 +114,8 @@ class CPD_Data_Provider {
         
         $query = $this->wpdb->prepare( $sql_select_group_order, ...$prepare_args );
         
-        error_log('CPD_Data_Provider::get_campaign_data_by_ad_group - Account ID: ' . ($account_id ?? 'NULL') . ' | Start Date: ' . $start_date . ' | End Date: ' . $end_date);
-        error_log('SQL Query for ad group: ' . $query); // Log the actual prepared query
+        // error_log('CPD_Data_Provider::get_campaign_data_by_ad_group - Account ID: ' . ($account_id ?? 'NULL') . ' | Start Date: ' . $start_date . ' | End Date: ' . $end_date);
+        // error_log('SQL Query for ad group: ' . $query); // Log the actual prepared query
 
         $results = $this->wpdb->get_results( $query );
 
@@ -134,6 +136,7 @@ class CPD_Data_Provider {
      * @return array An array of campaign data rows aggregated by date.
      */
     public function get_campaign_data_by_date( $account_id, $start_date, $end_date ) {
+        // error_log('CPD_Data_Provider::get_campaign_data_by_date - Account ID Passed: ' . $account_id . ' | Start Date: ' . $start_date . ' | End Date: ' . $end_date);
         $account_id = $this->normalize_account_id( $account_id ); // Normalize input
         $table_name = 'dashdev_cpd_campaign_data'; // Using fixed table name as per your setup
 
@@ -155,8 +158,8 @@ class CPD_Data_Provider {
         
         $query = $this->wpdb->prepare( $sql_select_group_order, ...$prepare_args );
         
-        error_log('CPD_Data_Provider::get_campaign_data_by_date - Account ID: ' . ($account_id ?? 'NULL') . ' | Start Date: ' . $start_date . ' | End Date: ' . $end_date);
-        error_log('SQL Query for campaign by date: ' . $query); // Log the actual prepared query
+        // error_log('CPD_Data_Provider::get_campaign_data_by_date - Account ID: ' . ($account_id ?? 'NULL') . ' | Start Date: ' . $start_date . ' | End Date: ' . $end_date);
+        // error_log('SQL Query for campaign by date: ' . $query); // Log the actual prepared query
 
         $results = $this->wpdb->get_results( $query );
 
@@ -174,6 +177,7 @@ class CPD_Data_Provider {
      * @return array An array of visitor data rows.
      */
     public function get_visitor_data( $account_id ) {
+        // error_log('CPD_Data_Provider::get_visitor_data - Account ID Passed: ' . $account_id);
         $account_id = $this->normalize_account_id( $account_id ); // Normalize input
         $table_name = $this->wpdb->prefix . 'cpd_visitors';
         
@@ -191,38 +195,29 @@ class CPD_Data_Provider {
         // Prepare the query
         $sql_query = $this->wpdb->prepare( $sql_select_order, ...$prepare_args );
         
-        // error_log('CPD_Data_Provider::get_visitor_data - Account ID Passed: ' . ($account_id ?? 'NULL (All Clients)'));
-        // error_log('CPD_Data_Provider::get_visitor_data - Final SQL Query: ' . $sql_query); // Log the actual prepared query
-
         $results = $this->wpdb->get_results( $sql_query );
         // error_log('CPD_Data_Provider::get_visitor_data - Account ID Passed: ' . $results);
+
+
+
         if ( empty( $results ) ) {
             error_log('CPD_Data_Provider: get_visitor_data returned no results for account_id: ' . ($account_id ?? 'ALL'));
         }
         if ( $this->wpdb->last_error ) {
             error_log('CPD_Data_Provider: Database error for visitor data: ' . $this->wpdb->last_error);
         }
-/*
-        $visitors = $wpdb->get_results( $wpdb->prepare( $sql, ...$prepare_args ) );
-        // Ensure recent_page_urls is a proper array by splitting the comma-separated string
-        foreach ( $visitors as $visitor ) {
-            if ( isset( $visitor->recent_page_urls ) && is_string( $visitor->recent_page_urls ) ) {
-                // Trim whitespace from the entire string, then explode by comma
-                $urls_string = trim($visitor->recent_page_urls);
-                if ( ! empty( $urls_string ) ) {
-                    // Split the string into an array, then trim whitespace from each URL
-                    $urls_array = array_map('trim', explode(',', $urls_string));
-                    // Remove any empty strings that might result from extra commas or leading/trailing commas
-                    $visitor->recent_page_urls = array_filter($urls_array);
-                } else {
-                    $visitor->recent_page_urls = [];
-                }
-            } else {
-                $visitor->recent_page_urls = []; // Default to empty array if not set or not a string
-            }
-            error_log('CPD_Data_Provider::get_visitor_data - Visitor ID: ' . $visitor->id . ' | Recent Page URLs: ' . implode(', ', $visitor->recent_page_urls));
-        }        
-*/
+
+        // Ensure CPD_Referrer_Logo class is loaded (it should already be via class-cpd-public.php or class-cpd-admin.php)
+        if ( ! class_exists( 'CPD_Referrer_Logo' ) ) {
+            // Adjust path if necessary based on your plugin structure
+            require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-referrer-logo.php';
+        }
+
+        // Iterate through each visitor and add the referrer_logo_url
+        foreach ( $results as $visitor ) {
+            $visitor->referrer_logo_url = CPD_Referrer_Logo::get_logo_for_visitor( $visitor );
+        }
+
         return $results;
     }
 

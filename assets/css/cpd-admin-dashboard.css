@@ -1054,3 +1054,124 @@ body.wp-admin #eligible-visitors-table .undo-crm-button {
 body.wp-admin #eligible-visitors-table .undo-crm-button:hover {
     color: #e65100 !important; /* Darker orange on hover */
 }
+
+/* Referrer Logo Mapping Styles */
+.referrer-mapping-row {
+    display: grid !important;
+    grid-template-columns: 1fr 2fr auto !important;
+    gap: 15px !important;
+    align-items: end !important;
+    margin-bottom: 15px !important;
+    padding: 15px !important;
+    background-color: #f9f9f9 !important;
+    border-radius: var(--border-radius) !important;
+    border: 1px solid var(--line-color) !important;
+}
+
+.referrer-mapping-row .form-group {
+    margin-bottom: 0 !important;
+}
+
+.referrer-mapping-row .form-group label {
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+    color: var(--text-color-light) !important;
+    margin-bottom: 5px !important;
+    font-family: var(--font-family) !important;
+}
+
+.referrer-mapping-row .form-group input {
+    padding: 8px 12px !important;
+    border: 1px solid var(--line-color) !important;
+    border-radius: 4px !important;
+    font-size: 0.9rem !important;
+    width: 100% !important;
+    font-family: var(--font-family) !important;
+    background-color: #fff !important;
+    transition: border-color 0.2s ease !important;
+}
+
+.referrer-mapping-row .form-group input:focus {
+    outline: none !important;
+    border-color: var(--secondary-color) !important;
+    box-shadow: 0 0 0 2px rgba(66, 148, 204, 0.1) !important;
+}
+
+.referrer-mapping-row .remove-mapping {
+    background-color: #dc3545 !important;
+    color: white !important;
+    border: none !important;
+    padding: 8px 12px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    font-size: 0.85rem !important;
+    height: fit-content !important;
+    font-family: var(--font-family) !important;
+    font-weight: 500 !important;
+    transition: background-color 0.2s ease !important;
+}
+
+.referrer-mapping-row .remove-mapping:hover {
+    background-color: #c82333 !important;
+}
+
+#add-referrer-mapping {
+    background-color: var(--secondary-color) !important;
+    color: white !important;
+    border: none !important;
+    padding: 10px 20px !important;
+    border-radius: var(--border-radius) !important;
+    cursor: pointer !important;
+    font-weight: 600 !important;
+    margin-top: 10px !important;
+    font-family: var(--font-family) !important;
+    font-size: 0.9rem !important;
+    transition: background-color 0.2s ease !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+}
+
+#add-referrer-mapping:hover {
+    background-color: #357abd !important;
+}
+
+#add-referrer-mapping:before {
+    content: '\f067' !important; /* FontAwesome plus icon */
+    font-family: 'Font Awesome 5 Free' !important;
+    font-weight: 900 !important;
+}
+
+.direct-logo-checkbox {
+    background-color: #fff !important;
+    padding: 15px !important;
+    border: 1px solid var(--line-color) !important;
+    border-radius: var(--border-radius) !important;
+}
+
+.direct-logo-checkbox label {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    margin-bottom: 5px !important;
+    font-weight: 600 !important;
+    color: var(--text-color-dark) !important;
+}
+
+.direct-logo-checkbox input[type="checkbox"] {
+    width: auto !important;
+    margin: 0 !important;
+}
+
+/* Responsive design for referrer mappings */
+@media (max-width: 768px) {
+    .referrer-mapping-row {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+        padding: 12px !important;
+    }
+    
+    .referrer-mapping-row .form-group input {
+        font-size: 16px !important; /* Prevent zoom on iOS */
+    }
+}

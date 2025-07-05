@@ -192,7 +192,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                     >
                     <div class="visitor-top-row">
                         <div class="visitor-logo">
-                            <img src="<?php echo esc_url( $memo_seal_url ); ?>" alt="Referrer Logo">
+                            <img src="<?php echo esc_url( CPD_Referrer_Logo::get_logo_for_visitor( $visitor ) ); ?>" alt="Referrer Logo">
                         </div>
                         <div class="visitor-actions">
                             <span class="icon add-crm-icon" title="Add to CRM">

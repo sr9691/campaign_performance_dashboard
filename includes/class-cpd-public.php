@@ -1,4 +1,4 @@
-<?php
+    <?php
     /**
      * The public-facing functionality of the plugin.
      *
@@ -17,10 +17,14 @@ class CPD_Public {
     private $data_provider;
 
     public function __construct( $plugin_name, $version ) {
+        
+        
         $this->plugin_name = $plugin_name;
         $this->version = $version;
         // Initialize the data provider here, as it's used in enqueue_scripts_data and display_dashboard
         require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-data-provider.php';
+        require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-referrer-logo.php';
+        
         $this->data_provider = new CPD_Data_Provider();
 
         // Add AJAX handlers for front-end.
@@ -28,8 +32,8 @@ class CPD_Public {
         add_action( 'wp_ajax_nopriv_cpd_update_visitor_status', array( $this, 'update_visitor_status_callback' ) );
 
         // Add new AJAX handler for fetching dashboard data
-        add_action( 'wp_ajax_cpd_get_dashboard_data', array( $this, 'get_dashboard_data_callback' ) );
-        add_action( 'wp_ajax_nopriv_cpd_get_dashboard_data', array( $this, 'get_dashboard_data_callback' ) );
+        add_action( 'wp_ajax_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
+        add_action( 'wp_ajax_nopriv_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
 
         // Add scripts and styles with a high priority to load after the theme's.
         add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_styles' ), 99 );
@@ -45,6 +49,7 @@ class CPD_Public {
 
         // Force hide admin bar with action
         add_action( 'wp_head', array( $this, 'force_hide_admin_bar' ) );
+        
 
         // Register shortcode
         add_shortcode( 'campaign_dashboard', array( $this, 'display_dashboard' ) );
@@ -275,6 +280,7 @@ class CPD_Public {
      * AJAX handler for getting dashboard data.
      */
     public function ajax_get_dashboard_data() {
+        error_log('=== AJAX ajax_get_dashboard_data() method called ===');
         // Change the nonce check here to match the new specific nonce
         if ( ! current_user_can( 'read' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_get_dashboard_data_nonce' ) ) { // ALL users (read cap) can get dashboard data
             wp_send_json_error( 'Security check failed.' );
@@ -286,7 +292,7 @@ class CPD_Public {
         $duration = isset( $_POST['duration'] ) ? sanitize_text_field( $_POST['duration'] ) : 'campaign'; // Default to 'campaign'
         
         // Add debug logging
-        error_log('PUBLIC AJAX: Duration received: ' . $duration . ' (type: ' . gettype($duration) . ')');
+        // error_log('PUBLIC AJAX: Duration received: ' . $duration . ' (type: ' . gettype($duration) . ')');
         
         // Determine start and end dates based on duration
         $start_date = null;
@@ -318,12 +324,19 @@ class CPD_Public {
             $end_date = $campaign_date_range->max_date ?? date('Y-m-d');
         }
 
-        error_log('PUBLIC AJAX: Final dates - Start: ' . $start_date . ', End: ' . $end_date);
+        // error_log('PUBLIC AJAX: Final dates - Start: ' . $start_date . ', End: ' . $end_date);
 
         $summary_metrics = $this->data_provider->get_summary_metrics( $client_id, $start_date, $end_date );
         $campaign_data_by_ad_group = $this->data_provider->get_campaign_data_by_ad_group( $client_id, $start_date, $end_date );
         $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $client_id, $start_date, $end_date );
         $visitor_data = $this->data_provider->get_visitor_data( $client_id );
+
+        if (!empty($visitor_data)) {
+            foreach ($visitor_data as $visitor) {
+                // Add the logo URL for each visitor using the existing class
+                $visitor->logo_url = CPD_Referrer_Logo::get_logo_for_visitor($visitor);
+            }
+        }
 
         // --- Get client logo URL ---
         $client_logo_url = CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png'; // Default
@@ -333,7 +346,7 @@ class CPD_Public {
                 $client_logo_url = esc_url( $client_obj->logo_url );
             }
         }
-        
+
         wp_send_json_success( array(
             'summary_metrics' => $summary_metrics,
             'campaign_data' => $campaign_data_by_ad_group,
@@ -342,7 +355,7 @@ class CPD_Public {
             'client_logo_url' => $client_logo_url,
         ) );
     }
-    
+
     /**
      * Renders the campaign dashboard via a shortcode.
      */
@@ -466,7 +479,7 @@ class CPD_Public {
         $update_action = isset( $_POST['update_action'] ) ? sanitize_text_field( $_POST['update_action'] ) : '';
         $user_id = get_current_user_id();
 
-        error_log('update_visitor_status_callback: Received request - Visitor ID: ' . $visitor_internal_id . ', Action: ' . $update_action);
+        // error_log('update_visitor_status_callback: Received request - Visitor ID: ' . $visitor_internal_id . ', Action: ' . $update_action);
 
         // Validate the internal ID and action
         if ( $visitor_internal_id <= 0 || ! in_array( $update_action, array( 'add_crm', 'archive' ) ) ) {
@@ -494,7 +507,7 @@ class CPD_Public {
             $visitor_table,
             $visitor_internal_id
         ) );
-        error_log('update_visitor_status_callback: Visitor ' . $visitor_internal_id . ' current ' . $current_status_column . ' status: ' . $current_status_value);
+        // error_log('update_visitor_status_callback: Visitor ' . $visitor_internal_id . ' current ' . $current_status_column . ' status: ' . $current_status_value);
 
         $updated_rows = 0;
         if ( (int)$current_status_value === 0 ) { // Only attempt update if current status is 0 (not yet added/archived)
@@ -509,7 +522,7 @@ class CPD_Public {
             error_log('update_visitor_status_callback: Visitor ' . $visitor_internal_id . ' already has ' . $current_status_column . ' set to 1. No update performed.');
         }
 
-        error_log('update_visitor_status_callback: $wpdb->update returned ' . print_r($updated_rows, true) . ' rows affected. Last DB Error: ' . $wpdb->last_error);
+        // error_log('update_visitor_status_callback: $wpdb->update returned ' . print_r($updated_rows, true) . ' rows affected. Last DB Error: ' . $wpdb->last_error);
 
         if ( $updated_rows === false ) { // Query failed
             $log_description = 'Failed to update visitor status for Internal ID ' . $visitor_internal_id . ' (Action: ' . $update_action . '). Database Error: ' . $wpdb->last_error;

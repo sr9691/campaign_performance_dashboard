@@ -355,13 +355,53 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                             </select>
                             <small class="form-help">Select the hour of the day for automatic CRM email feeds.</small>
                         </div>
+
                     </div>
+
+                    <div class="settings-section">
+                        <h3>Referrer Logo Mapping</h3>
+                        <p>Configure custom logos for different referrer domains. These logos will appear in the visitor panel.</p>
+                        
+                        <div id="referrer-logo-mappings">
+                            <?php 
+                            $existing_mappings = get_option('cpd_referrer_logo_mappings', array(
+                                'google.com' => 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/240px-Google_%22G%22_logo.svg.png',
+                                'linkedin.com' => 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/LinkedIn_logo_initials.png/240px-LinkedIn_logo_initials.png',
+                                'bing.com' => 'https://upload.wikimedia.org/wikipedia/commons/f/f3/Bing_fluent_logo.jpg'
+                            ));
+                            foreach ( $existing_mappings as $domain => $logo_url ) : ?>
+                            <div class="referrer-mapping-row">
+                                <div class="form-group">
+                                    <label>Domain</label>
+                                    <input type="text" name="referrer_domains[]" value="<?php echo esc_attr( $domain ); ?>" placeholder="e.g., google.com">
+                                </div>
+                                <div class="form-group">
+                                    <label>Logo URL</label>
+                                    <input type="url" name="referrer_logos[]" value="<?php echo esc_url( $logo_url ); ?>" placeholder="https://example.com/logo.png">
+                                </div>
+                                <div class="form-group">
+                                    <button type="button" class="button button-secondary remove-mapping">Remove</button>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                        
+                        <button type="button" id="add-referrer-mapping" class="button button-secondary">Add New Mapping</button>
+                        
+                        <div class="form-group direct-logo-checkbox" style="margin-top: 20px;">
+                            <label>
+                                <input type="checkbox" name="cpd_show_direct_logo" value="1" <?php checked( get_option('cpd_show_direct_logo', 1), 1 ); ?>>
+                                Show "DIRECT" logo for visitors with no referrer
+                            </label>
+                            <small class="form-help">When enabled, visitors with blank referrer will show a "DIRECT" text logo.</small>
+                        </div>
+                    </div>
+
                     <div class="form-actions">
                         <button type="submit">Save Settings</button>
                     </div>
                 </form>
-            </div>
-
+            </div>                        
 
             <div class="settings-section">
                 <h3>Data Management</h3>

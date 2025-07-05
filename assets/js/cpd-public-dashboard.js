@@ -207,9 +207,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Client-specific function to load all dashboard data via AJAX ---
     async function loadClientDashboardData(explicitClientId = null, explicitDuration = null) {
-        console.log('=== loadClientDashboardData DEBUG ===');
-        console.log('explicitClientId:', explicitClientId);
-        console.log('explicitDuration:', explicitDuration);
 
         // 1. Determine the Client ID to use for the AJAX call
         let clientIdToUse;
@@ -252,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
             duration: durationToUse
         };
         
-        console.log('Request data being sent:', requestData);
+        // console.log('Request data being sent:', requestData);
 
 
         try {
@@ -277,7 +274,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (responseData.success) {
                 const data = responseData.data;
-                console.log("Data received for update:", data);
+                console.log("=== CPD AJAX Debug ===");
+                console.log("Full response data:", data);
+                if (data.visitor_data && data.visitor_data.length > 0) {
+                    console.log("First visitor data:", data.visitor_data[0]);
+                    console.log("Visitor keys:", Object.keys(data.visitor_data[0]));
+                    data.visitor_data.forEach((visitor, index) => {
+                        console.log(`Visitor ${index}:`, {
+                            id: visitor.id,
+                            name: visitor.first_name + ' ' + visitor.last_name,
+                            most_recent_referrer: visitor.most_recent_referrer,
+                            logo_url: visitor.referrer_logo_url || 'NOT SET'
+                        });
+                    });
+                }
+                console.log("=== End Debug ===");
+
 
                 // Update Client Logo in Header (Only applicable if a specific client is selected)
                 if (actualClientIdForAjax  !== 'all' && data.client_logo_url) {
@@ -338,7 +350,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     visitorListContainer.innerHTML = '';
                     if (data.visitor_data && data.visitor_data.length > 0) {
                         data.visitor_data.forEach(visitor => {
-                            const memoSealUrl = localizedData.memo_seal_url;
+                            console.log("Processing visitor referrer logo:", visitor.referrer_logo_url);
+                            const visitorLogoUrl = visitor.referrer_logo_url || localizedData.memo_seal_url;
                             const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
                             const companyName = visitor.company_name || 'Unknown Company';
                             const jobTitle = visitor.job_title || 'Unknown Title';
@@ -360,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     data-recent-page-urls='${safeRecentPageUrlsForAttr}' >
                                     <div class="visitor-top-row">
                                         <div class="visitor-logo">
-                                            <img src="${memoSealUrl}" alt="Referrer Logo">
+                                            <img src="${visitorLogoUrl}" alt="Referrer Logo">
                                         </div>
                                         <div class="visitor-actions">
                                             <span class="icon add-crm-icon" title="Add to CRM">
@@ -393,7 +406,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                console.log('loadClientDashboardData: Dashboard updated successfully.');
+                // console.log('loadClientDashboardData: Dashboard updated successfully.');
             } else {
                 console.error('loadClientDashboardData: AJAX response success is false:', data.data);
             }

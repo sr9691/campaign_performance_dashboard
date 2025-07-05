@@ -58,6 +58,9 @@ class CPD_Dashboard {
         require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-email-handler.php';
         // The data provider class
         require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-data-provider.php';
+        // The referrer logo mapping class
+        require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-referrer-logo.php';
+
     }
 
     /**

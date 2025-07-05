@@ -362,6 +362,11 @@ class CPD_Admin {
      * Handles the form submission for general settings.
      * This replaces the WordPress Settings API for these options.
      */
+/**
+     * Handles the form submission for general settings.
+     * This replaces the WordPress Settings API for these options.
+     * UPDATED: Now includes referrer logo mappings handling
+     */
     public function handle_save_general_settings() {
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_die( 'You do not have sufficient permissions to access this page.' );
@@ -380,17 +385,40 @@ class CPD_Admin {
         $enable_notifications = isset( $_POST['enable_notifications'] ) ? sanitize_text_field( $_POST['enable_notifications'] ) : 'yes';
         $crm_email_schedule_hour = isset( $_POST['cpd_crm_email_schedule_hour'] ) ? sanitize_text_field( $_POST['cpd_crm_email_schedule_hour'] ) : '09';
 
+        // Handle referrer logo mappings
+        $referrer_domains = isset( $_POST['referrer_domains'] ) && is_array( $_POST['referrer_domains'] ) ? array_map( 'sanitize_text_field', $_POST['referrer_domains'] ) : array();
+        $referrer_logos = isset( $_POST['referrer_logos'] ) && is_array( $_POST['referrer_logos'] ) ? array_map( 'esc_url_raw', $_POST['referrer_logos'] ) : array();
+        $show_direct_logo = isset( $_POST['cpd_show_direct_logo'] ) ? 1 : 0;
+        
+        // Combine domains and logos into associative array
+        $referrer_logo_mappings = array();
+        for ( $i = 0; $i < count( $referrer_domains ); $i++ ) {
+            if ( !empty( $referrer_domains[$i] ) && !empty( $referrer_logos[$i] ) ) {
+                // Clean domain (remove www. and protocols)
+                $clean_domain = strtolower( trim( $referrer_domains[$i] ) );
+                $clean_domain = preg_replace( '/^https?:\/\//', '', $clean_domain );
+                $clean_domain = preg_replace( '/^www\./', '', $clean_domain );
+                $clean_domain = rtrim( $clean_domain, '/' );
+                
+                $referrer_logo_mappings[$clean_domain] = $referrer_logos[$i];
+            }
+        }
+
         // Update options using WordPress's Options API
         update_option( 'cpd_client_dashboard_url', $client_dashboard_url );
         update_option( 'cpd_report_problem_email', $report_problem_email );
+        
         // Do NOT update cpd_api_key here, as it's generated via AJAX, not direct form submission
         update_option( 'default_campaign_duration', $default_campaign_duration );
         update_option( 'enable_notifications', $enable_notifications );
         update_option( 'cpd_crm_email_schedule_hour', $crm_email_schedule_hour );
-
+        
+        // Update referrer logo options
+        update_option( 'cpd_referrer_logo_mappings', $referrer_logo_mappings );
+        update_option( 'cpd_show_direct_logo', $show_direct_logo );
 
         // Log the action
-        $this->log_action( get_current_user_id(), 'SETTINGS_UPDATED', 'General dashboard settings were updated.' );
+        $this->log_action( get_current_user_id(), 'SETTINGS_UPDATED', 'General dashboard settings were updated including referrer logo mappings.' );
 
         // Redirect back to the settings page with a success message
         wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management#settings&message=settings_saved' ) );
@@ -665,8 +693,13 @@ class CPD_Admin {
 
         error_log('ADMIN AJAX: Final dates - Start: ' . $start_date . ', End: ' . $end_date);
 
-        // No more error if $client_id is null; we now handle 'all clients' case.
-        
+        if (!empty($visitor_data)) {
+            foreach ($visitor_data as $visitor) {
+                // Add the logo URL for each visitor using the existing class
+                $visitor->logo_url = CPD_Referrer_Logo::get_logo_for_visitor($visitor);
+            }
+        }
+                
         $summary_metrics = $this->data_provider->get_summary_metrics( $client_id, $start_date, $end_date );
         $campaign_data_by_ad_group = $this->data_provider->get_campaign_data_by_ad_group( $client_id, $start_date, $end_date );
         $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $client_id, $start_date, $end_date );
@@ -689,7 +722,7 @@ class CPD_Admin {
             'client_logo_url' => $client_logo_url,
         ) );
     }
-    
+
     /**
      * AJAX handler to get the updated client list.
      */

@@ -1059,4 +1059,96 @@ jQuery(document).ready(function($) {
     } else {
         console.log('cpd-dashboard.js: Not on admin management page. Admin UI not initialized, but shared functions are available.');
     }
+
+    // Referrer Logo Mapping Management
+    $('#add-referrer-mapping').on('click', function() {
+        console.log('cpd-dashboard.js: Add referrer mapping clicked');
+        const newRow = `
+            <div class="referrer-mapping-row">
+                <div class="form-group">
+                    <label>Domain</label>
+                    <input type="text" name="referrer_domains[]" placeholder="e.g., facebook.com">
+                </div>
+                <div class="form-group">
+                    <label>Logo URL</label>
+                    <input type="url" name="referrer_logos[]" placeholder="https://example.com/logo.png">
+                </div>
+                <div class="form-group">
+                    <button type="button" class="button button-secondary remove-mapping">Remove</button>
+                </div>
+            </div>
+        `;
+        $('#referrer-logo-mappings').append(newRow);
+        
+        // Add a subtle animation to the new row
+        const $newRow = $('#referrer-logo-mappings .referrer-mapping-row:last-child');
+        $newRow.hide().fadeIn(300);
+    });
+    
+    // Remove referrer mapping row
+    $(document).on('click', '.remove-mapping', function() {
+        console.log('cpd-dashboard.js: Remove referrer mapping clicked');
+        const $row = $(this).closest('.referrer-mapping-row');
+        
+        // Add confirmation for removing mapping
+        if (confirm('Are you sure you want to remove this referrer logo mapping?')) {
+            $row.fadeOut(300, function() {
+                $(this).remove();
+            });
+        }
+    });
+    
+    // Domain input formatting helper
+    $(document).on('input', 'input[name="referrer_domains[]"]', function() {
+        const $input = $(this);
+        let domain = $input.val().toLowerCase().trim();
+        
+        // Remove protocol if user typed it
+        domain = domain.replace(/^https?:\/\//, '');
+        // Remove www. if user typed it
+        domain = domain.replace(/^www\./, '');
+        // Remove trailing slash
+        domain = domain.replace(/\/$/, '');
+        
+        if (domain !== $input.val()) {
+            $input.val(domain);
+        }
+    });
+    
+    // Form validation for referrer mappings
+    $('#settings-form').on('submit', function(e) {
+        const domains = $('input[name="referrer_domains[]"]');
+        const logos = $('input[name="referrer_logos[]"]');
+        let hasError = false;
+        
+        // Remove previous error styling
+        domains.removeClass('error');
+        logos.removeClass('error');
+        $('.referrer-error-message').remove();
+        
+        domains.each(function(index) {
+            const domain = $(this).val().trim();
+            const logo = logos.eq(index).val().trim();
+            
+            if (domain && !logo) {
+                $(this).addClass('error');
+                logos.eq(index).addClass('error');
+                logos.eq(index).after('<span class="referrer-error-message" style="color: #dc3545; font-size: 0.8rem;">Logo URL is required when domain is specified</span>');
+                hasError = true;
+            } else if (!domain && logo) {
+                $(this).addClass('error');
+                $(this).after('<span class="referrer-error-message" style="color: #dc3545; font-size: 0.8rem;">Domain is required when logo URL is specified</span>');
+                hasError = true;
+            }
+        });
+        
+        if (hasError) {
+            e.preventDefault();
+            $('html, body').animate({
+                scrollTop: $('.error').first().offset().top - 100
+            }, 300);
+            return false;
+        }
+    });
+
 });
