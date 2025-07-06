@@ -94,183 +94,17 @@ class CPD_Email_Handler {
 
     /**
      * Sends CRM feed emails for visitors marked for CRM addition.
+     * Now uses webhook instead of email.
      * Can be triggered by cron or on-demand.
      *
      * @param string|null $account_id_filter Optional. Specific account_id to send for. Null to send for all eligible.
      * @param int $user_id The ID of the user triggering the send (0 for cron).
      */
     public static function send_crm_feed_emails( $account_id_filter = null, $user_id = 0 ) {
-        self::initialize();
-
-        $account_ids_to_email = [];
-        if ( $account_id_filter ) {
-            // Validate account_id_filter against existing clients
-            $client_exists = self::$wpdb->get_var( self::$wpdb->prepare( "SELECT account_id FROM %i WHERE account_id = %s", self::$client_table, $account_id_filter ) );
-            if ( $client_exists ) {
-                $account_ids_to_email[] = $client_exists;
-            } else {
-                self::log_action( $user_id, 'EMAIL_SEND_FAILED', 'On-demand CRM email send failed: Invalid Account ID provided: ' . esc_html($account_id_filter) );
-                return false; // Invalid account ID
-            }
-        } else {
-            // Get all unique account IDs that have visitors flagged for CRM addition but not yet sent.
-            $account_ids_to_email = self::$wpdb->get_col(
-                self::$wpdb->prepare(
-                    "SELECT DISTINCT account_id FROM %i WHERE is_crm_added = %d AND crm_sent IS NULL",
-                    self::$visitor_table,
-                    1
-                )
-            );
-        }
-
-        if ( empty( $account_ids_to_email ) ) {
-            self::log_action( $user_id, 'EMAIL_NO_DATA', 'CRM email feed: No eligible visitors found for any account.' . ( $account_id_filter ? ' (Filtered by Account ID: ' . $account_id_filter . ')' : '' ) );
-            return true; // No emails to send, but not a failure.
-        }
-
-        $email_sent_count = 0;
-        $failed_email_count = 0;
-
-        foreach ( $account_ids_to_email as $account_id ) {
-            // Get the client's CRM email address.
-            $client_info = self::$wpdb->get_row(
-                self::$wpdb->prepare( "SELECT client_name, crm_feed_email FROM %i WHERE account_id = %s", self::$client_table, $account_id )
-            );
-
-            if ( ! $client_info || empty( $client_info->crm_feed_email ) ) {
-                self::log_action( $user_id, 'EMAIL_FAILED', 'CRM email feed failed: No email configured for Account ID: ' . $account_id . ' (Client: ' . ($client_info->client_name ?? 'N/A') . ')' );
-                $failed_email_count++;
-                continue;
-            }
-
-            // Get eligible visitor data for this client.
-            $visitors_data = self::$wpdb->get_results(
-                self::$wpdb->prepare(
-                    "SELECT * FROM %i WHERE account_id = %s AND is_crm_added = %d AND crm_sent IS NULL",
-                    self::$visitor_table,
-                    $account_id,
-                    1
-                ),
-                ARRAY_A
-            );
-
-            if ( empty( $visitors_data ) ) {
-                self::log_action( $user_id, 'EMAIL_NO_DATA_CLIENT', 'CRM email feed: No eligible visitors found for Account ID: ' . $account_id );
-                continue;
-            }
-
-            // Define columns for Company and Individual CSVs
-            $company_columns = [
-                'company_name',
-                'estimated_employee_count',
-                'estimated_revenue',
-                'industry',
-                'website',
-                'city',
-                'state',
-                'zipcode',
-            ];
-
-            $individual_columns = [
-                'first_name',
-                'last_name',
-                'email',
-                'job_title',
-                'linkedin_url',
-                'city',
-                'state',
-                'zipcode',
-                'most_recent_referrer',
-                'recent_page_count',
-                'recent_page_urls',
-                'all_time_page_views',
-                'first_seen_at',
-                'last_seen_at',
-                'tags',
-                'filter_matches',
-            ];
-
-            $attachments = [];
-            $total_records_in_email = 0;
-
-            // Generate Company CSV
-            $company_csv_content = self::generate_csv( $visitors_data, $company_columns );
-            if ( $company_csv_content ) {
-                $attachments[] = array(
-                    'name'    => 'crm_feed_company_' . $account_id . '_' . date( 'Y-m-d' ) . '.csv',
-                    'content' => $company_csv_content,
-                    'type'    => 'text/csv',
-                );
-                $total_records_in_email += count($visitors_data); // All visitors contribute to both, if applicable
-            } else {
-                 self::log_action( $user_id, 'CSV_GEN_FAILED', 'Failed to generate Company CSV for Account ID: ' . $account_id );
-            }
-
-            // Generate Individual CSV
-            $individual_csv_content = self::generate_csv( $visitors_data, $individual_columns );
-            if ( $individual_csv_content ) {
-                $attachments[] = array(
-                    'name'    => 'crm_feed_individual_' . $account_id . '_' . date( 'Y-m-d' ) . '.csv',
-                    'content' => $individual_csv_content,
-                    'type'    => 'text/csv',
-                );
-            } else {
-                 self::log_action( $user_id, 'CSV_GEN_FAILED', 'Failed to generate Individual CSV for Account ID: ' . $account_id );
-            }
-
-            if ( empty( $attachments ) ) {
-                self::log_action( $user_id, 'EMAIL_FAILED', 'CRM email feed failed: No CSV attachments generated for Account ID: ' . $account_id );
-                $failed_email_count++;
-                continue;
-            }
-
-            // Prepare and send the email
-            $to = array_map( 'sanitize_email', explode( ',', $client_info->crm_feed_email ) ); // Supports comma-separated emails.
-            $subject = 'Daily CRM Feed for ' . $client_info->client_name . ' - ' . date( 'Y-m-d' );
-            $message = 'Attached are the daily visitor data files you marked for CRM integration (Company and Individual leads).';
-
-            // Temporarily add filter for attachments
-            $filter_id = 'cpd_mail_attachments_' . uniqid();
-            add_filter( 'wp_mail_attachments', function( $attachments_list ) use ( $attachments ) {
-                return array_merge( $attachments_list, $attachments );
-            }, 10, 1, $filter_id ); // Add priority and acceptance to remove specific instance
-
-            $email_sent = wp_mail( $to, $subject, $message );
-
-            // Remove the attachment filter to prevent side effects
-            remove_filter( 'wp_mail_attachments', function( $attachments_list ) use ( $attachments ) {
-                return array_merge( $attachments_list, $attachments );
-            }, 10, 1, $filter_id );
-
-
-            // Log the outcome and update records
-            if ( $email_sent ) {
-                // Update crm_sent for sent visitors
-                $visitors_to_update_ids = wp_list_pluck( $visitors_data, 'id' );
-                if ( ! empty( $visitors_to_update_ids ) ) {
-                    $ids_string = implode( ',', array_map( 'intval', $visitors_to_update_ids ) );
-                    $current_timestamp = current_time( 'mysql' );
-                    
-                    self::$wpdb->query(
-                        self::$wpdb->prepare(
-                            "UPDATE %i SET crm_sent = %s WHERE id IN ($ids_string)",
-                            self::$visitor_table,
-                            $current_timestamp
-                        )
-                    );
-                }
-
-                self::log_action( $user_id, 'EMAIL_SENT_SUCCESS', 'CRM feed sent to ' . $client_info->client_name . ' (' . implode(', ', $to) . '). ' . count($visitors_data) . ' records processed (ID: ' . $account_id . ').' );
-                $email_sent_count++;
-
-            } else {
-                self::log_action( $user_id, 'EMAIL_SENT_FAILED', 'Failed to send CRM feed to ' . $client_info->client_name . ' (' . implode(', ', $to) . ') for Account ID: ' . $account_id . '. WordPress mail error: ' . ( print_r(error_get_last(), true) ) );
-                $failed_email_count++;
-            }
-        }
-        
-        return $email_sent_count > 0; // Return true if at least one email was sent
+        // Replace email functionality with webhook calls
+        return self::send_crm_webhook_data( $account_id_filter, $user_id );
     }
+
 
     /**
      * Schedules the daily CRM email event.
@@ -292,7 +126,7 @@ class CPD_Email_Handler {
 
     /**
      * Callback for the daily cron event.
-     * Triggers the send_crm_feed_emails function for all eligible clients.
+     * Now triggers webhook calls instead of emails.
      */
     public static function daily_crm_email_cron_callback() {
         self::initialize();
@@ -301,13 +135,12 @@ class CPD_Email_Handler {
 
         // Only send if the current hour matches the scheduled hour
         if ( $current_hour === (int) $scheduled_time ) {
-            self::log_action( 0, 'CRON_TRIGGERED', 'Attempting daily CRM email send via cron.' );
-            self::send_crm_feed_emails( null, 0 ); // Null account_id_filter for all clients, user_id 0 for cron
+            self::log_action( 0, 'CRON_TRIGGERED', 'Attempting daily CRM webhook send via cron.' );
+            self::send_crm_webhook_data( null, 0 ); // Null account_id_filter for all clients, user_id 0 for cron
         } else {
-            self::log_action( 0, 'CRON_SKIPPED', 'Daily CRM email cron triggered, but current hour (' . $current_hour . ') does not match scheduled hour (' . $scheduled_time . ').' );
+            self::log_action( 0, 'CRON_SKIPPED', 'Daily CRM webhook cron triggered, but current hour (' . $current_hour . ') does not match scheduled hour (' . $scheduled_time . ').' );
         }
     }
-
     /**
      * AJAX callback to undo the is_crm_added flag for a visitor.
      */
@@ -401,4 +234,206 @@ class CPD_Email_Handler {
             wp_send_json_error( array( 'message' => 'Failed to send on-demand CRM email for client: ' . $account_id . '. Check logs for details.' ) );
         }
     }
+
+
+    /**
+     * AJAX callback to trigger on-demand CRM webhook send (replaces email version).
+     */
+    public static function ajax_trigger_on_demand_send_webhook() {
+        self::initialize();
+        if ( ! current_user_can( 'manage_options' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => 'Security check failed.' ) );
+        }
+
+        $account_id = isset( $_POST['account_id'] ) && $_POST['account_id'] !== 'all' ? sanitize_text_field( $_POST['account_id'] ) : null;
+
+        if ( empty( $account_id ) ) {
+            wp_send_json_error( array( 'message' => 'Please select a specific client to send on-demand emails for.' ) );
+        }
+
+        $user_id = get_current_user_id();
+        $success = self::send_crm_webhook_data( $account_id, $user_id );
+
+        if ( $success ) {
+            wp_send_json_success( array( 'message' => 'On-demand CRM webhook sent successfully to client: ' . $account_id . ' (if eligible data existed).' ) );
+        } else {
+            wp_send_json_error( array( 'message' => 'Failed to send on-demand CRM webhook for client: ' . $account_id . '. Check logs for details.' ) );
+        }
+    }
+
+
+
+    /**
+     * Sends CRM data to Make.com webhook instead of email.
+     * This is the new webhook-based approach.
+     *
+     * @param string|null $account_id_filter Optional. Specific account_id to send for. Null to send for all eligible.
+     * @param int $user_id The ID of the user triggering the send (0 for cron).
+     * @return bool True if at least one webhook was sent successfully, false otherwise.
+     */
+    public static function send_crm_webhook_data( $account_id_filter = null, $user_id = 0 ) {
+        self::initialize();
+
+        $webhook_url = get_option( 'cpd_webhook_url', '' );
+        $api_key = get_option( 'cpd_makecom_api_key', '' );
+
+        if ( empty( $webhook_url ) ) {
+            self::log_action( $user_id, 'WEBHOOK_FAILED', 'CRM webhook send failed: Webhook URL not configured.' );
+            return false;
+        }
+
+        if ( empty( $api_key ) ) {
+            self::log_action( $user_id, 'WEBHOOK_FAILED', 'CRM webhook send failed: API key not configured.' );
+            return false;
+        }
+
+        $account_ids_to_process = [];
+        if ( $account_id_filter ) {
+            // Validate account_id_filter against existing clients
+            $client_exists = self::$wpdb->get_var( self::$wpdb->prepare( "SELECT account_id FROM %i WHERE account_id = %s", self::$client_table, $account_id_filter ) );
+            if ( $client_exists ) {
+                $account_ids_to_process[] = $client_exists;
+            } else {
+                self::log_action( $user_id, 'WEBHOOK_FAILED', 'Webhook send failed: Invalid Account ID provided: ' . esc_html($account_id_filter) );
+                return false;
+            }
+        } else {
+            // Get all unique account IDs that have visitors flagged for CRM addition but not yet sent.
+            $account_ids_to_process = self::$wpdb->get_col(
+                self::$wpdb->prepare(
+                    "SELECT DISTINCT account_id FROM %i WHERE is_crm_added = %d AND crm_sent IS NULL",
+                    self::$visitor_table,
+                    1
+                )
+            );
+        }
+
+        if ( empty( $account_ids_to_process ) ) {
+            self::log_action( $user_id, 'WEBHOOK_NO_DATA', 'CRM webhook: No eligible visitors found for any account.' . ( $account_id_filter ? ' (Filtered by Account ID: ' . $account_id_filter . ')' : '' ) );
+            return true; // No data to send, but not a failure.
+        }
+
+        $webhook_sent_count = 0;
+        $failed_webhook_count = 0;
+
+        foreach ( $account_ids_to_process as $account_id ) {
+            // Get the client's CRM email address and info
+            $client_info = self::$wpdb->get_row(
+                self::$wpdb->prepare( "SELECT client_name, crm_feed_email FROM %i WHERE account_id = %s", self::$client_table, $account_id )
+            );
+
+            if ( ! $client_info || empty( $client_info->crm_feed_email ) ) {
+                self::log_action( $user_id, 'WEBHOOK_FAILED', 'CRM webhook failed: No email configured for Account ID: ' . $account_id . ' (Client: ' . ($client_info->client_name ?? 'N/A') . ')' );
+                $failed_webhook_count++;
+                continue;
+            }
+
+            // Get eligible visitor data for this client
+            $visitors_data = self::$wpdb->get_results(
+                self::$wpdb->prepare(
+                    "SELECT * FROM %i WHERE account_id = %s AND is_crm_added = %d AND crm_sent IS NULL",
+                    self::$visitor_table,
+                    $account_id,
+                    1
+                ),
+                ARRAY_A
+            );
+
+            if ( empty( $visitors_data ) ) {
+                self::log_action( $user_id, 'WEBHOOK_NO_DATA_CLIENT', 'CRM webhook: No eligible visitors found for Account ID: ' . $account_id );
+                continue;
+            }
+
+            // Transform data into the required JSON structure
+            $webhook_payload = array(
+                'client_email' => $client_info->crm_feed_email,
+                'visitors' => array()
+            );
+
+            foreach ( $visitors_data as $visitor ) {
+                $visitor_payload = array(
+                    'company_data' => array(
+                        'company_name' => $visitor['company_name'] ?? '',
+                        'estimated_employee_count' => $visitor['estimated_employee_count'] ?? '',
+                        'estimated_revenue' => $visitor['estimated_revenue'] ?? '',
+                        'industry' => $visitor['industry'] ?? '',
+                        'website' => $visitor['website'] ?? '',
+                        'city' => $visitor['city'] ?? '',
+                        'state' => $visitor['state'] ?? '',
+                        'zipcode' => $visitor['zipcode'] ?? ''
+                    ),
+                    'individual_data' => array(
+                        'first_name' => $visitor['first_name'] ?? '',
+                        'last_name' => $visitor['last_name'] ?? '',
+                        'email' => $visitor['email'] ?? '',
+                        'job_title' => $visitor['job_title'] ?? '',
+                        'linkedin_url' => $visitor['linkedin_url'] ?? '',
+                        'city' => $visitor['city'] ?? '',
+                        'state' => $visitor['state'] ?? '',
+                        'zipcode' => $visitor['zipcode'] ?? '',
+                        'most_recent_referrer' => $visitor['most_recent_referrer'] ?? '',
+                        'recent_page_count' => $visitor['recent_page_count'] ?? 0,
+                        'recent_page_urls' => $visitor['recent_page_urls'] ?? '',
+                        'all_time_page_views' => $visitor['all_time_page_views'] ?? 0,
+                        'first_seen_at' => $visitor['first_seen_at'] ?? '',
+                        'last_seen_at' => $visitor['last_seen_at'] ?? '',
+                        'tags' => $visitor['tags'] ?? '',
+                        'filter_matches' => $visitor['filter_matches'] ?? ''
+                    )
+                );
+                
+                $webhook_payload['visitors'][] = $visitor_payload;
+            }
+
+            // Send webhook request
+            $headers = array(
+                'Content-Type' => 'application/json',
+                'x-make-apikey' => $api_key,
+                'Client-Email' => $client_info->crm_feed_email
+            );
+
+            $response = wp_remote_post( $webhook_url, array(
+                'method' => 'POST',
+                'timeout' => 30,
+                'headers' => $headers,
+                'body' => wp_json_encode( $webhook_payload )
+            ) );
+
+            // Handle webhook response
+            if ( is_wp_error( $response ) ) {
+                self::log_action( $user_id, 'WEBHOOK_FAILED', 'CRM webhook failed for ' . $client_info->client_name . ' (Account ID: ' . $account_id . '). Error: ' . $response->get_error_message() );
+                $failed_webhook_count++;
+                continue;
+            }
+
+            $response_code = wp_remote_retrieve_response_code( $response );
+            
+            if ( $response_code >= 200 && $response_code < 300 ) {
+                // Success - Update crm_sent for sent visitors
+                $visitors_to_update_ids = wp_list_pluck( $visitors_data, 'id' );
+                if ( ! empty( $visitors_to_update_ids ) ) {
+                    $ids_string = implode( ',', array_map( 'intval', $visitors_to_update_ids ) );
+                    $current_timestamp = current_time( 'mysql' );
+                    
+                    self::$wpdb->query(
+                        self::$wpdb->prepare(
+                            "UPDATE %i SET crm_sent = %s WHERE id IN ($ids_string)",
+                            self::$visitor_table,
+                            $current_timestamp
+                        )
+                    );
+                }
+
+                self::log_action( $user_id, 'WEBHOOK_SENT_SUCCESS', 'CRM webhook sent successfully to ' . $client_info->client_name . ' (' . $client_info->crm_feed_email . '). ' . count($visitors_data) . ' records processed (Account ID: ' . $account_id . ').' );
+                $webhook_sent_count++;
+            } else {
+                $response_body = wp_remote_retrieve_body( $response );
+                self::log_action( $user_id, 'WEBHOOK_FAILED', 'CRM webhook failed for ' . $client_info->client_name . ' (Account ID: ' . $account_id . '). HTTP Code: ' . $response_code . '. Response: ' . $response_body );
+                $failed_webhook_count++;
+            }
+        }
+
+        return $webhook_sent_count > 0; // Return true if at least one webhook was sent
+    }
+
 }

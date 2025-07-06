@@ -378,13 +378,6 @@ jQuery(document).ready(function($) {
         });
     }
 
-    /*  --- ADMIN-SPECIFIC UI & INTERACTION (Wrapped in isAdminPage check) ---
-    const isAdminPage = document.body.classList.contains('toplevel_page_cpd-dashboard-management') ||
-                        document.body.classList.contains('toplevel_page_cpd-dashboard-settings') ||
-                        document.body.classList.contains('toplevel_page_cpd-dashboard') ||
-                        document.body.classList.contains('toplevel_page_cpd-dashboard-crm-emails'); // Or whatever the exact slug is for the CRM Emails page
-    */ 
-
     const isAdminPage = document.body.classList.contains('campaign-dashboard_page_cpd-dashboard-management'); 
     
     if (isAdminPage) {
@@ -902,15 +895,13 @@ jQuery(document).ready(function($) {
         });
 
         // NEW: CRM Email Management Logic
-        const eligibleVisitorsTableBody = $('#eligible-visitors-table tbody');
-        const eligibleVisitorsClientFilter = $('#eligible_visitors_client_filter');
+        const crmClientFilter = $('#crm_client_filter');
         const triggerOnDemandSendButton = $('#trigger_on_demand_send');
-        const onDemandClientSelect = $('#on_demand_client_select');
+        const eligibleVisitorsTableBody = $('#eligible-visitors-table tbody');
 
-
-        function loadEligibleVisitors() {
+function loadEligibleVisitors() {
             eligibleVisitorsTableBody.html('<tr><td colspan="10" class="no-data">Loading eligible visitors...</td></tr>');
-            const clientId = eligibleVisitorsClientFilter.val();
+            const clientId = crmClientFilter.val();
             
             $.ajax({
                 url: cpd_admin_ajax.ajax_url,
@@ -956,7 +947,67 @@ jQuery(document).ready(function($) {
             });
         }
 
-        eligibleVisitorsClientFilter.on('change', loadEligibleVisitors);
+        // Update button state and tooltip based on selection
+        function updateButtonState() {
+            const selectedValue = crmClientFilter.val();
+            if (selectedValue === 'all') {
+                triggerOnDemandSendButton.prop('disabled', true);
+                triggerOnDemandSendButton.attr('title', 'Please select a specific client to send on-demand emails');
+            } else {
+                triggerOnDemandSendButton.prop('disabled', false);
+                triggerOnDemandSendButton.attr('title', '');
+            }
+        }
+        
+        
+                // Event handlers
+        crmClientFilter.on('change', function() {
+            loadEligibleVisitors();
+            updateButtonState();
+        });
+
+
+                // Initialize button state
+        updateButtonState();
+
+        triggerOnDemandSendButton.on('click', function() {
+            const button = $(this);
+            const selectedAccountId = crmClientFilter.val();
+
+            if (selectedAccountId === 'all') {
+                alert('Please select a specific client to send on-demand emails.');
+                return;
+            }
+
+            if (confirm(`Are you sure you want to send on-demand CRM emails for client: ${selectedAccountId}?`)) {
+                button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Sending...');
+
+                $.ajax({
+                    url: cpd_admin_ajax.ajax_url,
+                    type: 'POST',
+                    data: {
+                        action: 'cpd_trigger_on_demand_send',
+                        nonce: cpd_admin_ajax.nonce,
+                        account_id: selectedAccountId
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            alert(response.data.message);
+                            loadEligibleVisitors(); // Reload the eligible visitors list after send
+                        } else {
+                            alert('Error: ' + response.data.message);
+                        }
+                    },
+                    error: function() {
+                        alert('An error occurred during the on-demand send request.');
+                    },
+                    complete: function() {
+                        button.prop('disabled', false).html('<i class="fas fa-paper-plane"></i> Send On-Demand CRM Email');
+                        updateButtonState(); // Recheck button state
+                    }
+                });
+            }
+        });
 
         eligibleVisitorsTableBody.on('click', '.undo-crm-button', function() {
             const button = $(this);
@@ -990,45 +1041,6 @@ jQuery(document).ready(function($) {
                 });
             }
         });
-
-        triggerOnDemandSendButton.on('click', function() {
-            const button = $(this);
-            const selectedAccountId = onDemandClientSelect.val();
-
-            if (selectedAccountId === 'all') {
-                alert('Please select a specific client to send on-demand emails.');
-                return;
-            }
-
-            if (confirm(`Are you sure you want to send on-demand CRM emails for client: ${selectedAccountId}?`)) {
-                button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Sending...');
-
-                $.ajax({
-                    url: cpd_admin_ajax.ajax_url,
-                    type: 'POST',
-                    data: {
-                        action: 'cpd_trigger_on_demand_send',
-                        nonce: cpd_admin_ajax.nonce,
-                        account_id: selectedAccountId
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            alert(response.data.message);
-                            loadEligibleVisitors(); // Reload the eligible visitors list after send
-                        } else {
-                            alert('Error: ' + response.data.message);
-                        }
-                    },
-                    error: function() {
-                        alert('An error occurred during the on-demand send request.');
-                    },
-                    complete: function() {
-                        button.prop('disabled', false).html('<i class="fas fa-paper-plane"></i> Send On-Demand CRM Email');
-                    }
-                });
-            }
-        });
-
 
         // --- Final Step: Initialize dashboard data on page load for #clients-section only ---
         // This is for the admin's main dashboard view (if they navigate to it).

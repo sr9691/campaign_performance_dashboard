@@ -355,9 +355,22 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                             </select>
                             <small class="form-help">Select the hour of the day for automatic CRM email feeds.</small>
                         </div>
-
+                            <div class="form-group">
+                                <label for="cpd_webhook_url">Make.com Webhook URL</label>
+                                <input type="url" id="cpd_webhook_url" name="cpd_webhook_url"
+                                        value="<?php echo esc_url( get_option( 'cpd_webhook_url', '' ) ); ?>"
+                                        placeholder="https://hook.us1.make.com/...">
+                                <small class="form-help">Enter the Make.com webhook URL for CRM email processing.</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="cpd_makecom_api_key">Make.com API Key</label>
+                                <input type="text" id="cpd_makecom_api_key" name="cpd_makecom_api_key"
+                                    value="<?php echo esc_attr( get_option( 'cpd_makecom_api_key', '' ) ); ?>"
+                                    placeholder="Enter your Make.com API key">
+                                <small class="form-help">API key for authenticating webhook requests to Make.com.</small>
+                            </div>
                     </div>
-
+                    <hr>
                     <div class="settings-section">
                         <h3>Referrer Logo Mapping</h3>
                         <p>Configure custom logos for different referrer domains. These logos will appear in the visitor panel.</p>
@@ -420,26 +433,27 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
             </div>
 
 
-        <div id="crm-email-management-section" class="card section-content">
+<div id="crm-email-management-section" class="card section-content">
             <h2>CRM Email Management</h2>
 
-            <div class="add-form-section">
-                <h3>On-Demand CRM Email Send</h3>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label for="on_demand_client_select">Select Client Account</label>
-                        <select id="on_demand_client_select" class="searchable-select">
-                            <option value="all">-- All Clients -- (Note: Only sends to clients with eligible data)</option>
-                            <?php foreach ( $all_clients as $client_option ) : ?>
-                                <option value="<?php echo esc_attr( $client_option->account_id ); ?>">
-                                    <?php echo esc_html( $client_option->client_name ); ?> (<?php echo esc_html( $client_option->account_id ); ?>)
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
+            <!-- Consolidated Client Filter at Top -->
+            <div class="form-grid" style="grid-template-columns: 1fr; margin-bottom: 30px;">
+                <div class="form-group">
+                    <label for="crm_client_filter">Select Client Account</label>
+                    <select id="crm_client_filter" class="searchable-select">
+                        <option value="all">-- All Clients --</option>
+                        <?php foreach ( $all_clients as $client_option ) : ?>
+                            <option value="<?php echo esc_attr( $client_option->account_id ); ?>">
+                                <?php echo esc_html( $client_option->client_name ); ?> (<?php echo esc_html( $client_option->account_id ); ?>)
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
+             </div>
+            <div class="add-form-section">
+                <label for="trigger_on_demand_send">On-Demand CRM Email Send</label>
                 <div class="form-actions">
-                    <button type="button" id="trigger_on_demand_send" class="button">
+                    <button type="button" id="trigger_on_demand_send" class="button" title="">
                         <i class="fas fa-paper-plane"></i> Send On-Demand CRM Email
                     </button>
                 </div>
@@ -447,19 +461,6 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
 
             <div class="table-section">
                 <h3>Eligible Visitors for CRM Email</h3>
-                <div class="form-grid" style="grid-template-columns: 1fr;">
-                    <div class="form-group">
-                        <label for="eligible_visitors_client_filter">Filter by Client Account</label>
-                        <select id="eligible_visitors_client_filter" class="searchable-select">
-                            <option value="all">-- All Clients --</option>
-                            <?php foreach ( $all_clients as $client_option ) : ?>
-                                <option value="<?php echo esc_attr( $client_option->account_id ); ?>">
-                                    <?php echo esc_html( $client_option->client_name ); ?> (<?php echo esc_html( $client_option->account_id ); ?>)
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </div>
                 <div class="table-container">
                     <table class="data-table" id="eligible-visitors-table">
                         <thead>
@@ -483,6 +484,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                 </div>
             </div>
         </div>
+
         <div id="logs-section" class="card section-content">
             <h2>Action Logs</h2>
             <div class="table-container">
@@ -496,6 +498,12 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         </tr>
                     </thead>
                     <tbody>
+                        <?php 
+                            error_log('CPD Debug: Logs variable contains ' . count($logs) . ' entries');
+                            if (!empty($logs)) {
+                                error_log('CPD Debug: First log entry: ' . print_r($logs[0], true));
+                            }
+                        ?>
                         <?php if ( ! empty( $logs ) ) : ?>
                             <?php foreach ( $logs as $log ) : ?>
                                 <tr>
@@ -513,7 +521,8 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                     </tbody>
                 </table>
             </div>
-        </div>
+        </div>        
+
 
         <div id="edit-client-modal" class="modal" style="display:none;">
             <div class="modal-content">

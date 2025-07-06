@@ -30,7 +30,7 @@ class CPD_Admin {
         $this->log_table = $this->wpdb->prefix . 'cpd_action_logs';
         $this->client_table = $this->wpdb->prefix . 'cpd_clients';
         $this->user_client_table = $this->wpdb->prefix . 'cpd_client_users';
-        
+
         // Initialize the data provider
         require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-data-provider.php'; // Ensure it's loaded
         $this->data_provider = new CPD_Data_Provider();
@@ -61,9 +61,7 @@ class CPD_Admin {
 
         // NEW: CRM Email AJAX actions
         add_action( 'wp_ajax_cpd_get_eligible_visitors', array( 'CPD_Email_Handler', 'ajax_get_eligible_visitors' ) );
-        add_action( 'wp_ajax_cpd_trigger_on_demand_send', array( 'CPD_Email_Handler', 'ajax_trigger_on_demand_send' ) );
-        add_action( 'wp_ajax_cpd_undo_crm_added', array( 'CPD_Email_Handler', 'ajax_undo_crm_added' ) );
-
+        add_action( 'wp_ajax_cpd_trigger_on_demand_send', array( 'CPD_Email_Handler', 'ajax_trigger_on_demand_send_webhook' ) );
 
         // Enqueue styles/scripts - FIXED: Use global hooks for all admin pages
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
@@ -390,6 +388,10 @@ class CPD_Admin {
         $referrer_logos = isset( $_POST['referrer_logos'] ) && is_array( $_POST['referrer_logos'] ) ? array_map( 'esc_url_raw', $_POST['referrer_logos'] ) : array();
         $show_direct_logo = isset( $_POST['cpd_show_direct_logo'] ) ? 1 : 0;
         
+        // Handle Make.com webhook settings
+        $webhook_url = isset( $_POST['cpd_webhook_url'] ) ? esc_url_raw( $_POST['cpd_webhook_url'] ) : '';
+        $makecom_api_key = isset( $_POST['cpd_makecom_api_key'] ) ? sanitize_text_field( $_POST['cpd_makecom_api_key'] ) : '';
+        
         // Combine domains and logos into associative array
         $referrer_logo_mappings = array();
         for ( $i = 0; $i < count( $referrer_domains ); $i++ ) {
@@ -417,8 +419,12 @@ class CPD_Admin {
         update_option( 'cpd_referrer_logo_mappings', $referrer_logo_mappings );
         update_option( 'cpd_show_direct_logo', $show_direct_logo );
 
+        // Update Make.com webhook settings
+        update_option( 'cpd_webhook_url', $webhook_url );
+        update_option( 'cpd_makecom_api_key', $makecom_api_key );
+
         // Log the action
-        $this->log_action( get_current_user_id(), 'SETTINGS_UPDATED', 'General dashboard settings were updated including referrer logo mappings.' );
+        $this->log_action( get_current_user_id(), 'SETTINGS_UPDATED', 'General dashboard settings were updated including Make.com webhook URL, API key, and referrer logo mappings.' );
 
         // Redirect back to the settings page with a success message
         wp_redirect( admin_url( 'admin.php?page=' . $this->plugin_name . '-management#settings&message=settings_saved' ) );
@@ -760,4 +766,5 @@ class CPD_Admin {
     public static function get_plugin_name() {
         return 'cpd-dashboard';
     }
+
 }
