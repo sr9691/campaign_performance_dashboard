@@ -263,7 +263,7 @@ class CPD_Email_Handler {
 
 
 
-    /**
+/**
      * Sends CRM data to Make.com webhook instead of email.
      * This is the new webhook-based approach.
      *
@@ -344,45 +344,45 @@ class CPD_Email_Handler {
                 continue;
             }
 
-            // Transform data into the required JSON structure
+            // Transform data into separate company and individual arrays
             $webhook_payload = array(
                 'client_email' => $client_info->crm_feed_email,
-                'visitors' => array()
+                'companies' => array(),
+                'individuals' => array()
             );
 
             foreach ( $visitors_data as $visitor ) {
-                $visitor_payload = array(
-                    'company_data' => array(
-                        'company_name' => $visitor['company_name'] ?? '',
-                        'estimated_employee_count' => $visitor['estimated_employee_count'] ?? '',
-                        'estimated_revenue' => $visitor['estimated_revenue'] ?? '',
-                        'industry' => $visitor['industry'] ?? '',
-                        'website' => $visitor['website'] ?? '',
-                        'city' => $visitor['city'] ?? '',
-                        'state' => $visitor['state'] ?? '',
-                        'zipcode' => $visitor['zipcode'] ?? ''
-                    ),
-                    'individual_data' => array(
-                        'first_name' => $visitor['first_name'] ?? '',
-                        'last_name' => $visitor['last_name'] ?? '',
-                        'email' => $visitor['email'] ?? '',
-                        'job_title' => $visitor['job_title'] ?? '',
-                        'linkedin_url' => $visitor['linkedin_url'] ?? '',
-                        'city' => $visitor['city'] ?? '',
-                        'state' => $visitor['state'] ?? '',
-                        'zipcode' => $visitor['zipcode'] ?? '',
-                        'most_recent_referrer' => $visitor['most_recent_referrer'] ?? '',
-                        'recent_page_count' => $visitor['recent_page_count'] ?? 0,
-                        'recent_page_urls' => $visitor['recent_page_urls'] ?? '',
-                        'all_time_page_views' => $visitor['all_time_page_views'] ?? 0,
-                        'first_seen_at' => $visitor['first_seen_at'] ?? '',
-                        'last_seen_at' => $visitor['last_seen_at'] ?? '',
-                        'tags' => $visitor['tags'] ?? '',
-                        'filter_matches' => $visitor['filter_matches'] ?? ''
-                    )
+                // Add to companies array
+                $webhook_payload['companies'][] = array(
+                    'company_name' => $visitor['company_name'] ?? '',
+                    'estimated_employee_count' => $visitor['estimated_employee_count'] ?? '',
+                    'estimated_revenue' => $visitor['estimated_revenue'] ?? '',
+                    'industry' => $visitor['industry'] ?? '',
+                    'website' => $visitor['website'] ?? '',
+                    'city' => $visitor['city'] ?? '',
+                    'state' => $visitor['state'] ?? '',
+                    'zipcode' => $visitor['zipcode'] ?? ''
                 );
                 
-                $webhook_payload['visitors'][] = $visitor_payload;
+                // Add to individuals array
+                $webhook_payload['individuals'][] = array(
+                    'first_name' => $visitor['first_name'] ?? '',
+                    'last_name' => $visitor['last_name'] ?? '',
+                    'email' => $visitor['email'] ?? '',
+                    'job_title' => $visitor['job_title'] ?? '',
+                    'linkedin_url' => $visitor['linkedin_url'] ?? '',
+                    'city' => $visitor['city'] ?? '',
+                    'state' => $visitor['state'] ?? '',
+                    'zipcode' => $visitor['zipcode'] ?? '',
+                    'most_recent_referrer' => $visitor['most_recent_referrer'] ?? '',
+                    'recent_page_count' => $visitor['recent_page_count'] ?? 0,
+                    'recent_page_urls' => $visitor['recent_page_urls'] ?? '',
+                    'all_time_page_views' => $visitor['all_time_page_views'] ?? 0,
+                    'first_seen_at' => $visitor['first_seen_at'] ?? '',
+                    'last_seen_at' => $visitor['last_seen_at'] ?? '',
+                    'tags' => $visitor['tags'] ?? '',
+                    'filter_matches' => $visitor['filter_matches'] ?? ''
+                );
             }
 
             // Send webhook request
@@ -435,5 +435,4 @@ class CPD_Email_Handler {
 
         return $webhook_sent_count > 0; // Return true if at least one webhook was sent
     }
-
 }
