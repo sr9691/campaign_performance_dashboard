@@ -1,6 +1,5 @@
 /*
- * Admin-specific CSS for Campaign Performance Dashboard Plugin
- * This file contains styles for the admin management pages.
+ * Admin CSS for Campaign Performance Dashboard Plugin
  */
 
 :root {
@@ -15,283 +14,9 @@
     --card-bg: #fff;
 }
 
-/* Add form sections within cards */
-body.wp-admin .admin-page-container .add-form-section {
-    margin-bottom: 40px !important;
-    padding-bottom: 30px !important;
-    border-bottom: 1px solid var(--line-color) !important;
-}
-
-body.wp-admin .admin-page-container .add-form-section h3 {
-    font-size: 1.3rem !important;
-    font-weight: 600 !important;
-    margin: 0 0 20px 0 !important;
-    color: var(--primary-color) !important;
-    font-family: var(--font-family) !important;
-}
-
-/* Table sections within cards */
-body.wp-admin .admin-page-container .table-section {
-    margin-top: 0 !important;
-}
-
-body.wp-admin .admin-page-container .table-section h3 {
-    font-size: 1.3rem !important;
-    font-weight: 600 !important;
-    margin: 0 0 20px 0 !important;
-    color: var(--primary-color) !important;
-    font-family: var(--font-family) !important;
-}
-
-/* Settings section styles */
-body.wp-admin .admin-page-container .settings-section {
-    margin-bottom: 40px !important;
-    padding-bottom: 30px !important;
-    border-bottom: 1px solid var(--line-color) !important;
-}
-
-body.wp-admin .admin-page-container .settings-section:last-child {
-    border-bottom: none !important;
-    margin-bottom: 0 !important;
-    padding-bottom: 0 !important;
-}
-
-body.wp-admin .admin-page-container .settings-section h3 {
-    font-size: 1.3rem !important;
-    font-weight: 600 !important;
-    margin: 0 0 20px 0 !important;
-    color: var(--primary-color) !important;
-    font-family: var(--font-family) !important;
-}
-
-body.wp-admin .admin-page-container .form-help {
-    font-size: 0.8rem !important;
-    color: var(--text-color-light) !important;
-    margin-top: 5px !important;
-    display: block !important;
-    font-family: var(--font-family) !important;
-}
-
-/* Data management actions */
-body.wp-admin .admin-page-container .data-management-actions {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 30px !important;
-    margin-top: 20px !important;
-}
-
-body.wp-admin .admin-page-container .action-group {
-    padding: 25px !important;
-    background-color: #f8f9fa !important;
-    border-radius: var(--border-radius) !important;
-    border: 1px solid var(--line-color) !important;
-    text-align: center !important;
-}
-
-body.wp-admin .admin-page-container .action-group h4 {
-    font-size: 1.1rem !important;
-    font-weight: 600 !important;
-    margin: 0 0 10px 0 !important;
-    color: var(--primary-color) !important;
-    font-family: var(--font-family) !important;
-}
-
-body.wp-admin .admin-page-container .action-group p {
-    font-size: 0.9rem !important;
-    color: var(--text-color-light) !important;
-    margin: 0 0 20px 0 !important;
-    font-family: var(--font-family) !important;
-    line-height: 1.4 !important;
-}
-
-body.wp-admin .admin-page-container .action-button-large {
-    background-color: var(--secondary-color) !important;
-    color: #fff !important;
-    border: none !important;
-    padding: 12px 20px !important;
-    border-radius: var(--border-radius) !important;
-    font-size: 0.9rem !important;
-    font-weight: 600 !important;
-    cursor: pointer !important;
-    transition: background-color 0.2s ease !important;
-    font-family: var(--font-family) !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 8px !important;
-}
-
-body.wp-admin .admin-page-container .action-button-large:hover {
-    background-color: #357abd !important;
-}
-
-body.wp-admin .admin-page-container .action-button-large.export-data:hover {
-    background-color: #28a745 !important;
-}
-
-body.wp-admin .admin-page-container .action-button-large.clear-cache:hover {
-    background-color: #dc3545 !important;
-}
-
-/* Missing table styles */
-body.wp-admin .admin-page-container .table-container {
-    overflow-x: auto !important;
-    margin-bottom: 20px !important;
-}
-
-body.wp-admin .admin-page-container .no-data {
-    text-align: center !important;
-    color: var(--text-color-light) !important;
-    font-style: italic !important;
-    padding: 20px !important;
-}
-
-body.wp-admin .admin-page-container .no-logo,
-body.wp-admin .admin-page-container .no-url {
-    color: var(--text-color-light) !important;
-    font-style: italic !important;
-    text-align: center !important;
-}
-
-/* Form validation styles */
-body.wp-admin .admin-page-container .form-group input.error,
-body.wp-admin .admin-page-container .form-group select.error {
-    border-color: #dc3545 !important;
-    background-color: #fff5f5 !important;
-}
-
-body.wp-admin .admin-page-container .form-group .error-message {
-    color: #dc3545 !important;
-    font-size: 0.8rem !important;
-    margin-top: 5px !important;
-    display: block !important;
-}
-
-/* Success/Error message styles */
-body.wp-admin .admin-page-container .success-message {
-    background-color: #d4edda !important;
-    color: #155724 !important;
-    border: 1px solid #c3e6cb !important;
-    border-radius: var(--border-radius) !important;
-    padding: 12px 16px !important;
-    margin-bottom: 20px !important;
-    font-family: var(--font-family) !important;
-}
-
-body.wp-admin .admin-page-container .error-message-box {
-    background-color: #f8d7da !important;
-    color: #721c24 !important;
-    border: 1px solid #f5c6cb !important;
-    border-radius: var(--border-radius) !important;
-    padding: 12px 16px !important;
-    margin-bottom: 20px !important;
-    font-family: var(--font-family) !important;
-}
-
-/* Loading states */
-body.wp-admin .admin-page-container .loading {
-    opacity: 0.6 !important;
-    pointer-events: none !important;
-}
-
-body.wp-admin .admin-page-container .spinner {
-    display: inline-block !important;
-    width: 16px !important;
-    height: 16px !important;
-    border: 2px solid #f3f3f3 !important;
-    border-top: 2px solid var(--primary-color) !important;
-    border-radius: 50% !important;
-    animation: spin 1s linear infinite !important;
-    margin-right: 8px !important;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* Button disabled state */
-body.wp-admin .admin-page-container button:disabled,
-body.wp-admin .admin-page-container .form-actions button:disabled {
-    background-color: #ccc !important;
-    cursor: not-allowed !important;
-    opacity: 0.6 !important;
-}
-
-/* Modal form styles */
-body.wp-admin .modal-content .form-group {
-    margin-bottom: 20px !important;
-}
-
-body.wp-admin .modal-content .form-group:last-child {
-    margin-bottom: 0 !important;
-}
-
-body.wp-admin .modal-content .form-actions {
-    margin-top: 25px !important;
-    text-align: right !important;
-}
-
-body.wp-admin .modal-content h2 {
-    margin: 0 0 25px 0 !important;
-    padding-right: 30px !important; /* Account for close button */
-    color: var(--primary-color) !important;
-    font-family: var(--font-family) !important;
-    font-size: 1.4rem !important;
-    font-weight: 600 !important;
-}
-
-/* Responsive adjustments */
-@media (max-width: 1200px) {
-    body.wp-admin .admin-page-container .form-grid {
-        grid-template-columns: 1fr !important;
-    }
-    
-    body.wp-admin .admin-page-container .data-management-actions {
-        grid-template-columns: 1fr !important;
-    }
-}
-
-@media (max-width: 768px) {
-    body.wp-admin .admin-page-container {
-        flex-direction: column !important;
-    }
-    
-    body.wp-admin .admin-page-container .admin-sidebar {
-        width: 100% !important;
-        height: auto !important;
-    }
-    
-    body.wp-admin .admin-page-container .admin-main-content {
-        width: 100% !important;
-        padding: 20px !important;
-    }
-    
-    body.wp-admin .admin-page-container .data-table {
-        font-size: 0.8rem !important;
-    }
-    
-    body.wp-admin .admin-page-container .data-table th,
-    body.wp-admin .admin-page-container .data-table td {
-        padding: 8px 10px !important;
-    }
-}/*
- * Admin-specific CSS for Campaign Performance Dashboard Plugin
- * This file contains styles for the admin management pages.
- */
-
-:root {
-    --primary-color: #2c435d;
-    --secondary-color: #4294cc;
-    --font-family: 'Montserrat', sans-serif;
-    --text-color-dark: #333;
-    --text-color-light: #555;
-    --line-color: #ddd;
-    --border-radius: 8px;
-    --bg-color: #eef2f6;
-    --card-bg: #fff;
-}
-
-/* CRITICAL: Force load our admin styles with maximum specificity */
+/* ========================================
+   WORDPRESS ADMIN OVERRIDES
+   ======================================== */
 body.wp-admin { 
     overflow: hidden !important; 
     font-family: var(--font-family) !important;
@@ -304,17 +29,12 @@ body.wp-admin #wpcontent {
     background-color: var(--bg-color) !important;
 }
 
-body.wp-admin #wpbody { 
+body.wp-admin #wpbody,
+body.wp-admin #wpbody-content { 
     background: var(--bg-color) !important; 
     padding: 0 !important; 
     margin: 0 !important; 
-}
-
-body.wp-admin #wpbody-content { 
-    padding: 0 !important; 
-    margin: 0 !important; 
     position: relative !important; 
-    background-color: var(--bg-color) !important; 
 }
 
 body.wp-admin .wrap { 
@@ -327,23 +47,22 @@ body.wp-admin .wrap {
     background-color: var(--bg-color) !important; 
 }
 
-/* Hide WordPress admin elements with maximum specificity */
+/* Hide WordPress admin elements */
 body.wp-admin #adminmenumain, 
 body.wp-admin #adminmenuwrap, 
 body.wp-admin #adminmenuback, 
 body.wp-admin #wpadminbar, 
-body.wp-admin #wpfooter { 
-    display: none !important; 
-    visibility: hidden !important; 
-}
-
+body.wp-admin #wpfooter,
 body.wp-admin .notice, 
 body.wp-admin .error, 
 body.wp-admin .updated { 
     display: none !important; 
+    visibility: hidden !important; 
 }
 
-/* Apply main container styles */
+/* ========================================
+   MAIN LAYOUT CONTAINERS
+   ======================================== */
 body.wp-admin .admin-page-container {
     display: flex !important;
     min-height: 100vh !important;
@@ -356,10 +75,9 @@ body.wp-admin .admin-page-container {
     font-family: var(--font-family) !important;
 }
 
-/* Main content area for admin pages */
 body.wp-admin .admin-page-container .admin-main-content {
     flex: 1 !important;
-    width: calc(100% - 250px) !important; /* Account for sidebar width */
+    width: calc(100% - 250px) !important;
     padding: 40px !important;
     display: block !important;
     overflow-y: auto !important;
@@ -369,7 +87,116 @@ body.wp-admin .admin-page-container .admin-main-content {
     box-sizing: border-box !important;
 }
 
-/* Section content visibility */
+/* ========================================
+   SIDEBAR LAYOUT
+   ======================================== */
+body.wp-admin .admin-page-container .admin-sidebar {
+    width: 250px !important;
+    height: 100vh !important;
+    background-color: var(--primary-color) !important;
+    color: #fff !important;
+    padding: 0 !important;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1) !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    position: relative !important;
+    z-index: 2 !important;
+    overflow: hidden !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar .logo-container {
+    padding: 20px !important;
+    text-align: center !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    flex-shrink: 0 !important;
+    background-color: var(--primary-color) !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar .logo-container img {
+    max-width: 180px !important;
+    height: auto !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar nav {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 0 20px !important;
+    overflow: hidden !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar nav ul {
+    list-style: none !important;
+    padding: 15px 0 !important;
+    margin: 0 !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar nav li {
+    margin-bottom: 8px !important;
+    flex-shrink: 0 !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar .logout-container {
+    padding: 20px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+    flex-shrink: 0 !important;
+    background-color: var(--primary-color) !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar nav a,
+body.wp-admin .admin-page-container .admin-sidebar .logout-container a {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    padding: 12px 16px !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+    text-decoration: none !important;
+    font-weight: 500 !important;
+    border-radius: var(--border-radius) !important;
+    transition: background-color 0.2s ease, color 0.2s ease !important;
+    font-size: 0.9rem !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar nav a.active {
+    background-color: var(--card-bg) !important;
+    color: var(--primary-color) !important;
+    font-weight: 700 !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar nav a:hover:not(.active) {
+    background-color: var(--secondary-color) !important;
+    color: #fff !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar .logout-container a,
+body.wp-admin .admin-page-container .admin-sidebar .admin-dashboard-link a {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-weight: 600 !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar .logout-container a:hover {
+    background-color: #dc3545 !important;
+    color: #fff !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar .admin-dashboard-link a:hover {
+    background-color: var(--secondary-color) !important;
+    color: #fff !important;
+}
+
+body.wp-admin .admin-page-container .admin-sidebar .admin-dashboard-link {
+    margin-top: 15px !important;
+}
+
+/* ========================================
+   CONTENT SECTIONS
+   ======================================== */
 body.wp-admin .admin-page-container .section-content {
     display: none !important;
 }
@@ -378,22 +205,16 @@ body.wp-admin .admin-page-container .section-content.active {
     display: block !important;
 }
 
-/* Add form sections within cards */
-body.wp-admin .admin-page-container .add-form-section {
-    margin-top: 40px !important;
-    padding-top: 30px !important;
-    border-top: 1px solid var(--line-color) !important;
-}
-
-body.wp-admin .admin-page-container .add-form-section h3 {
-    font-size: 1.3rem !important;
-    font-weight: 600 !important;
-    margin: 0 0 20px 0 !important;
-    color: var(--primary-color) !important;
+body.wp-admin .admin-page-container h1 {
+    font-size: 2.2rem !important;
+    font-weight: 700 !important;
+    margin: 0 0 30px 0 !important;
+    border-bottom: 2px solid var(--line-color) !important;
+    padding-bottom: 15px !important;
+    color: var(--text-color-dark) !important;
     font-family: var(--font-family) !important;
 }
 
-/* Card styles */
 body.wp-admin .admin-page-container .card {
     background-color: var(--card-bg) !important;
     padding: 30px !important;
@@ -414,50 +235,43 @@ body.wp-admin .admin-page-container .card h2 {
     font-family: var(--font-family) !important;
 }
 
-body.wp-admin .admin-page-container h1 {
-    font-size: 2.2rem !important;
-    font-weight: 700 !important;
-    margin: 0 0 30px 0 !important;
-    border-bottom: 2px solid var(--line-color) !important;
-    padding-bottom: 15px !important;
-    color: var(--text-color-dark) !important;
-    font-family: var(--font-family) !important;
-}
-
-/* Table styles */
-body.wp-admin .admin-page-container .data-table {
-    width: 100% !important;
-    border-collapse: collapse !important;
-    text-align: left !important;
-    font-family: var(--font-family) !important;
-    table-layout: fixed !important;
-    box-sizing: border-box !important;
-    max-width: none !important;
-}
-
-body.wp-admin .admin-page-container .data-table th,
-body.wp-admin .admin-page-container .data-table td {
-    padding: 15px 20px !important;
+/* ========================================
+   FORM SECTIONS
+   ======================================== */
+body.wp-admin .admin-page-container .add-form-section,
+body.wp-admin .admin-page-container .settings-section {
+    margin-bottom: 40px !important;
+    padding-bottom: 30px !important;
     border-bottom: 1px solid var(--line-color) !important;
-    font-weight: 500 !important;
-    font-family: var(--font-family) !important;
-    vertical-align: middle !important;
-    line-height: 1.4 !important;
 }
 
-body.wp-admin .admin-page-container .data-table th {
+body.wp-admin .admin-page-container .settings-section:last-child {
+    border-bottom: none !important;
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+body.wp-admin .admin-page-container .add-form-section h3,
+body.wp-admin .admin-page-container .settings-section h3,
+body.wp-admin .admin-page-container .table-section h3 {
+    font-size: 1.3rem !important;
     font-weight: 600 !important;
-    color: var(--text-color-light) !important;
-    text-transform: uppercase !important;
+    margin: 0 0 20px 0 !important;
+    color: var(--primary-color) !important;
+    font-family: var(--font-family) !important;
+}
+
+body.wp-admin .admin-page-container .form-help {
     font-size: 0.8rem !important;
-    background-color: #f8f9fa !important;
+    color: var(--text-color-light) !important;
+    margin-top: 5px !important;
+    display: block !important;
+    font-family: var(--font-family) !important;
 }
 
-body.wp-admin .admin-page-container .data-table tbody tr:hover {
-    background-color: #f9fbfd !important;
-}
-
-/* Form styles */
+/* ========================================
+   FORM STYLES
+   ======================================== */
 body.wp-admin .admin-page-container .form-grid {
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
@@ -502,526 +316,26 @@ body.wp-admin .admin-page-container .form-group select:focus {
     border-color: var(--secondary-color) !important;
 }
 
-/* Button styles */
-body.wp-admin .admin-page-container .form-actions button,
-body.wp-admin .admin-page-container button[type="submit"] {
-    background-color: var(--primary-color) !important;
-    color: #fff !important;
-    border: none !important;
-    padding: 12px 25px !important;
-    border-radius: var(--border-radius) !important;
-    font-size: 1rem !important;
-    font-weight: 600 !important;
-    cursor: pointer !important;
-    transition: background-color 0.2s ease !important;
-    font-family: var(--font-family) !important;
+body.wp-admin .admin-page-container .form-group input.error,
+body.wp-admin .admin-page-container .form-group select.error {
+    border-color: #dc3545 !important;
+    background-color: #fff5f5 !important;
 }
 
-body.wp-admin .admin-page-container .form-actions button:hover,
-body.wp-admin .admin-page-container button[type="submit"]:hover {
-    background-color: #1f3148 !important;
-}
-
-/* Logo and action button styles */
-body.wp-admin .admin-page-container .client-logo-thumbnail {
-    width: auto !important;
-    height: 100px !important;
-    border-radius: 8px !important;
-    object-fit: contain !important;
-    border: 1px solid var(--line-color) !important;
+body.wp-admin .admin-page-container .form-group .error-message {
+    color: #dc3545 !important;
+    font-size: 0.8rem !important;
+    margin-top: 5px !important;
     display: block !important;
-    max-width: 200px !important;
-    max-height: 100px !important;
-    margin: 0 auto !important;
 }
 
-body.wp-admin .admin-page-container .actions-cell {
-    white-space: nowrap !important;
-    text-align: center !important;
-}
-
-body.wp-admin .admin-page-container .action-button {
-    background: none !important;
-    border: none !important;
-    color: var(--secondary-color) !important;
-    font-size: 1.1rem !important;
-    cursor: pointer !important;
-    margin: 0 5px !important;
-    padding: 5px !important;
-    transition: color 0.2s ease !important;
-}
-
-body.wp-admin .admin-page-container .action-button:hover {
-    color: var(--primary-color) !important;
-}
-
-/* Modal styles */
-.modal {
-    display: none;
-    position: fixed;
-    z-index: 100000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background-color: rgba(0,0,0,0.4);
-    align-items: center;
-    justify-content: center;
-}
-
-.modal-content {
-    background-color: var(--card-bg);
-    margin: auto;
-    padding: 20px;
-    border: 1px solid #888;
-    width: 80%;
-    max-width: 600px;
-    border-radius: var(--border-radius);
-    position: relative;
-    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2),0 6px 20px 0 rgba(0,0,0,0.19);
-    font-family: var(--font-family) !important;
-}
-
-.modal .close {
-    color: #aaa;
-    position: absolute;
-    right: 15px;
-    top: 10px;
-    font-size: 28px;
-    font-weight: bold;
-}
-
-.modal .close:hover,
-.modal .close:focus {
-    color: black;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-/* Force WordPress admin overrides with maximum specificity */
-body.wp-admin.toplevel_page_cpd-dashboard,
-body.wp-admin.toplevel_page_cpd_dashboard,
-body.wp-admin.toplevel_page_cpd-dashboard-management { /* Targeting both old and new admin slugs */
-    background-color: var(--bg-color) !important;
-    overflow: hidden !important;
-    font-family: var(--font-family) !important;
-}
-
-body.wp-admin.toplevel_page_cpd-dashboard #wpcontent,
-body.wp-admin.toplevel_page_cpd_dashboard #wpcontent,
-body.wp-admin.toplevel_page_cpd-dashboard-management #wpcontent {
-    margin-left: 0 !important;
-    padding: 0 !important;
-    min-height: 100vh !important;
-    background-color: var(--bg-color) !important;
-}
-
-body.wp-admin.toplevel_page_cpd-dashboard #wpbody,
-body.wp-admin.toplevel_page_cpd_dashboard #wpbody,
-body.wp-admin.toplevel_page_cpd-dashboard-management #wpbody {
-    background-color: var(--bg-color) !important;
-    padding: 0 !important;
-    margin: 0 !important;
-}
-
-body.wp-admin.toplevel_page_cpd-dashboard #wpbody-content,
-body.wp-admin.toplevel_page_cpd_dashboard #wpbody-content,
-body.wp-admin.toplevel_page_cpd-dashboard-management #wpbody-content {
-    padding: 0 !important;
-    margin: 0 !important;
-    position: relative !important;
-    background-color: var(--bg-color) !important;
-}
-
-body.wp-admin.toplevel_page_cpd-dashboard .wrap,
-body.wp-admin.toplevel_page_cpd_dashboard .wrap,
-body.wp-admin.toplevel_page_cpd-dashboard-management .wrap {
-    margin: 0 !important;
-    padding: 0 !important;
-    display: flex !important;
-    width: 100% !important;
-    min-height: 100vh !important;
-    max-width: none !important;
-    background-color: var(--bg-color) !important;
-}
-
-/* Hide WordPress admin elements with maximum specificity */
-body.wp-admin.toplevel_page_cpd-dashboard #adminmenumain,
-body.wp-admin.toplevel_page_cpd-dashboard #adminmenuwrap,
-body.wp-admin.toplevel_page_cpd-dashboard #adminmenuback,
-body.wp-admin.toplevel_page_cpd-dashboard #wpadminbar,
-body.wp-admin.toplevel_page_cpd-dashboard #wpfooter,
-body.wp-admin.toplevel_page_cpd_dashboard #adminmenumain,
-body.wp-admin.toplevel_page_cpd_dashboard #adminmenuwrap,
-body.wp-admin.toplevel_page_cpd_dashboard #adminmenuback,
-body.wp-admin.toplevel_page_cpd_dashboard #wpadminbar,
-body.wp-admin.toplevel_page_cpd_dashboard #wpfooter,
-body.wp-admin.toplevel_page_cpd-dashboard-management #adminmenumain,
-body.wp-admin.toplevel_page_cpd-dashboard-management #adminmenuwrap,
-body.wp-admin.toplevel_page_cpd-dashboard-management #adminmenuback,
-body.wp-admin.toplevel_page_cpd-dashboard-management #wpadminbar,
-body.wp-admin.toplevel_page_cpd-dashboard-management #wpfooter {
-    display: none !important;
-    visibility: hidden !important;
-}
-
-/* Hide any WordPress notices/messages on our page */
-body.wp-admin.toplevel_page_cpd-dashboard .notice,
-body.wp-admin.toplevel_page_cpd-dashboard .error,
-body.wp-admin.toplevel_page_cpd-dashboard .updated,
-body.wp-admin.toplevel_page_cpd_dashboard .notice,
-body.wp-admin.toplevel_page_cpd_dashboard .error,
-body.wp-admin.toplevel_page_cpd_dashboard .updated,
-body.wp-admin.toplevel_page_cpd-dashboard-management .notice,
-body.wp-admin.toplevel_page_cpd-dashboard-management .error,
-body.wp-admin.toplevel_page_cpd-dashboard-management .updated {
-    display: none !important;
-}
-
-/* SIDEBAR LAYOUT - COMPLETE REWRITE FOR LOGOUT FIX */
-/* NOTE: This sidebar is for the admin dashboard if it were to have a custom sidebar.
-   For the management page, the default WP admin menu is hidden, and there's no custom sidebar here. */
-body.wp-admin .admin-page-container .admin-sidebar {
-    width: 250px !important;
-    height: 100vh !important;
-    background-color: var(--primary-color) !important;
-    color: #fff !important;
-    padding: 0 !important;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1) !important;
-    flex-shrink: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    position: relative !important;
-    z-index: 2 !important;
-    overflow: hidden !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar .logo-container {
-    padding: 20px !important;
-    text-align: center !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-    flex-shrink: 0 !important;
-    background-color: var(--primary-color) !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar .logo-container img {
-    max-width: 180px !important;
-    height: auto !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar nav {
-    flex: 1 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    padding: 0 20px !important;
-    overflow: hidden !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar nav ul {
-    list-style: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    flex: 1 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow-y: auto !important;
-    padding-top: 15px !important;
-    padding-bottom: 15px !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar nav li {
-    margin-bottom: 8px !important;
-    flex-shrink: 0 !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar nav li:last-child {
-    margin-top: 0 !important;
-    margin-bottom: 0 !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar .logout-container {
-    padding: 20px !important;
-    border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
-    flex-shrink: 0 !important;
-    background-color: var(--primary-color) !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar nav a,
-body.wp-admin .admin-page-container .admin-sidebar .logout-container a {
-    display: flex !important;
-    align-items: center !important;
-    gap: 12px !important;
-    padding: 12px 16px !important;
-    color: rgba(255, 255, 255, 0.8) !important;
-    text-decoration: none !important;
-    font-weight: 500 !important;
-    border-radius: var(--border-radius) !important;
-    transition: background-color 0.2s ease, color 0.2s ease !important;
-    font-size: 0.9rem !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar nav a.active {
-    background-color: var(--card-bg) !important;
-    color: var(--primary-color) !important;
-    font-weight: 700 !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar nav a:hover:not(.active) {
-    background-color: var(--secondary-color) !important;
-    color: #fff !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar .logout-container a {
-    background-color: rgba(255, 255, 255, 0.1) !important;
-    color: rgba(255, 255, 255, 0.9) !important;
-    font-weight: 600 !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar .logout-container a:hover {
-    background-color: #dc3545 !important;
-    color: #fff !important;
-}
-
-/* TABLE COLUMN WIDTH FIXES */
-body.wp-admin .admin-page-container .data-table th:nth-child(1),
-body.wp-admin .admin-page-container .data-table td:nth-child(1) {
-    width: 20% !important; /* Name column */
-}
-
-body.wp-admin .admin-page-container .data-table th:nth-child(2),
-body.wp-admin .admin-page-container .data-table td:nth-child(2) {
-    width: 10% !important; /* Account ID column - made narrower */
-}
-
-body.wp-admin .admin-page-container .data-table th:nth-child(3),
-body.wp-admin .admin-page-container .data-table td:nth-child(3) {
-    width: 200px !important; /* Logo column - increased to 200px */
-    text-align: center !important;
-}
-
-body.wp-admin .admin-page-container .data-table th:nth-child(4),
-body.wp-admin .admin-page-container .data-table td:nth-child(4) {
-    width: 25% !important; /* Webpage column - increased */
-}
-
-body.wp-admin .admin-page-container .data-table th:nth-child(5),
-body.wp-admin .admin-page-container .data-table td:nth-child(5) {
-    width: 25% !important; /* Email column */
-}
-
-body.wp-admin .admin-page-container .data-table th:nth-child(6),
-body.wp-admin .admin-page-container .data-table td:nth-child(6) {
-    width: 120px !important; /* Actions column */
-    text-align: center !important;
-}
-
-/* DASHBOARD HEADER LOGO FIXES */
-body.wp-admin .admin-page-container .client-logo-container {
-    width: 60px !important;
-    height: 60px !important;
-    border-radius: 50% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex-shrink: 0 !important;
-    overflow: hidden !important;
-}
-
-body.wp-admin .admin-page-container .client-logo-container img {
-    width: 100% !important;
-    height: 100% !important;
-    object-fit: contain !important;
-}
-
-/* VISITOR LOGO FIXES */
-body.wp-admin .admin-page-container .visitor-logo {
-    width: 45px !important;
-    height: 45px !important;
-    border-radius: 50% !important;
-    overflow: hidden !important;
-    flex-shrink: 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    background-color: #f0f0f0 !important;
-}
-
-body.wp-admin .admin-page-container .visitor-logo img {
-    width: 80% !important;
-    height: auto !important;
-    object-fit: contain !important;
-}
-
-/* GENERAL IMAGE PROTECTION */
-body.wp-admin .admin-page-container img {
-    max-width: 100% !important;
-    height: auto !important;
-}
-
-/* DASHBOARD CONTENT WRAPPER FIXES */
-body.wp-admin .admin-page-container .dashboard-content-wrapper {
-    width: 100% !important;
-    max-width: none !important;
-    box-sizing: border-box !important;
-}
-
-/* DASHBOARD HEADER FIXES */
-body.wp-admin .admin-page-container .dashboard-header {
-    width: 100% !important;
-    max-width: none !important;
-    box-sizing: border-box !important;
-    display: flex !important;
-    align-items: center !important;
-    margin-bottom: 30px !important;
-}
-
-/* SUMMARY CARDS FIXES */
-body.wp-admin .admin-page-container .summary-cards {
-    display: flex !important;
-    gap: 20px !important;
-    margin-bottom: 30px !important;
-    width: 100% !important;
-    max-width: none !important;
-    box-sizing: border-box !important;
-}
-
-/* CHARTS SECTION FIXES */
-body.wp-admin .admin-page-container .charts-section {
-    display: flex !important;
-    gap: 30px !important;
-    margin-bottom: 30px !important;
-}
-
-body.wp-admin .admin-page-container .chart-container {
-    background-color: var(--card-bg) !important;
-    padding: 20px !important;
-    border-radius: var(--border-radius) !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
-    height: 250px !important; /* Keep fixed height for charts */
-    max-height: 250px !important;
-    overflow: hidden !important;
-    box-sizing: border-box !important;
-}
-
-
-body.wp-admin .admin-page-container .chart-container h3 {
-    font-size: 1.2rem !important;
-    font-weight: 600 !important;
-    margin: 0 0 20px 0 !important;
-    color: var(--text-color-dark) !important;
-    font-family: var(--font-family) !important;
-}
-
-/* AD GROUP TABLE FIXES */
-body.wp-admin .admin-page-container .ad-group-table {
-    width: 100% !important;
-    max-width: none !important;
-    box-sizing: border-box !important;
-}
-
-/* VISITOR PANEL FIXES */
-body.wp-admin .admin-page-container .visitor-panel {
-    width: 300px !important;
-    height: 100vh !important;
-    background-color: var(--card-bg) !important;
-    border-left: 1px solid var(--line-color) !important;
-    flex-shrink: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
-}
-
-body.wp-admin .admin-page-container .visitor-panel .header {
-    padding: 20px !important;
-    border-bottom: 1px solid var(--line-color) !important;
-    font-weight: 600 !important;
-    color: var(--text-color-dark) !important;
-    font-family: var(--font-family) !important;
-    background-color: #f8f9fa !important;
-    flex-shrink: 0 !important;
-}
-
-body.wp-admin .admin-page-container .visitor-list {
-    flex: 1 !important;
-    overflow-y: auto !important;
-    padding: 20px !important;
-}
-
-body.wp-admin .admin-page-container .visitor-card {
-    display: flex !important;
-    align-items: flex-start !important;
-    gap: 15px !important;
-    padding: 15px !important;
-    border-bottom: 1px solid var(--line-color) !important;
-    transition: background-color 0.2s ease !important;
-}
-
-body.wp-admin .admin-page-container .visitor-card:hover {
-    background-color: #f9fbfd !important;
-}
-
-body.wp-admin .admin-page-container .visitor-details {
-    flex: 1 !important;
-}
-
-body.wp-admin .admin-page-container .visitor-name {
-    font-weight: 600 !important;
-    margin: 0 0 8px 0 !important;
-    color: var(--text-color-dark) !important;
-    font-family: var(--font-family) !important;
-}
-
-body.wp-admin .admin-page-container .visitor-info p {
-    margin: 4px 0 !important;
-    font-size: 0.85rem !important;
-    color: var(--text-color-light) !important;
-    font-family: var(--font-family) !important;
-}
-
-body.wp-admin .admin-page-container .visitor-actions {
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 8px !important;
-}
-
-body.wp-admin .admin-page-container .visitor-actions .icon {
-    cursor: pointer !important;
-    padding: 6px !important;
-    border-radius: 4px !important;
-    transition: background-color 0.2s ease !important;
-    color: var(--text-color-light) !important;
-}
-
-body.wp-admin .admin-page-container .visitor-actions .add-crm-icon:hover {
-    background-color: #28a745 !important;
-    color: #fff !important;
-}
-
-body.wp-admin .admin-page-container .visitor-actions .delete-icon:hover {
-    background-color: #dc3545 !important;
-    color: #fff !important;
-}
-
-/* Styles for the Admin Management Link to make it look like a button */
-body.wp-admin .admin-page-container .admin-sidebar .admin-dashboard-link {
-    margin-top: 15px !important; /* Space above the admin dashboard link */
-}
-
-body.wp-admin .admin-page-container .admin-sidebar .admin-dashboard-link a {
-    background-color: rgba(255, 255, 255, 0.1) !important;
-    color: rgba(255, 255, 255, 0.9) !important;
-    font-weight: 600 !important;
-}
-
-body.wp-admin .admin-page-container .admin-sidebar .admin-dashboard-link a:hover {
-    background-color: var(--secondary-color) !important;
-    color: #fff !important;
-}
-
-/* Specific styles for the CRM Email Management section */
+/* ========================================
+   BUTTON STYLES
+   ======================================== */
+body.wp-admin .admin-page-container .form-actions button,
+body.wp-admin .admin-page-container button[type="submit"],
 body.wp-admin #crm-email-management-section .button {
-    background-color: var(--secondary-color) !important;
+    background-color: var(--primary-color) !important;
     color: #fff !important;
     border: none !important;
     padding: 12px 25px !important;
@@ -1036,14 +350,129 @@ body.wp-admin #crm-email-management-section .button {
     gap: 8px !important;
 }
 
+body.wp-admin .admin-page-container .form-actions button:hover,
+body.wp-admin .admin-page-container button[type="submit"]:hover {
+    background-color: #1f3148 !important;
+}
+
+body.wp-admin #crm-email-management-section .button {
+    background-color: var(--secondary-color) !important;
+}
+
 body.wp-admin #crm-email-management-section .button:hover {
     background-color: #357abd !important;
+}
+
+body.wp-admin .admin-page-container button:disabled,
+body.wp-admin .admin-page-container .form-actions button:disabled {
+    background-color: #ccc !important;
+    cursor: not-allowed !important;
+    opacity: 0.6 !important;
+}
+
+body.wp-admin .admin-page-container .action-button-large {
+    background-color: var(--secondary-color) !important;
+    color: #fff !important;
+    border: none !important;
+    padding: 12px 20px !important;
+    border-radius: var(--border-radius) !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: background-color 0.2s ease !important;
+    font-family: var(--font-family) !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+}
+
+body.wp-admin .admin-page-container .action-button-large:hover {
+    background-color: #357abd !important;
+}
+
+body.wp-admin .admin-page-container .action-button-large.export-data:hover {
+    background-color: #28a745 !important;
+}
+
+body.wp-admin .admin-page-container .action-button-large.clear-cache:hover {
+    background-color: #dc3545 !important;
+}
+
+/* ========================================
+   TABLE STYLES - GENERAL
+   ======================================== */
+body.wp-admin .admin-page-container .table-container {
+    overflow-x: auto !important;
+    margin-bottom: 20px !important;
+}
+
+body.wp-admin .admin-page-container .data-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    text-align: left !important;
+    font-family: var(--font-family) !important;
+    table-layout: fixed !important;
+    box-sizing: border-box !important;
+    max-width: none !important;
+}
+
+body.wp-admin .admin-page-container .data-table th,
+body.wp-admin .admin-page-container .data-table td {
+    padding: 15px 20px !important;
+    border-bottom: 1px solid var(--line-color) !important;
+    font-weight: 500 !important;
+    font-family: var(--font-family) !important;
+    vertical-align: top !important;
+    line-height: 1.4 !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+body.wp-admin .admin-page-container .data-table th {
+    font-weight: 600 !important;
+    color: var(--text-color-light) !important;
+    text-transform: uppercase !important;
+    font-size: 0.8rem !important;
+    background-color: #f8f9fa !important;
+}
+
+body.wp-admin .admin-page-container .data-table tbody tr:hover {
+    background-color: rgba(66, 148, 204, 0.05) !important;
+    transition: background-color 0.2s ease !important;
+}
+
+body.wp-admin .admin-page-container .data-table tbody tr:hover .action-button {
+    opacity: 1 !important;
+    transform: scale(1.1) !important;
+    transition: all 0.2s ease !important;
+}
+
+body.wp-admin .admin-page-container .actions-cell {
+    white-space: nowrap !important;
+    text-align: center !important;
+}
+
+body.wp-admin .admin-page-container .action-button {
+    background: none !important;
+    border: none !important;
+    color: var(--secondary-color) !important;
+    font-size: 1.1rem !important;
+    cursor: pointer !important;
+    margin: 0 3px !important;
+    padding: 5px !important;
+    transition: all 0.2s ease !important;
+    opacity: 0.7 !important;
+    display: inline-block !important;
+}
+
+body.wp-admin .admin-page-container .action-button:hover {
+    color: var(--primary-color) !important;
 }
 
 body.wp-admin #eligible-visitors-table .undo-crm-button {
     background: none !important;
     border: none !important;
-    color: #ff9800 !important; /* Orange color for undo */
+    color: #ff9800 !important;
     font-size: 1.1rem !important;
     cursor: pointer !important;
     margin: 0 5px !important;
@@ -1052,10 +481,188 @@ body.wp-admin #eligible-visitors-table .undo-crm-button {
 }
 
 body.wp-admin #eligible-visitors-table .undo-crm-button:hover {
-    color: #e65100 !important; /* Darker orange on hover */
+    color: #e65100 !important;
 }
 
-/* Referrer Logo Mapping Styles */
+/* ========================================
+   TABLE SPECIFIC COLUMN WIDTHS
+   ======================================== */
+
+/* CLIENT MANAGEMENT TABLE */
+body.wp-admin .admin-page-container #clients-section .data-table th:nth-child(1),
+body.wp-admin .admin-page-container #clients-section .data-table td:nth-child(1) {
+    width: 18% !important; min-width: 140px !important; font-weight: 600 !important;
+}
+body.wp-admin .admin-page-container #clients-section .data-table th:nth-child(2),
+body.wp-admin .admin-page-container #clients-section .data-table td:nth-child(2) {
+    width: 12% !important; min-width: 100px !important; font-family: monospace !important;
+}
+body.wp-admin .admin-page-container #clients-section .data-table th:nth-child(3),
+body.wp-admin .admin-page-container #clients-section .data-table td:nth-child(3) {
+    width: 15% !important; min-width: 120px !important; text-align: center !important;
+}
+body.wp-admin .admin-page-container #clients-section .data-table th:nth-child(4),
+body.wp-admin .admin-page-container #clients-section .data-table td:nth-child(4) {
+    width: 28% !important; min-width: 200px !important; word-break: break-all !important;
+}
+body.wp-admin .admin-page-container #clients-section .data-table th:nth-child(5),
+body.wp-admin .admin-page-container #clients-section .data-table td:nth-child(5) {
+    width: 22% !important; min-width: 180px !important; word-break: break-word !important;
+}
+body.wp-admin .admin-page-container #clients-section .data-table th:nth-child(6),
+body.wp-admin .admin-page-container #clients-section .data-table td:nth-child(6) {
+    width: 5% !important; min-width: 80px !important; text-align: center !important; white-space: nowrap !important;
+}
+
+/* USER MANAGEMENT TABLE */
+body.wp-admin .admin-page-container #users-section .data-table th:nth-child(1),
+body.wp-admin .admin-page-container #users-section .data-table td:nth-child(1) {
+    width: 18% !important; min-width: 120px !important; font-weight: 600 !important;
+}
+body.wp-admin .admin-page-container #users-section .data-table th:nth-child(2),
+body.wp-admin .admin-page-container #users-section .data-table td:nth-child(2) {
+    width: 32% !important; min-width: 220px !important; word-break: break-word !important; hyphens: auto !important;
+}
+body.wp-admin .admin-page-container #users-section .data-table th:nth-child(3),
+body.wp-admin .admin-page-container #users-section .data-table td:nth-child(3) {
+    width: 12% !important; min-width: 90px !important;
+}
+body.wp-admin .admin-page-container #users-section .data-table th:nth-child(4),
+body.wp-admin .admin-page-container #users-section .data-table td:nth-child(4) {
+    width: 25% !important; min-width: 150px !important; word-wrap: break-word !important;
+}
+body.wp-admin .admin-page-container #users-section .data-table th:nth-child(5),
+body.wp-admin .admin-page-container #users-section .data-table td:nth-child(5) {
+    width: 13% !important; min-width: 90px !important; text-align: center !important; white-space: nowrap !important;
+}
+
+/* CRM EMAIL MANAGEMENT TABLE */
+body.wp-admin .admin-page-container #crm-email-management-section .data-table th:nth-child(1),
+body.wp-admin .admin-page-container #crm-email-management-section .data-table td:nth-child(1) {
+    width: 15% !important; min-width: 120px !important; font-weight: 600 !important;
+}
+body.wp-admin .admin-page-container #crm-email-management-section .data-table th:nth-child(2),
+body.wp-admin .admin-page-container #crm-email-management-section .data-table td:nth-child(2) {
+    width: 18% !important; min-width: 140px !important;
+}
+body.wp-admin .admin-page-container #crm-email-management-section .data-table th:nth-child(3),
+body.wp-admin .admin-page-container #crm-email-management-section .data-table td:nth-child(3) {
+    width: 15% !important; min-width: 120px !important; word-break: break-all !important;
+}
+body.wp-admin .admin-page-container #crm-email-management-section .data-table th:nth-child(4),
+body.wp-admin .admin-page-container #crm-email-management-section .data-table td:nth-child(4) {
+    width: 10% !important; min-width: 80px !important;
+}
+body.wp-admin .admin-page-container #crm-email-management-section .data-table th:nth-child(5),
+body.wp-admin .admin-page-container #crm-email-management-section .data-table td:nth-child(5) {
+    width: 8% !important; min-width: 60px !important;
+}
+body.wp-admin .admin-page-container #crm-email-management-section .data-table th:nth-child(6),
+body.wp-admin .admin-page-container #crm-email-management-section .data-table td:nth-child(6) {
+    width: 8% !important; min-width: 70px !important;
+}
+body.wp-admin .admin-page-container #crm-email-management-section .data-table th:nth-child(7),
+body.wp-admin .admin-page-container #crm-email-management-section .data-table td:nth-child(7) {
+    width: 12% !important; min-width: 100px !important; font-size: 0.9rem !important;
+}
+body.wp-admin .admin-page-container #crm-email-management-section .data-table th:nth-child(8),
+body.wp-admin .admin-page-container #crm-email-management-section .data-table td:nth-child(8) {
+    width: 8% !important; min-width: 70px !important; text-align: center !important;
+}
+body.wp-admin .admin-page-container #crm-email-management-section .data-table th:nth-child(9),
+body.wp-admin .admin-page-container #crm-email-management-section .data-table td:nth-child(9) {
+    width: 10% !important; min-width: 80px !important; font-family: monospace !important;
+}
+body.wp-admin .admin-page-container #crm-email-management-section .data-table th:nth-child(10),
+body.wp-admin .admin-page-container #crm-email-management-section .data-table td:nth-child(10) {
+    width: 6% !important; min-width: 60px !important; text-align: center !important; white-space: nowrap !important;
+}
+
+/* ACTION LOGS TABLE */
+body.wp-admin .admin-page-container #logs-section .data-table th:nth-child(1),
+body.wp-admin .admin-page-container #logs-section .data-table td:nth-child(1) {
+    width: 20% !important; min-width: 150px !important; font-family: monospace !important; font-size: 0.9rem !important;
+}
+body.wp-admin .admin-page-container #logs-section .data-table th:nth-child(2),
+body.wp-admin .admin-page-container #logs-section .data-table td:nth-child(2) {
+    width: 15% !important; min-width: 100px !important; font-family: monospace !important;
+}
+body.wp-admin .admin-page-container #logs-section .data-table th:nth-child(3),
+body.wp-admin .admin-page-container #logs-section .data-table td:nth-child(3) {
+    width: 20% !important; min-width: 120px !important; font-weight: 600 !important;
+}
+body.wp-admin .admin-page-container #logs-section .data-table th:nth-child(4),
+body.wp-admin .admin-page-container #logs-section .data-table td:nth-child(4) {
+    width: 45% !important; min-width: 200px !important; word-wrap: break-word !important; overflow-wrap: break-word !important;
+}
+
+/* ========================================
+   SPECIAL ELEMENTS
+   ======================================== */
+body.wp-admin .admin-page-container .client-logo-thumbnail {
+    width: auto !important;
+    height: 60px !important;
+    max-width: 100px !important;
+    border-radius: 4px !important;
+    object-fit: contain !important;
+    border: 1px solid var(--line-color) !important;
+    display: block !important;
+    margin: 0 auto !important;
+}
+
+body.wp-admin .admin-page-container .no-data {
+    text-align: center !important;
+    color: var(--text-color-light) !important;
+    font-style: italic !important;
+    padding: 30px 20px !important;
+    background-color: #f9f9f9 !important;
+}
+
+body.wp-admin .admin-page-container .no-logo,
+body.wp-admin .admin-page-container .no-url {
+    color: var(--text-color-light) !important;
+    font-style: italic !important;
+    text-align: center !important;
+    font-size: 0.9rem !important;
+}
+
+/* ========================================
+   DATA MANAGEMENT SECTION
+   ======================================== */
+body.wp-admin .admin-page-container .data-management-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 30px !important;
+    margin-top: 20px !important;
+}
+
+body.wp-admin .admin-page-container .action-group {
+    padding: 25px !important;
+    background-color: #f8f9fa !important;
+    border-radius: var(--border-radius) !important;
+    border: 1px solid var(--line-color) !important;
+    text-align: center !important;
+}
+
+body.wp-admin .admin-page-container .action-group h4 {
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+    margin: 0 0 10px 0 !important;
+    color: var(--primary-color) !important;
+    font-family: var(--font-family) !important;
+}
+
+body.wp-admin .admin-page-container .action-group p {
+    font-size: 0.9rem !important;
+    color: var(--text-color-light) !important;
+    margin: 0 0 20px 0 !important;
+    font-family: var(--font-family) !important;
+    line-height: 1.4 !important;
+}
+
+/* ========================================
+   REFERRER LOGO MAPPING STYLES
+   ======================================== */
 .referrer-mapping-row {
     display: grid !important;
     grid-template-columns: 1fr 2fr auto !important;
@@ -1137,7 +744,7 @@ body.wp-admin #eligible-visitors-table .undo-crm-button:hover {
 }
 
 #add-referrer-mapping:before {
-    content: '\f067' !important; /* FontAwesome plus icon */
+    content: '\f067' !important;
     font-family: 'Font Awesome 5 Free' !important;
     font-weight: 900 !important;
 }
@@ -1163,12 +770,192 @@ body.wp-admin #eligible-visitors-table .undo-crm-button:hover {
     margin: 0 !important;
 }
 
-/* Responsive design for referrer mappings */
-@media (max-width: 768px) {
+/* ========================================
+   MODAL STYLES
+   ======================================== */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 100000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: var(--card-bg);
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+    max-width: 600px;
+    border-radius: var(--border-radius);
+    position: relative;
+    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2),0 6px 20px 0 rgba(0,0,0,0.19);
+    font-family: var(--font-family) !important;
+}
+
+.modal .close {
+    color: #aaa;
+    position: absolute;
+    right: 15px;
+    top: 10px;
+    font-size: 28px;
+    font-weight: bold;
+}
+
+.modal .close:hover,
+.modal .close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.modal-content .form-group {
+    margin-bottom: 20px !important;
+}
+
+.modal-content .form-group:last-child {
+    margin-bottom: 0 !important;
+}
+
+.modal-content .form-actions {
+    margin-top: 25px !important;
+    text-align: right !important;
+}
+
+.modal-content h2 {
+    margin: 0 0 25px 0 !important;
+    padding-right: 30px !important;
+    color: var(--primary-color) !important;
+    font-family: var(--font-family) !important;
+    font-size: 1.4rem !important;
+    font-weight: 600 !important;
+}
+
+/* ========================================
+   SUCCESS/ERROR MESSAGES
+   ======================================== */
+body.wp-admin .admin-page-container .success-message {
+    background-color: #d4edda !important;
+    color: #155724 !important;
+    border: 1px solid #c3e6cb !important;
+    border-radius: var(--border-radius) !important;
+    padding: 12px 16px !important;
+    margin-bottom: 20px !important;
+    font-family: var(--font-family) !important;
+}
+
+body.wp-admin .admin-page-container .error-message-box {
+    background-color: #f8d7da !important;
+    color: #721c24 !important;
+    border: 1px solid #f5c6cb !important;
+    border-radius: var(--border-radius) !important;
+    padding: 12px 16px !important;
+    margin-bottom: 20px !important;
+    font-family: var(--font-family) !important;
+}
+
+/* ========================================
+   LOADING STATES
+   ======================================== */
+body.wp-admin .admin-page-container .loading {
+    opacity: 0.6 !important;
+    pointer-events: none !important;
+}
+
+body.wp-admin .admin-page-container .spinner {
+    display: inline-block !important;
+    width: 16px !important;
+    height: 16px !important;
+    border: 2px solid #f3f3f3 !important;
+    border-top: 2px solid var(--primary-color) !important;
+    border-radius: 50% !important;
+    animation: spin 1s linear infinite !important;
+    margin-right: 8px !important;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ========================================
+   RESPONSIVE DESIGN
+   ======================================== */
+@media (max-width: 1400px) {
+    body.wp-admin .admin-page-container #clients-section .data-table th:nth-child(4),
+    body.wp-admin .admin-page-container #clients-section .data-table td:nth-child(4) {
+        width: 25% !important;
+    }
+    
+    body.wp-admin .admin-page-container #clients-section .data-table th:nth-child(5),
+    body.wp-admin .admin-page-container #clients-section .data-table td:nth-child(5) {
+        width: 25% !important;
+    }
+}
+
+@media (max-width: 1200px) {
+    body.wp-admin .admin-page-container .form-grid,
+    body.wp-admin .admin-page-container .data-management-actions {
+        grid-template-columns: 1fr !important;
+    }
+    
+    body.wp-admin .admin-page-container #users-section .data-table th:nth-child(2),
+    body.wp-admin .admin-page-container #users-section .data-table td:nth-child(2) {
+        width: 35% !important;
+    }
+    
+    body.wp-admin .admin-page-container #users-section .data-table th:nth-child(4),
+    body.wp-admin .admin-page-container #users-section .data-table td:nth-child(4) {
+        width: 20% !important;
+    }
+    
     .referrer-mapping-row {
         grid-template-columns: 1fr !important;
         gap: 10px !important;
         padding: 12px !important;
+    }
+}
+
+@media (max-width: 768px) {
+    body.wp-admin .admin-page-container {
+        flex-direction: column !important;
+    }
+    
+    body.wp-admin .admin-page-container .admin-sidebar {
+        width: 100% !important;
+        height: auto !important;
+    }
+    
+    body.wp-admin .admin-page-container .admin-main-content {
+        width: 100% !important;
+        padding: 20px !important;
+    }
+    
+    body.wp-admin .admin-page-container .table-container {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+    
+    body.wp-admin .admin-page-container .data-table {
+        min-width: 700px !important;
+        font-size: 0.8rem !important;
+    }
+    
+    body.wp-admin .admin-page-container .data-table th,
+    body.wp-admin .admin-page-container .data-table td {
+        padding: 8px 10px !important;
+    }
+    
+    body.wp-admin .admin-page-container .client-logo-thumbnail {
+        height: 40px !important;
+        max-width: 60px !important;
     }
     
     .referrer-mapping-row .form-group input {
