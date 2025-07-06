@@ -256,7 +256,7 @@ jQuery(document).ready(function($) {
 
     // Function to load dashboard data via AJAX
     function loadDashboardData(clientId, duration) {
-        console.log('loadDashboardData: Called with Client ID:', clientId, 'Duration:', duration);
+        console.log('ADMIN oadDashboardData: Called with Client ID:', clientId, 'Duration:', duration);
         if(dashboardContent.length === 0) { // Defensive check
             console.warn("Dashboard content container (#clients-section) not found. Cannot load dashboard data.");
             return;
@@ -273,7 +273,7 @@ jQuery(document).ready(function($) {
                 duration: duration
             },
             success: function(response) {
-                console.log('loadDashboardData: AJAX Success. Response:', response);
+                console.log('ADMIN loadDashboardData: AJAX Success. Response:', response);
                 if (response.success) {
                     const data = response.data;
                     
@@ -295,6 +295,7 @@ jQuery(document).ready(function($) {
                     });
                     
                     // Update Charts
+                    console.log('ADMIN loadDashboardData: Rendering charts with campaign data:', data.campaign_data_by_date);
                     renderImpressionsChart(data.campaign_data_by_date);
                     renderImpressionsByAdGroupChart(data.campaign_data);
 

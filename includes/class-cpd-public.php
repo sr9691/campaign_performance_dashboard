@@ -108,11 +108,11 @@ class CPD_Public {
             wp_enqueue_style( 'google-montserrat', 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap', array(), null );
             wp_enqueue_style( 'font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', array(), '5.15.4', 'all' );
             // UPDATED: Enqueue public-specific stylesheet
-            wp_enqueue_style( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-public-dashboard.css', array(), $this->version, 'all' );
+            wp_enqueue_style( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/css/cpd-public-dashboard.css', array(), null, 'all' );
 
             if ( current_user_can( 'manage_options' ) ) { // Load only for administrators
                 $style_path_admin = CPD_DASHBOARD_PLUGIN_DIR . 'assets/css/cpd-admin-dashboard.css';
-                $style_version_admin = file_exists( $style_path_admin ) ? filemtime( $style_path_admin ) : $this->version;
+                $style_version_admin = file_exists( $style_path_admin ) ? filemtime( $style_path_admin ) : null;
 
                 wp_enqueue_style(
                     $this->plugin_name . '-admin', // Use the same handle as in CPD_Admin for consistency

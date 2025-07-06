@@ -193,7 +193,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             
             if (data.success) {
-                //console.log(`sendAjaxRequestForVisitorStatus: Visitor ${visitorId} status updated successfully.`);
                 return true;
             } else {
                 console.error('sendAjaxRequestForVisitorStatus: AJAX error:', data.data);
@@ -207,50 +206,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Client-specific function to load all dashboard data via AJAX ---
     async function loadClientDashboardData(explicitClientId = null, explicitDuration = null) {
-
         // 1. Determine the Client ID to use for the AJAX call
         let clientIdToUse;
         if (explicitClientId !== null) {
-            clientIdToUse = explicitClientId;
+            clientIdToUse = explicitClientId; // Prioritize explicitly passed ID (from client list click)
         } else {
+            // Fallback: Check URL parameter first (for page loads/refreshes where admin sets client_id)
             const urlParams = new URLSearchParams(window.location.search);
             let selectedClientIdFromUrl = urlParams.get('client_id');
+
+            // If admin, use URL param if present, otherwise localizedData.current_client_account_id (for client users)
             clientIdToUse = isAdminUser && selectedClientIdFromUrl ? selectedClientIdFromUrl : localizedData.current_client_account_id;
         }
 
         // 2. Determine the Duration to use for the AJAX call
         const durationToUse = explicitDuration !== null ? explicitDuration : document.getElementById('duration-selector').value;
-        
-        console.log('clientIdToUse:', clientIdToUse);
-        console.log('durationToUse:', durationToUse, '(type:', typeof durationToUse, ')');
-        
-        // Check dropdown value directly
-        const dropdown = document.getElementById('duration-selector');
-        if (dropdown) {
-            console.log('Dropdown current value:', dropdown.value, '(type:', typeof dropdown.value, ')');
-            console.log('Dropdown options:');
-            Array.from(dropdown.options).forEach(opt => {
-                console.log(`  - Value: "${opt.value}" (selected: ${opt.selected})`);
-            });
+
+        // Defensive check: If no client ID is determined and it's not an admin, warn and exit.
+        if (!clientIdToUse && !isAdminUser) {
+            console.warn('loadClientDashboardData: No client ID available for client view. Cannot load data.');
+            return;
         }
 
-        // 3. Handle "All Clients" selection
+        // 3. Handle "All Clients" selection: Convert 'all' string to null for the data provider
         const actualClientIdForAjax = (clientIdToUse === 'all') ? null : clientIdToUse;
-        
-        console.log('actualClientIdForAjax:', actualClientIdForAjax);
 
         const mainContent = document.querySelector('.main-content');
         if (mainContent) mainContent.style.opacity = '0.5';
-
-        const requestData = {
-            action: 'cpd_get_dashboard_data',
-            nonce: localizedData.dashboard_nonce,
-            client_id: actualClientIdForAjax,
-            duration: durationToUse
-        };
-        
-        // console.log('Request data being sent:', requestData);
-
 
         try {
             const response = await fetch(localizedData.ajax_url, {
@@ -274,31 +256,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (responseData.success) {
                 const data = responseData.data;
-                console.log("=== CPD AJAX Debug ===");
-                console.log("Full response data:", data);
-                if (data.visitor_data && data.visitor_data.length > 0) {
-                    console.log("First visitor data:", data.visitor_data[0]);
-                    console.log("Visitor keys:", Object.keys(data.visitor_data[0]));
-                    data.visitor_data.forEach((visitor, index) => {
-                        console.log(`Visitor ${index}:`, {
-                            id: visitor.id,
-                            name: visitor.first_name + ' ' + visitor.last_name,
-                            most_recent_referrer: visitor.most_recent_referrer,
-                            logo_url: visitor.referrer_logo_url || 'NOT SET'
-                        });
-                    });
-                }
-                console.log("=== End Debug ===");
-
 
                 // Update Client Logo in Header (Only applicable if a specific client is selected)
-                if (actualClientIdForAjax  !== 'all' && data.client_logo_url) {
+                if (actualClientIdForAjax !== null && data.client_logo_url) {
                     const clientLogoImg = document.querySelector('.dashboard-header .client-logo-container img');
-                    console.log("Updating client logo with URL:", data.client_logo_url);
                     if (clientLogoImg) {
                         clientLogoImg.src = data.client_logo_url;
                     }
-                } else if (actualClientIdForAjax  === 'all') {
+                } else if (actualClientIdForAjax === null) {
                     // If "All Clients" is selected, revert to default logo
                     const clientLogoImg = document.querySelector('.dashboard-header .client-logo-container img');
                     if (clientLogoImg) {
@@ -306,16 +271,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-
                 // Update Summary Cards 
                 document.querySelectorAll('.summary-card .value').forEach(el => {
                     const dataKey = el.nextElementSibling.dataset.summaryKey; // Get from new data-key attribute
-                    console.log("Updating summary cards with metrics:", data.summary_metrics);
                     if (dataKey && data.summary_metrics && data.summary_metrics[dataKey]) {
                         el.textContent = data.summary_metrics[dataKey];
                     } else {
                         el.textContent = '0'; // Default to 0 if no data
-                        // console.warn(`Summary data not found for key: ${dataKey}`); // Optional debug
                     }
                 });
 
@@ -350,7 +312,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     visitorListContainer.innerHTML = '';
                     if (data.visitor_data && data.visitor_data.length > 0) {
                         data.visitor_data.forEach(visitor => {
-                            console.log("Processing visitor referrer logo:", visitor.referrer_logo_url);
                             const visitorLogoUrl = visitor.referrer_logo_url || localizedData.memo_seal_url;
                             const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
                             const companyName = visitor.company_name || 'Unknown Company';
@@ -363,7 +324,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             // Use the AJAX data directly - it's already in the correct format
                             const recentPageUrls = visitor.recent_page_urls || [];
                             const safeRecentPageUrlsForAttr = JSON.stringify(recentPageUrls);
-
 
                             visitorListContainer.insertAdjacentHTML('beforeend', `
                                 <div class="visitor-card"
@@ -406,9 +366,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                // console.log('loadClientDashboardData: Dashboard updated successfully.');
+                console.log('loadClientDashboardData: Dashboard updated successfully.');
             } else {
-                console.error('loadClientDashboardData: AJAX response success is false:', data.data);
+                console.error('loadClientDashboardData: AJAX response success is false:', responseData.data);
             }
         } catch (error) {
             console.error('loadClientDashboardData: Fetch error:', error);
@@ -416,7 +376,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (mainContent) mainContent.style.opacity = '1';
         }
     }
-
 
     // Event listener for the "Add CRM" and "Delete" buttons on Visitor Panel.
     const visitorPanel = document.querySelector('.visitor-panel');
@@ -482,7 +441,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     pageUrlsList.innerHTML = ''; // Clear previous URLs
                     
                     if (recentPageUrls.length > 0) {
-                        
                         recentPageUrls.forEach((url, index) => {
                             // Ensure url is a string and clean it up
                             let cleanUrl = String(url).trim();
@@ -521,7 +479,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     return; // Exit to prevent further processing for this click
                 }
 
-
                 let updateAction = '';
                 if (button.classList.contains('add-crm-icon')) {
                     updateAction = 'add_crm';
@@ -545,7 +502,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 button.style.opacity = '1';
             }
         });
-
     }
 
     // Modal close functionality
@@ -609,11 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-
     // --- Initial Data Load ---
-    // This is the primary function call when the public dashboard loads.
-    // It will fetch data based on whether it's an admin viewing "all" or a specific client,
-    // or a regular client.
     console.log('cpd-public-dashboard.js: Initializing dashboard data load.');
     loadClientDashboardData();
 });
