@@ -52,6 +52,55 @@ class CPD_Referrer_Logo {
     }
     
     /**
+     * Get referrer URL for tooltip display from visitor object
+     *
+     * @param object $visitor Visitor object
+     * @return string The referrer URL for tooltip display
+     */
+    public static function get_referrer_url_for_visitor( $visitor ) {
+        $referrer_url = '';
+        
+        // Try to get referrer from visitor object
+        if ( isset( $visitor->most_recent_referrer ) ) {
+            $referrer_url = $visitor->most_recent_referrer;
+        } elseif ( isset( $visitor->referrer ) ) {
+            $referrer_url = $visitor->referrer;
+        } elseif ( isset( $visitor->referrer_url ) ) {
+            $referrer_url = $visitor->referrer_url;
+        }
+        
+        // Return appropriate tooltip text
+        if ( empty( $referrer_url ) || trim( $referrer_url ) === '' ) {
+            return 'Direct Traffic - No referrer';
+        }
+        
+        return 'Referrer: ' . $referrer_url;
+    }
+    
+    /**
+     * Get alt text for referrer logo based on referrer URL
+     *
+     * @param string $referrer_url The full referrer URL from visitor data
+     * @return string The alt text to display
+     */
+    public static function get_alt_text_for_referrer( $referrer_url ) {
+        // If referrer is empty or null, return "DIRECT" text
+        if ( empty( $referrer_url ) || trim( $referrer_url ) === '' ) {
+            return 'Direct Traffic';
+        }
+        
+        // Extract domain from referrer URL for cleaner display
+        $domain = self::extract_domain_from_url( $referrer_url );
+        
+        if ( !empty( $domain ) ) {
+            return 'Referrer: ' . $domain;
+        }
+        
+        // Fallback to full URL if domain extraction fails
+        return 'Referrer: ' . $referrer_url;
+    }
+    
+    /**
      * Extract domain from a full URL
      *
      * @param string $url The full URL
@@ -134,6 +183,27 @@ class CPD_Referrer_Logo {
         }
         
         return self::get_logo_for_referrer( $referrer_url );
+    }
+    
+    /**
+     * Get alt text for visitor logo (convenience method)
+     *
+     * @param object $visitor Visitor object
+     * @return string Alt text for the logo
+     */
+    public static function get_alt_text_for_visitor( $visitor ) {
+        $referrer_url = '';
+        
+        // Try to get referrer from visitor object
+        if ( isset( $visitor->most_recent_referrer ) ) {
+            $referrer_url = $visitor->most_recent_referrer;
+        } elseif ( isset( $visitor->referrer ) ) {
+            $referrer_url = $visitor->referrer;
+        } elseif ( isset( $visitor->referrer_url ) ) {
+            $referrer_url = $visitor->referrer_url;
+        }
+        
+        return self::get_alt_text_for_referrer( $referrer_url );
     }
     
     /**

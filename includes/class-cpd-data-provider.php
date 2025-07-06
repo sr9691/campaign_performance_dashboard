@@ -176,6 +176,12 @@ class CPD_Data_Provider {
      * @param string $account_id The account ID.
      * @return array An array of visitor data rows.
      */
+/**
+     * Get visitor data for a specific account, showing only those not archived and not yet sent to CRM.
+     *
+     * @param string $account_id The account ID.
+     * @return array An array of visitor data rows.
+     */
     public function get_visitor_data( $account_id ) {
         // error_log('CPD_Data_Provider::get_visitor_data - Account ID Passed: ' . $account_id);
         $account_id = $this->normalize_account_id( $account_id ); // Normalize input
@@ -198,8 +204,6 @@ class CPD_Data_Provider {
         $results = $this->wpdb->get_results( $sql_query );
         // error_log('CPD_Data_Provider::get_visitor_data - Account ID Passed: ' . $results);
 
-
-
         if ( empty( $results ) ) {
             error_log('CPD_Data_Provider: get_visitor_data returned no results for account_id: ' . ($account_id ?? 'ALL'));
         }
@@ -213,14 +217,16 @@ class CPD_Data_Provider {
             require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-referrer-logo.php';
         }
 
-        // Iterate through each visitor and add the referrer_logo_url
+        // Iterate through each visitor and add the referrer_logo_url and alt_text
         foreach ( $results as $visitor ) {
             $visitor->referrer_logo_url = CPD_Referrer_Logo::get_logo_for_visitor( $visitor );
+            $visitor->referrer_alt_text = CPD_Referrer_Logo::get_alt_text_for_visitor( $visitor );
+            $visitor->referrer_tooltip = CPD_Referrer_Logo::get_referrer_url_for_visitor( $visitor );
         }
 
         return $results;
     }
-
+    
     /**
      * NEW: Get eligible visitor data for CRM emails (is_crm_added = 1 AND crm_sent IS NULL).
      * This is used for the CRM Email Management section in admin settings.

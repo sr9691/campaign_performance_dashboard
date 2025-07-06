@@ -312,7 +312,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     visitorListContainer.innerHTML = '';
                     if (data.visitor_data && data.visitor_data.length > 0) {
                         data.visitor_data.forEach(visitor => {
-                            const visitorLogoUrl = visitor.referrer_logo_url || localizedData.memo_seal_url;
+                            // Get logo URL, alt text, and tooltip from AJAX response
+                            const visitorLogoUrl = visitor.logo_url || visitor.referrer_logo_url || localizedData.memo_seal_url;
+                            const visitorAltText = visitor.alt_text || visitor.referrer_alt_text || 'Visitor Logo';
+                            const visitorTooltipText = visitor.tooltip_text || visitor.referrer_tooltip || 'No referrer information';
+                            
                             const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
                             const companyName = visitor.company_name || 'Unknown Company';
                             const jobTitle = visitor.job_title || 'Unknown Title';
@@ -333,7 +337,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                     data-recent-page-urls='${safeRecentPageUrlsForAttr}' >
                                     <div class="visitor-top-row">
                                         <div class="visitor-logo">
-                                            <img src="${visitorLogoUrl}" alt="Referrer Logo">
+                                            <img src="${visitorLogoUrl}" 
+                                                 alt="${visitorAltText}" 
+                                                 title="${visitorTooltipText}">
                                         </div>
                                         <div class="visitor-actions">
                                             <span class="icon add-crm-icon" title="Add to CRM">

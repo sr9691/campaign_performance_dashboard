@@ -276,7 +276,7 @@ class CPD_Public {
         }
     }
 
-/**
+    /**
      * AJAX handler for getting dashboard data.
      */
     public function ajax_get_dashboard_data() {
@@ -333,8 +333,10 @@ class CPD_Public {
 
         if (!empty($visitor_data)) {
             foreach ($visitor_data as $visitor) {
-                // Add the logo URL for each visitor using the existing class
+                // Add the logo URL, alt text, and tooltip for each visitor using the existing class
                 $visitor->logo_url = CPD_Referrer_Logo::get_logo_for_visitor($visitor);
+                $visitor->alt_text = CPD_Referrer_Logo::get_alt_text_for_visitor($visitor);
+                $visitor->tooltip_text = CPD_Referrer_Logo::get_referrer_url_for_visitor($visitor);
             }
         }
 
@@ -355,7 +357,6 @@ class CPD_Public {
             'client_logo_url' => $client_logo_url,
         ) );
     }
-
     /**
      * Renders the campaign dashboard via a shortcode.
      */
