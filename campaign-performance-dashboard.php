@@ -107,5 +107,48 @@ function cpd_dashboard_run() {
     $plugin_name = 'cpd-dashboard';
     $version = CPD_DASHBOARD_VERSION;
     $cpd_admin = new CPD_Admin( $plugin_name, $version );
+    
+    // Load and initialize the email handler hooks
+    require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-email-handler.php';
+    
+    // Register the cron hook - THIS IS THE KEY ADDITION
+    add_action( 'cpd_daily_crm_email_event', array( 'CPD_Email_Handler', 'daily_crm_email_cron_callback' ) );
 }
 add_action( 'plugins_loaded', 'cpd_dashboard_run' );
+
+/**
+ * DEBUG FUNCTIONS - Remove these after testing
+ * Visit /wp-admin/?debug_cron=1 to see cron status
+ * Visit /wp-admin/?test_cron=1 to manually trigger cron
+ */
+function debug_cpd_cron() {
+    if ( current_user_can( 'manage_options' ) && isset( $_GET['debug_cron'] ) ) {
+        $next_run = wp_next_scheduled( 'cpd_daily_crm_email_event' );
+        echo '<div style="background: #fff; padding: 20px; margin: 20px; border: 1px solid #ccc;">';
+        echo '<h3>CPD Cron Debug</h3>';
+        echo '<strong>Next scheduled run:</strong> ' . ( $next_run ? date( 'Y-m-d H:i:s', $next_run ) : '<span style="color:red;">NOT SCHEDULED!</span>' ) . '<br>';
+        echo '<strong>Current time:</strong> ' . current_time( 'Y-m-d H:i:s' ) . '<br>';
+        echo '<strong>Scheduled hour setting:</strong> ' . get_option( 'cpd_crm_email_schedule_hour', '09' ) . '<br>';
+        echo '<strong>Notifications enabled:</strong> ' . get_option( 'enable_notifications', 'not_set' ) . '<br>';
+        echo '<strong>Webhook URL:</strong> ' . ( get_option( 'cpd_webhook_url', '' ) ? 'Configured' : '<span style="color:red;">NOT CONFIGURED</span>' ) . '<br>';
+        echo '<strong>API Key:</strong> ' . ( get_option( 'cpd_makecom_api_key', '' ) ? 'Configured' : '<span style="color:red;">NOT CONFIGURED</span>' ) . '<br>';
+        echo '</div>';
+    }
+}
+add_action( 'admin_notices', 'debug_cpd_cron' );
+
+function test_cpd_cron_manual() {
+    if ( current_user_can( 'manage_options' ) && isset( $_GET['test_cron'] ) ) {
+        echo '<div style="background: #fff; padding: 20px; margin: 20px; border: 1px solid #ccc;">';
+        echo '<h3>Manual Cron Test</h3>';
+        echo 'Executing cron callback...<br>';
+        
+        // Load the email handler if not already loaded
+        require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-email-handler.php';
+        CPD_Email_Handler::daily_crm_email_cron_callback();
+        
+        echo '<strong style="color:green;">Cron callback executed!</strong> Check your action logs for results.';
+        echo '</div>';
+    }
+}
+add_action( 'admin_notices', 'test_cpd_cron_manual' );

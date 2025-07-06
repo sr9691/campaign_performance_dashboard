@@ -35,6 +35,7 @@ class CPD_Email_Handler {
                 require_once CPD_DASHBOARD_PLUGIN_DIR . 'admin/class-cpd-admin.php';
             }
             self::$admin_instance = new CPD_Admin( 'cpd-dashboard', CPD_DASHBOARD_VERSION );
+
         }
     }
 
@@ -107,17 +108,17 @@ class CPD_Email_Handler {
 
 
     /**
-     * Schedules the daily CRM email event.
+     * Schedules the hourly CRM email event.
      * This method should be called during plugin activation.
      */
     public static function schedule_daily_crm_email() {
         if ( ! wp_next_scheduled( 'cpd_daily_crm_email_event' ) ) {
-            wp_schedule_event( time(), 'daily', 'cpd_daily_crm_email_event' );
+            wp_schedule_event( time(), 'hourly', 'cpd_daily_crm_email_event' );
         }
     }
 
     /**
-     * Unchedules the daily CRM email event.
+     * Unchedules the hourly CRM email event.
      * This method should be called during plugin deactivation.
      */
     public static function unschedule_daily_crm_email() {
@@ -130,6 +131,14 @@ class CPD_Email_Handler {
      */
     public static function daily_crm_email_cron_callback() {
         self::initialize();
+        
+        // CHECK EMAIL NOTIFICATIONS SETTING FOR CRON ONLY
+        $email_notifications_enabled = get_option( 'enable_notifications', 'no' );
+        if ( $email_notifications_enabled !== 'yes' ) {
+            self::log_action( 0, 'CRON_DISABLED', 'Daily CRM webhook cron skipped: Email notifications are disabled.' );
+            return;
+        }
+        
         $scheduled_time = get_option( 'cpd_crm_email_schedule_hour', '09' ); // Default 9 AM
         $current_hour = (int) current_time( 'H' );
 
@@ -263,7 +272,7 @@ class CPD_Email_Handler {
 
 
 
-/**
+    /**
      * Sends CRM data to Make.com webhook instead of email.
      * This is the new webhook-based approach.
      *
