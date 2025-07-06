@@ -51,11 +51,14 @@ class CPD_Admin {
         add_action( 'wp_ajax_nopriv_cpd_ajax_add_client', array( $this, 'ajax_handle_add_client' ) ); 
         add_action( 'wp_ajax_cpd_ajax_edit_client', array( $this, 'ajax_handle_edit_client' ) );
         add_action( 'wp_ajax_cpd_ajax_delete_client', array( $this, 'ajax_handle_delete_client' ) );
+        add_action( 'wp_ajax_cpd_get_clients', array( $this, 'ajax_get_clients' ) );
         add_action( 'wp_ajax_cpd_ajax_add_user', array( $this, 'ajax_handle_add_user' ) );
         add_action( 'wp_ajax_nopriv_cpd_ajax_add_user', array( $this, 'ajax_handle_add_user' ) ); 
         add_action( 'wp_ajax_cpd_ajax_edit_user', array( $this, 'ajax_handle_edit_user' ) );
         add_action( 'wp_ajax_cpd_ajax_delete_user', array( $this, 'ajax_handle_delete_user' ) );
+        add_action( 'wp_ajax_cpd_get_users', array( $this, 'ajax_get_users' ) );
         add_action( 'wp_ajax_cpd_get_client_list', array( $this, 'ajax_get_client_list' ) );
+
         // NEW: AJAX for API token generation
         add_action( 'wp_ajax_cpd_generate_api_token', array( $this, 'ajax_generate_api_token' ) );
 
@@ -72,32 +75,64 @@ class CPD_Admin {
 
         // Add admin menus
         add_action( 'admin_menu', array( $this, 'add_plugin_admin_menu' ) );
-
-        // Register settings (This line should be commented out or removed if you're not using the WP Settings API)
-        // add_action( 'admin_init', array( $this, 'register_settings' ) );
-
-        // Add the new setting for Report Problem Email (already there)
-        // register_setting( 'cpd-dashboard-settings-group', 'cpd_report_problem_email', 'sanitize_email' ); 
-        
+       
         // Handle dashboard redirect
         add_action( 'admin_init', array( $this, 'handle_dashboard_redirect' ) );
         
-        // Add action to show current screen info
-        // add_action( 'admin_notices', array( $this, 'debug_screen_info' ) );
-
         // Hook for scheduling daily CRM emails
         add_action( 'cpd_daily_crm_email_event', array( 'CPD_Email_Handler', 'daily_crm_email_cron_callback' ) );
 
     }
 
     /**
-     * DEBUG: Show current screen information
+     * AJAX handler to get all clients for table refresh
      */
-    public function debug_screen_info() {
-        if ( isset( $_GET['cpd_debug'] ) ) {
-            $screen = get_current_screen();
-            echo '<div class="notice notice-info"><p><strong>Debug Info:</strong> Screen ID: ' . esc_html( $screen->id ) . ' | Page: ' . esc_html( $_GET['page'] ?? 'none' ) . '</p></div>';
+    public function ajax_get_clients() {
+        if ( ! current_user_can( 'manage_options' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => 'Security check failed.' ) );
         }
+        
+        $clients = $this->data_provider->get_all_client_accounts();
+        
+        wp_send_json_success( array( 'clients' => $clients ) );
+    }
+
+    /**
+     * AJAX handler to get all users for table refresh
+     */
+    public function ajax_get_users() {
+        if ( ! current_user_can( 'manage_options' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => 'Security check failed.' ) );
+        }
+        
+        $all_users = get_users( array( 'role__in' => array( 'administrator', 'client' ) ) );
+        $current_user_id = get_current_user_id();
+        
+        // Prepare user data with linked client information
+        $formatted_users = array();
+        foreach ( $all_users as $user ) {
+            $user_client_account_id = $this->data_provider->get_account_id_by_user_id( $user->ID );
+            $linked_client_name = 'N/A';
+            
+            if ( $user_client_account_id ) {
+                $linked_client_obj = $this->data_provider->get_client_by_account_id( $user_client_account_id );
+                if ( $linked_client_obj ) {
+                    $linked_client_name = $linked_client_obj->client_name;
+                }
+            }
+            
+            $formatted_users[] = array(
+                'ID' => $user->ID,
+                'user_login' => $user->user_login,
+                'user_email' => $user->user_email,
+                'roles' => $user->roles,
+                'client_account_id' => $user_client_account_id,
+                'linked_client_name' => $linked_client_name,
+                'can_delete' => ( $user->ID !== $current_user_id ) // Prevent deleting current user
+            );
+        }
+        
+        wp_send_json_success( array( 'users' => $formatted_users ) );
     }
 
     /**

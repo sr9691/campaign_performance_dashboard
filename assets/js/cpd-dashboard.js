@@ -10,7 +10,6 @@ jQuery(document).ready(function($) {
     const localizedPublicData = typeof cpd_dashboard_data !== 'undefined' ? cpd_dashboard_data : {};
     const adminAjaxData = typeof cpd_admin_ajax !== 'undefined' ? cpd_admin_ajax : {};
 
-
     const elementsToHide = [
         '#adminmenumain',
         '#adminmenuwrap',
@@ -60,6 +59,120 @@ jQuery(document).ready(function($) {
     const dashboardContent = $('#clients-section'); // Main dashboard content container (admin-only HTML)
     const clientList = $('.account-list'); // Left sidebar client list (admin-only HTML)
     const dateRangeSelect = $('.duration-select select'); // Date range selector (exists on both)
+
+    // NEW: Function to refresh client table
+    function refreshClientTable() {
+        console.log('cpd-dashboard.js: Refreshing client table...');
+        
+        $.ajax({
+            url: cpd_admin_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'cpd_get_clients',
+                nonce: cpd_admin_ajax.nonce
+            },
+            success: function(response) {
+                if (response.success && response.data.clients) {
+                    const clientTableBody = $('#clients-section .data-table tbody');
+                    clientTableBody.empty();
+                    
+                    if (response.data.clients.length > 0) {
+                        response.data.clients.forEach(client => {
+                            const logoHtml = client.logo_url ? 
+                                `<img src="${client.logo_url}" alt="Logo" class="client-logo-thumbnail">` : 
+                                '<span class="no-logo">N/A</span>';
+                            
+                            const webpageHtml = client.webpage_url ? 
+                                `<a href="${client.webpage_url}" target="_blank" rel="noopener">${client.webpage_url}</a>` : 
+                                '<span class="no-url">N/A</span>';
+
+                            clientTableBody.append(`
+                                <tr data-client-id="${client.id}"
+                                    data-client-name="${client.client_name}"
+                                    data-account-id="${client.account_id}"
+                                    data-logo-url="${client.logo_url || ''}"
+                                    data-webpage-url="${client.webpage_url || ''}"
+                                    data-crm-email="${client.crm_feed_email || ''}">
+                                    <td>${client.client_name}</td>
+                                    <td>${client.account_id}</td>
+                                    <td>${logoHtml}</td>
+                                    <td>${webpageHtml}</td>
+                                    <td>${client.crm_feed_email || ''}</td>
+                                    <td class="actions-cell">
+                                        <button class="action-button edit-client" title="Edit Client">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="action-button delete-client" data-client-id="${client.id}" title="Delete Client">
+                                            <i class="fas fa-trash-alt"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `);
+                        });
+                    } else {
+                        clientTableBody.append('<tr><td colspan="6" class="no-data">No clients found.</td></tr>');
+                    }
+                }
+            },
+            error: function() {
+                console.error('Failed to refresh client table');
+            }
+        });
+    }
+
+    // NEW: Function to refresh user table
+    function refreshUserTable() {
+        console.log('cpd-dashboard.js: Refreshing user table...');
+        
+        $.ajax({
+            url: cpd_admin_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'cpd_get_users',
+                nonce: cpd_admin_ajax.nonce
+            },
+            success: function(response) {
+                if (response.success && response.data.users) {
+                    const userTableBody = $('#users-section .data-table tbody');
+                    userTableBody.empty();
+                    
+                    if (response.data.users.length > 0) {
+                        response.data.users.forEach(user => {
+                            const linkedClientName = user.linked_client_name || 'N/A';
+                            const deleteButton = user.can_delete ? 
+                                `<button class="action-button delete-user" data-user-id="${user.ID}" title="Delete User">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>` : '';
+
+                            userTableBody.append(`
+                                <tr data-user-id="${user.ID}"
+                                    data-username="${user.user_login}"
+                                    data-email="${user.user_email}"
+                                    data-role="${user.roles.join(', ')}"
+                                    data-client-account-id="${user.client_account_id || ''}">
+                                    <td>${user.user_login}</td>
+                                    <td>${user.user_email}</td>
+                                    <td>${user.roles.join(', ')}</td>
+                                    <td>${linkedClientName}</td>
+                                    <td class="actions-cell">
+                                        <button class="action-button edit-user" title="Edit User">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        ${deleteButton}
+                                    </td>
+                                </tr>
+                            `);
+                        });
+                    } else {
+                        userTableBody.append('<tr><td colspan="5" class="no-data">No users found.</td></tr>');
+                    }
+                }
+            },
+            error: function() {
+                console.error('Failed to refresh user table');
+            }
+        });
+    }
  
     /**
      * Renders or updates the Impressions Line Chart.
@@ -160,7 +273,6 @@ jQuery(document).ready(function($) {
              return;
         }
 
-
         const labels = filteredData.map(item => item.ad_group_name);
         const impressions = filteredData.map(item => item.impressions);
         
@@ -256,7 +368,7 @@ jQuery(document).ready(function($) {
 
     // Function to load dashboard data via AJAX
     function loadDashboardData(clientId, duration) {
-        console.log('ADMIN oadDashboardData: Called with Client ID:', clientId, 'Duration:', duration);
+        console.log('ADMIN loadDashboardData: Called with Client ID:', clientId, 'Duration:', duration);
         if(dashboardContent.length === 0) { // Defensive check
             console.warn("Dashboard content container (#clients-section) not found. Cannot load dashboard data.");
             return;
@@ -326,7 +438,11 @@ jQuery(document).ready(function($) {
                         visitorListContainer.empty();
                         if (data.visitor_data && data.visitor_data.length > 0) {
                             data.visitor_data.forEach(visitor => {
-                                const memoSealUrl = localizedPublicData.memo_seal_url || adminAjaxData.memo_seal_url; 
+                                // Use the new properties from AJAX response for alt text and tooltips
+                                const visitorLogoUrl = visitor.logo_url || visitor.referrer_logo_url || localizedPublicData.memo_seal_url || adminAjaxData.memo_seal_url;
+                                const visitorAltText = visitor.alt_text || visitor.referrer_alt_text || 'Visitor Logo';
+                                const visitorTooltipText = visitor.tooltip_text || visitor.referrer_tooltip || 'No referrer information';
+                                
                                 const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
                                 const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
                                 const email = visitor.email || '';
@@ -334,7 +450,9 @@ jQuery(document).ready(function($) {
                                 visitorListContainer.append(`
                                     <div class="visitor-card" data-visitor-id="${visitor.visitor_id}">
                                         <div class="visitor-logo">
-                                            <img src="${memoSealUrl}" alt="Referrer Logo">
+                                            <img src="${visitorLogoUrl}" 
+                                                 alt="${visitorAltText}" 
+                                                 title="${visitorTooltipText}">
                                         </div>
                                         <div class="visitor-details">
                                             <p class="visitor-name">${fullName.trim() || 'Unknown Visitor'}</p>
@@ -506,8 +624,6 @@ jQuery(document).ready(function($) {
             }, 100); // 100ms delay. Adjust if needed, but start here.
         }); // End window.onload for navigation
             
-
-
         const visitorPanel = $('.visitor-panel');
         console.log('cpd-dashboard.js: Visitor Panel element found (jQuery):', visitorPanel.length > 0 ? 'Yes' : 'No', visitorPanel);
 
@@ -588,7 +704,6 @@ jQuery(document).ready(function($) {
             });
         }
 
-
         dateRangeSelect.on('change', function() {
             console.log('cpd-dashboard.js: Date range dropdown changed!');
             const activeClientListItem = clientList.find('li.active');
@@ -614,7 +729,8 @@ jQuery(document).ready(function($) {
                     if (response.success) {
                         alert('Client added successfully!');
                         form[0].reset();
-                        // Optionally, reload client list if visible
+                        // NEW: Refresh the client table
+                        refreshClientTable();
                     } else {
                         alert('Error: ' + response.data.message);
                     }
@@ -645,7 +761,8 @@ jQuery(document).ready(function($) {
                     if (response.success) {
                         alert('User added successfully!');
                         form[0].reset();
-                        // Optionally, reload user list if visible
+                        // NEW: Refresh the user table
+                        refreshUserTable();
                     } else {
                         alert('Error: ' + response.data.message);
                     }
@@ -676,10 +793,9 @@ jQuery(document).ready(function($) {
                     },
                     success: function(response) {
                         if (response.success) {
-                            row.fadeOut(300, function() {
-                                $(this).remove();
-                                alert('Client deleted successfully!');
-                            });
+                            alert('Client deleted successfully!');
+                            // NEW: Refresh the client table instead of just removing the row
+                            refreshClientTable();
                         } else {
                             alert('Error: ' + response.data.message);
                         }
@@ -695,7 +811,7 @@ jQuery(document).ready(function($) {
             event.preventDefault();
             console.log('cpd-dashboard.js: Delete User button clicked!');
             const row = $(this).closest('tr');
-            const userId = $(this).data('user-id');
+            const userId = row.data('user-id');
             
             if (confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
                 $.ajax({
@@ -708,10 +824,9 @@ jQuery(document).ready(function($) {
                     },
                     success: function(response) {
                         if (response.success) {
-                            row.fadeOut(300, function() {
-                                $(this).remove();
-                                alert('User deleted successfully!');
-                            });
+                            alert('User deleted successfully!');
+                            // NEW: Refresh the user table instead of just removing the row
+                            refreshUserTable();
                         } else {
                             alert('Error: ' + response.data.message);
                         }
@@ -764,6 +879,8 @@ jQuery(document).ready(function($) {
                     if (response.success) {
                         alert('Client updated successfully!');
                         editClientModal.fadeOut();
+                        // NEW: Refresh the client table
+                        refreshClientTable();
                     } else {
                         alert('Error: ' + response.data.message);
                     }
@@ -795,7 +912,7 @@ jQuery(document).ready(function($) {
         $('#users-section .data-table').on('click', '.action-button.edit-user', function() {
             console.log('cpd-dashboard.js: Edit User button clicked!');
             const row = $(this).closest('tr');
-            const userId = $(this).data('user-id');
+            const userId = row.data('user-id');
             const username = row.data('username');
             const email = row.data('email');
             const role = row.data('role');
@@ -827,6 +944,8 @@ jQuery(document).ready(function($) {
                     if (response.success) {
                         alert('User updated successfully!');
                         editUserModal.fadeOut();
+                        // NEW: Refresh the user table
+                        refreshUserTable();
                     } else {
                         alert('Error: ' + response.data.message);
                     }
@@ -858,7 +977,6 @@ jQuery(document).ready(function($) {
                 });
             });
         }
-
 
         // NEW: API Key Generation Logic
         $('#generate_api_key_button').on('click', function(event) {
@@ -900,7 +1018,7 @@ jQuery(document).ready(function($) {
         const triggerOnDemandSendButton = $('#trigger_on_demand_send');
         const eligibleVisitorsTableBody = $('#eligible-visitors-table tbody');
 
-function loadEligibleVisitors() {
+        function loadEligibleVisitors() {
             eligibleVisitorsTableBody.html('<tr><td colspan="10" class="no-data">Loading eligible visitors...</td></tr>');
             const clientId = crmClientFilter.val();
             
@@ -960,15 +1078,13 @@ function loadEligibleVisitors() {
             }
         }
         
-        
-                // Event handlers
+        // Event handlers
         crmClientFilter.on('change', function() {
             loadEligibleVisitors();
             updateButtonState();
         });
 
-
-                // Initialize button state
+        // Initialize button state
         updateButtonState();
 
         triggerOnDemandSendButton.on('click', function() {
