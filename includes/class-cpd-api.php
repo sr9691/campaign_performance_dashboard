@@ -315,7 +315,7 @@ class CPD_API {
 
         $log_description = 'API Campaign Data Import. Status: ' . $import_status . '. Total rows deleted: ' . $rows_deleted . '. Total rows processed: ' . $campaign_rows_processed . '.';
         if ( ! empty( $import_messages ) ) {
-            $log_description .= ' Messages: ' . implode('; ', $import_messages);
+            // $log_description .= ' Messages: ' . implode('; ', $import_messages);
         }
         $this->log_api_action( 0, 'API_CAMPAIGN_IMPORT', $log_description );
 
@@ -444,7 +444,7 @@ class CPD_API {
 
         $log_description = 'API Visitor Data Import. Status: ' . $import_status . '. Rows processed: ' . $visitor_rows_processed . '.';
         if ( ! empty( $import_messages ) ) {
-            $log_description .= ' Messages: ' . implode('; ', $import_messages);
+            // $log_description .= ' Messages: ' . implode('; ', $import_messages);
         }
         $this->log_api_action( 0, 'API_VISITOR_IMPORT', $log_description );
 
@@ -455,3 +455,4 @@ class CPD_API {
 
         return new WP_REST_Response( array( 'message' => 'Visitor data import process completed with status: ' . $import_status . '.', 'details' => $import_messages ), $response_status );
     }
+}
