@@ -754,6 +754,18 @@ body.wp-admin .admin-page-container .action-group p {
     padding: 15px !important;
     border: 1px solid var(--line-color) !important;
     border-radius: var(--border-radius) !important;
+    margin-top: 20px !important;
+    
+}
+
+.direct-logo-checkbox input[type="checkbox"] {
+    width: 18px !important;
+    height: 18px !important;
+    margin: 0 !important;
+    margin-right: 10px !important;
+    vertical-align: middle !important;
+    flex-shrink: 0 !important;
+    cursor: pointer !important;
 }
 
 .direct-logo-checkbox label {
@@ -763,11 +775,8 @@ body.wp-admin .admin-page-container .action-group p {
     margin-bottom: 5px !important;
     font-weight: 600 !important;
     color: var(--text-color-dark) !important;
-}
-
-.direct-logo-checkbox input[type="checkbox"] {
-    width: auto !important;
-    margin: 0 !important;
+    cursor: pointer !important;
+    line-height: 1.4 !important;
 }
 
 /* ========================================

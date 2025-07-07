@@ -138,12 +138,12 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                             <?php if ( ! empty( $all_clients ) ) : ?>
                                 <?php foreach ( $all_clients as $client ) : ?>
                                     <tr data-client-id="<?php echo esc_attr( $client->id ); ?>"
-                                        data-client-name="<?php echo esc_attr( $client->client_name ); ?>"
+                                        data-client-name="<?php echo esc_attr( wp_unslash( $client->client_name ) ); ?>"
                                         data-account-id="<?php echo esc_attr( $client->account_id ); ?>"
                                         data-logo-url="<?php echo esc_url( $client->logo_url ); ?>"
                                         data-webpage-url="<?php echo esc_url( $client->webpage_url ); ?>"
                                         data-crm-email="<?php echo esc_attr( $client->crm_feed_email ); ?>">
-                                        <td><?php echo esc_html( $client->client_name ); ?></td>
+                                        <td><?php echo esc_html( wp_unslash( $client->client_name ) ); ?></td>
                                         <td><?php echo esc_html( $client->account_id ); ?></td>
                                         <td>
                                             <?php if ( ! empty( $client->logo_url ) ) : ?>
@@ -401,7 +401,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         
                         <button type="button" id="add-referrer-mapping" class="button button-secondary">Add New Mapping</button>
                         
-                        <div class="form-group direct-logo-checkbox" style="margin-top: 20px;">
+                        <div class="form-group direct-logo-checkbox" style="margin-top: 20px;" style="display:none;">
                             <label>
                                 <input type="checkbox" name="cpd_show_direct_logo" value="1" <?php checked( get_option('cpd_show_direct_logo', 1), 1 ); ?>>
                                 Show "DIRECT" logo for visitors with no referrer

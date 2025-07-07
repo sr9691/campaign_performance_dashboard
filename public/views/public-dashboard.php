@@ -43,7 +43,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                 <?php foreach ($all_clients as $client) : ?>
                     <li class="account-list-item <?php echo ( $passed_selected_client_id_from_url === $client->account_id ) ? 'active' : ''; ?>"
                         data-client-id="<?php echo esc_attr($client->account_id); ?>">
-                        <?php echo esc_html($client->client_name); ?>
+                        <?php echo esc_html( wp_unslash( $client->client_name ) ); ?>
                     </li>
                 <?php endforeach; ?>
             <?php else : ?>

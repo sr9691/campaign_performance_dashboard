@@ -256,18 +256,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (responseData.success) {
                 const data = responseData.data;
+                const clientLogoImg = document.querySelector('.dashboard-header .client-logo-container img');
 
                 // Update Client Logo in Header (Only applicable if a specific client is selected)
                 if (actualClientIdForAjax !== null && data.client_logo_url) {
-                    const clientLogoImg = document.querySelector('.dashboard-header .client-logo-container img');
                     if (clientLogoImg) {
                         clientLogoImg.src = data.client_logo_url;
                     }
                 } else if (actualClientIdForAjax === null) {
                     // If "All Clients" is selected, revert to default logo
-                    const clientLogoImg = document.querySelector('.dashboard-header .client-logo-container img');
                     if (clientLogoImg) {
-                        clientLogoImg.src = localizedData.memo_seal_url; // Or a generic "all clients" logo
+                        clientLogoImg.src = localizedData.memo_logo_url; // Or a generic "all clients" logo
                     }
                 }
 
