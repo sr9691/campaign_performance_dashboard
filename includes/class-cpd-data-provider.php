@@ -274,7 +274,7 @@ class CPD_Data_Provider {
         $account_id = $this->normalize_account_id( $account_id );
         $table_name = 'dashdev_cpd_campaign_data'; // Your campaign data table
 
-        $sql = "SELECT MIN(date) AS min_date, MAX(date) AS max_date FROM %i";
+        $sql = "SELECT MIN(campaign_start_date) AS min_date, MAX(campaign_end_date) AS max_date FROM %i";
         $prepare_args = [$table_name];
 
         if ( $account_id !== null ) {
@@ -320,22 +320,35 @@ class CPD_Data_Provider {
         // error_log('CPD_Data_Provider::get_summary_metrics - Account ID: ' . ($account_id ?? 'NULL'));
         // error_log('SQL Query for summary campaign metrics: ' . $this->wpdb->prepare( $campaign_metrics_sql, ...$campaign_metrics_prepare_args ) );
 
-        // Visitor metrics query construction
-        $visitor_metrics_sql = "SELECT SUM(new_profile) as new_contacts, SUM(CASE WHEN is_crm_added = 1 THEN 1 ELSE 0 END) as crm_additions_count FROM %i WHERE last_seen_at BETWEEN %s AND %s";
-        $visitor_metrics_prepare_args = [$visitor_table, $start_date, $end_date];
+        // Visitor metrics query construction - separate queries for different date requirements
+        // Query for new_contacts (with date range)
+        $new_contacts_sql = "SELECT SUM(new_profile) as new_contacts FROM %i WHERE last_seen_at BETWEEN %s AND %s";
+        $new_contacts_prepare_args = [$visitor_table, $start_date, $end_date];
         if ( $account_id !== null ) { // Check for normalized null
-            $visitor_metrics_sql .= " AND account_id = %s";
-            $visitor_metrics_prepare_args[] = $account_id;
+            $new_contacts_sql .= " AND account_id = %s";
+            $new_contacts_prepare_args[] = $account_id;
         }
-        $contact_counts = $this->wpdb->get_row( $this->wpdb->prepare( $visitor_metrics_sql, ...$visitor_metrics_prepare_args ) );
         
-        // error_log('SQL Query for summary contact counts: ' . $this->wpdb->prepare( $visitor_metrics_sql, ...$visitor_metrics_prepare_args ) );
-
+        // Query for crm_additions (without date range - all dates)
+        $crm_additions_sql = "SELECT SUM(CASE WHEN is_crm_added = 1 THEN 1 ELSE 0 END) as crm_additions_count FROM %i WHERE 1=1";
+        $crm_additions_prepare_args = [$visitor_table];
+        if ( $account_id !== null ) { // Check for normalized null
+            $crm_additions_sql .= " AND account_id = %s";
+            $crm_additions_prepare_args[] = $account_id;
+        }
+        
+        // Execute both queries
+        $new_contacts_result = $this->wpdb->get_row( $this->wpdb->prepare( $new_contacts_sql, ...$new_contacts_prepare_args ) );
+        $crm_additions_result = $this->wpdb->get_row( $this->wpdb->prepare( $crm_additions_sql, ...$crm_additions_prepare_args ) );
+        
+        // error_log('SQL Query for new contacts: ' . $this->wpdb->prepare( $new_contacts_sql, ...$new_contacts_prepare_args ) );
+        // error_log('SQL Query for crm additions: ' . $this->wpdb->prepare( $crm_additions_sql, ...$crm_additions_prepare_args ) );
+        
         $total_clicks = isset($metrics->total_clicks) ? $metrics->total_clicks : 0;
         $total_impressions = isset($metrics->total_impressions) ? $metrics->total_impressions : 0;
         $total_reach = isset($metrics->total_reach) ? $metrics->total_reach : 0;
-        $new_contacts = isset($contact_counts->new_contacts) ? $contact_counts->new_contacts : 0;
-        $crm_additions = isset($contact_counts->crm_additions_count) ? $contact_counts->crm_additions_count : 0;
+        $new_contacts = isset($new_contacts_result->new_contacts) ? $new_contacts_result->new_contacts : 0;
+        $crm_additions = isset($crm_additions_result->crm_additions_count) ? $crm_additions_result->crm_additions_count : 0;
 
         $ctr = ($total_impressions > 0) ? ($total_clicks / $total_impressions) * 100 : 0;
 
