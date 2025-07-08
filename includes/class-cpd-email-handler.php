@@ -361,39 +361,48 @@ class CPD_Email_Handler {
             );
 
             foreach ( $visitors_data as $visitor ) {
-                // Add to companies array
-                $webhook_payload['companies'][] = array(
-                    'company_name' => $visitor['company_name'] ?? '',
-                    'estimated_employee_count' => $visitor['estimated_employee_count'] ?? '',
-                    'estimated_revenue' => $visitor['estimated_revenue'] ?? '',
-                    'industry' => $visitor['industry'] ?? '',
-                    'website' => $visitor['website'] ?? '',
-                    'city' => $visitor['city'] ?? '',
-                    'state' => $visitor['state'] ?? '',
-                    'zipcode' => $visitor['zipcode'] ?? ''
-                );
+                // Check if visitor has first name OR last name for individuals array
+                $has_name = !empty($visitor['first_name']) || !empty($visitor['last_name']);
                 
-                // Add to individuals array
-                $webhook_payload['individuals'][] = array(
-                    'first_name' => $visitor['first_name'] ?? '',
-                    'last_name' => $visitor['last_name'] ?? '',
-                    'email' => $visitor['email'] ?? '',
-                    'job_title' => $visitor['job_title'] ?? '',
-                    'linkedin_url' => $visitor['linkedin_url'] ?? '',
-                    'city' => $visitor['city'] ?? '',
-                    'state' => $visitor['state'] ?? '',
-                    'zipcode' => $visitor['zipcode'] ?? '',
-                    'most_recent_referrer' => $visitor['most_recent_referrer'] ?? '',
-                    'recent_page_count' => $visitor['recent_page_count'] ?? 0,
-                    'recent_page_urls' => $visitor['recent_page_urls'] ?? '',
-                    'all_time_page_views' => $visitor['all_time_page_views'] ?? 0,
-                    'first_seen_at' => $visitor['first_seen_at'] ?? '',
-                    'last_seen_at' => $visitor['last_seen_at'] ?? '',
-                    'tags' => $visitor['tags'] ?? '',
-                    'filter_matches' => $visitor['filter_matches'] ?? ''
-                );
+                // Check if visitor has company name for companies array
+                $has_company = !empty($visitor['company_name']);
+                
+                // Add to companies array only if visitor has company name
+                if ($has_company) {
+                    $webhook_payload['companies'][] = array(
+                        'company_name' => $visitor['company_name'] ?? '',
+                        'estimated_employee_count' => $visitor['estimated_employee_count'] ?? '',
+                        'estimated_revenue' => $visitor['estimated_revenue'] ?? '',
+                        'industry' => $visitor['industry'] ?? '',
+                        'website' => $visitor['website'] ?? '',
+                        'city' => $visitor['city'] ?? '',
+                        'state' => $visitor['state'] ?? '',
+                        'zipcode' => $visitor['zipcode'] ?? ''
+                    );
+                }
+                
+                // Add to individuals array only if visitor has first name OR last name
+                if ($has_name) {
+                    $webhook_payload['individuals'][] = array(
+                        'first_name' => $visitor['first_name'] ?? '',
+                        'last_name' => $visitor['last_name'] ?? '',
+                        'email' => $visitor['email'] ?? '',
+                        'job_title' => $visitor['job_title'] ?? '',
+                        'linkedin_url' => $visitor['linkedin_url'] ?? '',
+                        'city' => $visitor['city'] ?? '',
+                        'state' => $visitor['state'] ?? '',
+                        'zipcode' => $visitor['zipcode'] ?? '',
+                        'most_recent_referrer' => $visitor['most_recent_referrer'] ?? '',
+                        'recent_page_count' => $visitor['recent_page_count'] ?? 0,
+                        'recent_page_urls' => $visitor['recent_page_urls'] ?? '',
+                        'all_time_page_views' => $visitor['all_time_page_views'] ?? 0,
+                        'first_seen_at' => $visitor['first_seen_at'] ?? '',
+                        'last_seen_at' => $visitor['last_seen_at'] ?? '',
+                        'tags' => $visitor['tags'] ?? '',
+                        'filter_matches' => $visitor['filter_matches'] ?? ''
+                    );
+                }
             }
-
             // Send webhook request
             $headers = array(
                 'Content-Type' => 'application/json',
