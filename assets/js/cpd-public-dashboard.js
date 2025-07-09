@@ -318,8 +318,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             
                             const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
                             const companyName = visitor.company_name || 'Unknown Company';
-                            const jobTitle = visitor.job_title || 'Unknown Title';
-                            const email = visitor.email || 'Unknown Email';
+                            const jobTitle = visitor.title || 'Unknown Title';
+                            const email = visitor.work_email || 'Unknown Email';
                             const linkedinUrl = visitor.linkedin_url || '#';
                             const hasLinkedIn = visitor.linkedin_url && visitor.linkedin_url.trim() !== '';
                             const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
@@ -328,12 +328,31 @@ document.addEventListener('DOMContentLoaded', () => {
                             const recentPageUrls = visitor.recent_page_urls || [];
                             const safeRecentPageUrlsForAttr = JSON.stringify(recentPageUrls);
 
+                            // Store additional fields in data attributes for the modal
+                            const additionalDataAttrs = {
+                                'data-first-name': visitor.first_name || '',
+                                'data-last-name': visitor.last_name || '',
+                                'data-title': visitor.title || '',
+                                'data-work-email': visitor.work_email || '',
+                                'data-website': visitor.website || '',
+                                'data-industry': visitor.industry || '',
+                                'data-employee-count': visitor.estimated_employee_count || '',
+                                'data-revenue': visitor.estimate_revenue || '',
+                                'data-first-seen': visitor.first_seen_at || '',
+                                'data-page-views': visitor.all_time_page_views || '0'
+                            };
+
+                            const additionalAttrsString = Object.entries(additionalDataAttrs)
+                                .map(([key, value]) => `${key}="${value}"`)
+                                .join(' ');
+
                             visitorListContainer.insertAdjacentHTML('beforeend', `
                                 <div class="visitor-card"
                                     data-visitor-id="${visitor.id}"
                                     data-last-seen-at="${visitor.last_seen_at || 'N/A'}"
                                     data-recent-page-count="${visitor.recent_page_count || '0'}"
-                                    data-recent-page-urls='${safeRecentPageUrlsForAttr}' >
+                                    data-recent-page-urls='${safeRecentPageUrlsForAttr}'
+                                    ${additionalAttrsString} >
                                     <div class="visitor-top-row">
                                         <div class="visitor-logo">
                                             <img src="${visitorLogoUrl}" 
@@ -406,30 +425,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Handle Info icon click
                 if (button.classList.contains('info-icon')) {
+                    // Get all visitor data from data attributes and displayed content
+                    const firstName = visitorCard.dataset.firstName || '';
+                    const lastName = visitorCard.dataset.lastName || '';
+                    const title = visitorCard.dataset.title || 'N/A';
+                    const workEmail = visitorCard.dataset.workEmail || 'N/A';
+                    const website = visitorCard.dataset.website || '';
+                    const industry = visitorCard.dataset.industry || 'N/A';
+                    const employeeCount = visitorCard.dataset.employeeCount || 'N/A';
+                    const revenue = visitorCard.dataset.revenue || 'N/A';
+                    const firstSeen = visitorCard.dataset.firstSeen || 'N/A';
+                    const pageViews = visitorCard.dataset.pageViews || '0';
                     const lastSeenAt = visitorCard.dataset.lastSeenAt || 'N/A';
                     const recentPageCount = visitorCard.dataset.recentPageCount || '0';
                     
+                    // Get company and location from displayed content
+                    const visitorCompanyElement = visitorCard.querySelector('.visitor-company-main');
+                    const company = visitorCompanyElement ? visitorCompanyElement.textContent.trim() : 'Unknown Company';
+                    
+                    // Extract location from the displayed details
+                    let location = 'N/A';
+                    const visitorDetailsElements = visitorCard.querySelectorAll('.visitor-details-body p');
+                    visitorDetailsElements.forEach(p => {
+                        const icon = p.querySelector('i');
+                        if (icon && icon.classList.contains('fa-map-marker-alt')) {
+                            location = p.textContent.replace(/.*?\s+/, '').trim();
+                        }
+                    });
+                    
+                    // Determine if visitor has a name
+                    const fullName = [firstName, lastName].filter(Boolean).join(' ');
+                    const hasName = fullName.trim() !== '';
+                    
+                    // Get recent page URLs from data attribute
                     let recentPageUrls = [];
-                    // Get the recent page URLs from the data attribute
                     const recentPageUrlsStringFromAttr = visitorCard.dataset.recentPageUrls; 
                     
-                    // Parse the JSON string from the data attribute
                     if (recentPageUrlsStringFromAttr && recentPageUrlsStringFromAttr !== 'None' && recentPageUrlsStringFromAttr.trim() !== '') {
                         try {
                             const parsedUrls = JSON.parse(recentPageUrlsStringFromAttr);
-                            
-                            // Use duck typing instead of Array.isArray() which seems to be failing
                             if (parsedUrls && typeof parsedUrls === 'object' && parsedUrls.length !== undefined) {
-                                // Convert to proper array and filter
                                 recentPageUrls = Array.from(parsedUrls).filter(url => url && url.trim() !== '');
                             } else if (typeof parsedUrls === 'string') {
-                                // Single URL string
                                 recentPageUrls = [parsedUrls];
                             }
                         } catch (e) {
                             console.error('JSON Parse Error:', e);
-                            
-                            // Fallback: extract URLs using regex
                             if (recentPageUrlsStringFromAttr.includes('http')) {
                                 const urlMatches = recentPageUrlsStringFromAttr.match(/https?:\/\/[^\s"',\]]+/g);
                                 if (urlMatches) {
@@ -438,49 +479,133 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         }
                     }
-
-                    document.getElementById('modal-last-seen-at').textContent = lastSeenAt;
-                    document.getElementById('modal-recent-page-count').textContent = recentPageCount;
-
-                    const pageUrlsList = document.getElementById('modal-recent-page-urls');
-                    pageUrlsList.innerHTML = ''; // Clear previous URLs
                     
-                    if (recentPageUrls.length > 0) {
-                        recentPageUrls.forEach((url, index) => {
-                            // Ensure url is a string and clean it up
-                            let cleanUrl = String(url).trim();
-                            
-                            // Remove any remaining brackets or quotes that might be attached
-                            cleanUrl = cleanUrl.replace(/^[\[\"]|[\]\"]$/g, '');
-                            
-                            const li = document.createElement('li');
-                            const a = document.createElement('a');
-                            a.href = cleanUrl;
-                            a.textContent = cleanUrl;
-                            a.target = '_blank';
-                            li.appendChild(a);
-                            pageUrlsList.appendChild(li);
-                        });
-                        document.getElementById('modal-recent-page-urls-container').style.display = 'block';
-                    } else if (recentPageCount > 0) {
-                        // We have a count but no URLs - likely a data issue
-                        const li = document.createElement('li');
-                        li.textContent = `Data issue: ${recentPageCount} pages recorded but URLs not available`;
-                        li.style.color = '#ff6b6b';
-                        li.style.fontStyle = 'italic';
-                        pageUrlsList.appendChild(li);
-                        document.getElementById('modal-recent-page-urls-container').style.display = 'block';
-                    } else {
-                        // If no URLs and no count, display a "No recent pages" message
-                        const li = document.createElement('li');
-                        li.textContent = 'No recent pages.';
-                        pageUrlsList.appendChild(li);
-                        document.getElementById('modal-recent-page-urls-container').style.display = 'block';
-                    }
-
+                    // Build the new modal HTML with simplified structure (no action buttons, no logo)
+                    const modalHTML = `
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <div class="modal-visitor-info">
+                                    <div class="modal-visitor-name">${hasName ? fullName : company}</div>
+                                    ${hasName ? `<div class="modal-visitor-company">${company}</div>` : '<div class="modal-visitor-company">Company Visit</div>'}
+                                </div>
+                                <span class="close">&times;</span>
+                            </div>
+                            <div class="modal-body">
+                                ${hasName ? `
+                                <div class="visitor-modal-section">
+                                    <h3><i class="fas fa-user"></i> Personal Information</h3>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-id-card"></i>
+                                        <div class="visitor-detail-content"><strong>Name:</strong> ${fullName}</div>
+                                    </div>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-briefcase"></i>
+                                        <div class="visitor-detail-content"><strong>Title:</strong> ${title}</div>
+                                    </div>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-envelope"></i>
+                                        <div class="visitor-detail-content"><strong>Email:</strong> ${workEmail}</div>
+                                    </div>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-map-marker-alt"></i>
+                                        <div class="visitor-detail-content"><strong>Location:</strong> ${location}</div>
+                                    </div>
+                                </div>
+                                ` : ''}
+                                
+                                <div class="visitor-modal-section">
+                                    <h3><i class="fas fa-building"></i> Company Information</h3>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-building"></i>
+                                        <div class="visitor-detail-content"><strong>Company:</strong> ${company}</div>
+                                    </div>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-users"></i>
+                                        <div class="visitor-detail-content"><strong>Employees:</strong> ${employeeCount}</div>
+                                    </div>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-dollar-sign"></i>
+                                        <div class="visitor-detail-content"><strong>Revenue:</strong> ${revenue}</div>
+                                    </div>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-industry"></i>
+                                        <div class="visitor-detail-content"><strong>Industry:</strong> ${industry}</div>
+                                    </div>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-globe"></i>
+                                        <div class="visitor-detail-content">
+                                            <strong>Website:</strong> 
+                                            ${website && website.trim() !== '' ? 
+                                                `<a href="${website.startsWith('http') ? website : 'https://' + website}" target="_blank">${website}</a>` : 
+                                                'N/A'
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="visitor-modal-section">
+                                    <h3><i class="fas fa-clock"></i> Activity Information</h3>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-clock"></i>
+                                        <div class="visitor-detail-content"><strong>Last Seen:</strong> ${lastSeenAt}</div>
+                                    </div>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-calendar"></i>
+                                        <div class="visitor-detail-content"><strong>First Visit:</strong> ${firstSeen}</div>
+                                    </div>
+                                    <div class="visitor-detail-row">
+                                        <i class="fas fa-eye"></i>
+                                        <div class="visitor-detail-content"><strong>Total Page Views:</strong> ${pageViews}</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="recent-pages-section">
+                                    <h3><i class="fas fa-file-alt"></i> Recent Pages Visited</h3>
+                                    <div class="page-count-info">
+                                        <strong>Recent Pages:</strong> ${recentPageCount}
+                                    </div>
+                                    <div class="recent-page-urls-container">
+                                        <ul id="modal-recent-page-urls">
+                                            ${recentPageUrls.length > 0 ? 
+                                                recentPageUrls.map(url => {
+                                                    let cleanUrl = String(url).trim();
+                                                    cleanUrl = cleanUrl.replace(/^[\[\"]|[\]\"]$/g, '');
+                                                    return `<li><a href="${cleanUrl}" target="_blank">${cleanUrl}</a></li>`;
+                                                }).join('') :
+                                                recentPageCount > 0 ? 
+                                                    '<li><div class="no-data-message" style="color: #ff6b6b; font-style: italic;">Data issue: ' + recentPageCount + ' pages recorded but URLs not available</div></li>' :
+                                                    '<li><div class="no-data-message">No recent pages visited</div></li>'
+                                            }
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Update the modal content
                     if (visitorInfoModal) {
-                        visitorInfoModal.style.display = 'flex'; // Use flex to center the modal
+                        visitorInfoModal.innerHTML = modalHTML;
+                        visitorInfoModal.style.display = 'flex';
+                        
+                        // Add event listeners for modal close only
+                        const modalClose = visitorInfoModal.querySelector('.close');
+                        
+                        // Close button handler
+                        if (modalClose) {
+                            modalClose.addEventListener('click', () => {
+                                visitorInfoModal.style.display = 'none';
+                            });
+                        }
+                        
+                        // Close modal if clicked outside
+                        visitorInfoModal.addEventListener('click', (event) => {
+                            if (event.target === visitorInfoModal) {
+                                visitorInfoModal.style.display = 'none';
+                            }
+                        });
                     }
+                    
                     return; // Exit to prevent further processing for this click
                 }
 

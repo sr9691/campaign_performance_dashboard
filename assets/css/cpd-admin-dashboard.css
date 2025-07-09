@@ -110,7 +110,8 @@ body.wp-admin .admin-page-container .admin-sidebar .logo-container {
     text-align: center !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
     flex-shrink: 0 !important;
-    background-color: var(--primary-color) !important;
+    /* background-color: var(--primary-color) !important; */
+    background-color: var(--bg-color) !important;
 }
 
 body.wp-admin .admin-page-container .admin-sidebar .logo-container img {
