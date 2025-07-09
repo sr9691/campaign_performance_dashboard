@@ -311,7 +311,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     visitorListContainer.innerHTML = '';
                     if (data.visitor_data && data.visitor_data.length > 0) {
                         data.visitor_data.forEach(visitor => {
-                            debugger;
                             // Get logo URL, alt text, and tooltip from AJAX response
                             const visitorLogoUrl = visitor.logo_url || visitor.referrer_logo_url || localizedData.memo_seal_url;
                             const visitorAltText = visitor.alt_text || visitor.referrer_alt_text || 'Visitor Logo';
