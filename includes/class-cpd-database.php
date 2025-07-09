@@ -54,7 +54,7 @@ class CPD_Database {
 
         // Table for Campaign Performance Data (GroundTruth).
         // NOTE: This table has been renamed to 'dashdev_cpd_campaign_data' as per user's request.
-        // It's assumed 'dashdev_cpd_' is the full prefix for this specific table, not using $wpdb->prefix here.
+        
         $table_name_campaign_data = 'dashdev_cpd_campaign_data';
         $sql_campaign_data = "CREATE TABLE $table_name_campaign_data (
             id BIGINT(20) NOT NULL AUTO_INCREMENT,
@@ -109,9 +109,9 @@ class CPD_Database {
         $table_name_visitors = $this->wpdb->prefix . 'cpd_visitors';
         $sql_visitors = "CREATE TABLE $table_name_visitors (
             id mediumint(9) NOT NULL AUTO_INCREMENT,
-            visitor_id varchar(255) NULL DEFAULT NULL, -- Changed to NULLABLE to match current DB and API handling
+            visitor_id varchar(255) NULL DEFAULT NULL, 
             account_id varchar(255) NOT NULL,
-            linkedin_url varchar(255) DEFAULT '' NOT NULL, -- Confirmed NOT NULL as per your latest change
+            linkedin_url varchar(255) DEFAULT '' NOT NULL, 
             company_name varchar(255) DEFAULT '' NOT NULL,
             all_time_page_views int(11) DEFAULT 0 NOT NULL,
             first_name varchar(255) DEFAULT '' NOT NULL,
@@ -139,7 +139,6 @@ class CPD_Database {
             crm_sent datetime DEFAULT NULL,
             is_archived tinyint(1) DEFAULT 0 NOT NULL,
             PRIMARY KEY (id),
-            -- Corrected UNIQUE KEY to match the live DB and API logic: (linkedin_url, account_id)
             UNIQUE KEY unique_linkedin_account (linkedin_url, account_id)
         ) $this->charset_collate;";
         dbDelta( $sql_visitors );
