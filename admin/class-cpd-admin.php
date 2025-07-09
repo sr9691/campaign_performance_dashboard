@@ -470,7 +470,15 @@ class CPD_Admin {
      * Fetches all log entries from the database.
      */
     private function get_all_logs() {
-        return $this->wpdb->get_results( "SELECT * FROM {$this->log_table} ORDER BY timestamp DESC LIMIT 500" );
+        // return $this->wpdb->get_results( "SELECT * FROM {$this->log_table} ORDER BY timestamp DESC LIMIT 500" );
+        
+        return $this->wpdb->get_results( 
+                                            "SELECT l.*, u.display_name as user_name 
+                                             FROM {$this->log_table} l 
+                                             LEFT JOIN {$this->wpdb->users} u ON l.user_id = u.ID 
+                                             ORDER BY l.timestamp DESC 
+                                             LIMIT 500" 
+                                        );
     }
 
     /**

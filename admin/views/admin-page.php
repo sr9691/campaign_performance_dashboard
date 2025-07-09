@@ -401,7 +401,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         
                         <button type="button" id="add-referrer-mapping" class="button button-secondary">Add New Mapping</button>
                         
-                        <div class="form-group direct-logo-checkbox" style="margin-top: 20px;" style="display:none;">
+                        <div class="form-group direct-logo-checkbox" style="margin-top: 20px;"  style="display:none;">
                             <label>
                                 <input type="checkbox" name="cpd_show_direct_logo" value="1" <?php checked( get_option('cpd_show_direct_logo', 1), 1 ); ?>>
                                 Show "DIRECT" logo for visitors with no referrer
@@ -492,7 +492,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                     <thead>
                         <tr>
                             <th>Timestamp</th>
-                            <th>User ID</th>
+                            <th>User Name</th>
                             <th>Action Type</th>
                             <th>Description</th>
                         </tr>
@@ -508,7 +508,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                             <?php foreach ( $logs as $log ) : ?>
                                 <tr>
                                     <td><?php echo esc_html( $log->timestamp ); ?></td>
-                                    <td><?php echo esc_html( $log->user_id ); ?></td>
+                                    <td><?php echo esc_html( $log->user_name ); ?></td>
                                     <td><?php echo esc_html( $log->action_type ); ?></td>
                                     <td><?php echo esc_html( $log->description ); ?></td>
                                 </tr>
