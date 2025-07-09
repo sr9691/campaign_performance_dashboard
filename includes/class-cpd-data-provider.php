@@ -238,7 +238,7 @@ class CPD_Data_Provider {
         $account_id = $this->normalize_account_id( $account_id ); // Normalize input
         $table_name = $this->wpdb->prefix . 'cpd_visitors';
         
-        $sql_select_order = "SELECT id, first_name, last_name, company_name, linkedin_url, city, state, zipcode, last_seen_at, recent_page_count, account_id FROM %i WHERE is_crm_added = %d AND crm_sent IS NULL";
+        $sql_select_order = "SELECT id, first_name, last_name, `job_title` as title, `email` as work_email, `estimated_revenue`, company_name, linkedin_url, city, state, zipcode, last_seen_at, recent_page_count, account_id FROM %i WHERE is_crm_added = %d AND crm_sent IS NULL";
         $prepare_args = [$table_name, 1]; // is_crm_added = 1
 
         if ( $account_id !== null ) { // Check for normalized null

@@ -311,6 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     visitorListContainer.innerHTML = '';
                     if (data.visitor_data && data.visitor_data.length > 0) {
                         data.visitor_data.forEach(visitor => {
+                            debugger;
                             // Get logo URL, alt text, and tooltip from AJAX response
                             const visitorLogoUrl = visitor.logo_url || visitor.referrer_logo_url || localizedData.memo_seal_url;
                             const visitorAltText = visitor.alt_text || visitor.referrer_alt_text || 'Visitor Logo';
@@ -318,8 +319,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             
                             const fullName = (visitor.first_name || '') + ' ' + (visitor.last_name || '');
                             const companyName = visitor.company_name || 'Unknown Company';
-                            const jobTitle = visitor.title || 'Unknown Title';
-                            const email = visitor.work_email || 'Unknown Email';
+                            const jobTitle = visitor.job_title || 'Unknown Title';
+                            const email = visitor.email || 'Unknown Email';
                             const linkedinUrl = visitor.linkedin_url || '#';
                             const hasLinkedIn = visitor.linkedin_url && visitor.linkedin_url.trim() !== '';
                             const location = [visitor.city, visitor.state, visitor.zipcode].filter(Boolean).join(', ');
@@ -332,12 +333,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             const additionalDataAttrs = {
                                 'data-first-name': visitor.first_name || '',
                                 'data-last-name': visitor.last_name || '',
-                                'data-title': visitor.title || '',
-                                'data-work-email': visitor.work_email || '',
+                                'data-title': visitor.job_title || '',
+                                'data-work-email': visitor.email || '',
                                 'data-website': visitor.website || '',
                                 'data-industry': visitor.industry || '',
                                 'data-employee-count': visitor.estimated_employee_count || '',
-                                'data-revenue': visitor.estimate_revenue || '',
+                                'data-revenue': visitor.estimated_revenue || '',
                                 'data-first-seen': visitor.first_seen_at || '',
                                 'data-page-views': visitor.all_time_page_views || '0'
                             };
