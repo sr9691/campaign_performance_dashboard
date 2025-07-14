@@ -297,7 +297,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                             <label for="client_dashboard_url">Client Dashboard URL</label>
                             <input type="url" id="client_dashboard_url" name="cpd_client_dashboard_url"
                                    value="<?php echo esc_url( get_option( 'cpd_client_dashboard_url', '' ) ); ?>"
-                                   placeholder="https://memomarketinggroup.com/dashboarddev/wp-admin/admin.php?page=cpd-dashboard">
+                                   placeholder="https://memomarketinggroup.com/directreach/wp-admin/admin.php?page=reports">
                             <small class="form-help">Enter the full URL of the page where you added the [campaign_dashboard] shortcode.</small>
                         </div>
                         <div class="form-group">

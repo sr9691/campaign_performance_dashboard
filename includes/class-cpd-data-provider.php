@@ -90,7 +90,7 @@ class CPD_Data_Provider {
     public function get_campaign_data_by_ad_group( $account_id, $start_date, $end_date ) {
         // error_log('CPD_Data_Provider::get_campaign_data_by_ad_group - Account ID Passed: ' . $account_id);
         $account_id = $this->normalize_account_id( $account_id ); // Normalize input
-        $table_name = 'dashdev_cpd_campaign_data'; // Using fixed table name as per your setup
+        $table_name = $this->wpdb->prefix . 'cpd_campaign_data'; // Using fixed table name as per your setup
 
         $sql_select_group_order = "
             SELECT
@@ -138,7 +138,7 @@ class CPD_Data_Provider {
     public function get_campaign_data_by_date( $account_id, $start_date, $end_date ) {
         // error_log('CPD_Data_Provider::get_campaign_data_by_date - Account ID Passed: ' . $account_id . ' | Start Date: ' . $start_date . ' | End Date: ' . $end_date);
         $account_id = $this->normalize_account_id( $account_id ); // Normalize input
-        $table_name = 'dashdev_cpd_campaign_data'; // Using fixed table name as per your setup
+        $table_name = $this->wpdb->prefix . 'cpd_campaign_data'; // Using fixed table name as per your setup
 
         $sql_select_group_order = "
             SELECT
@@ -272,7 +272,7 @@ class CPD_Data_Provider {
      */
     public function get_campaign_date_range( $account_id = null ) {
         $account_id = $this->normalize_account_id( $account_id );
-        $table_name = 'dashdev_cpd_campaign_data'; // Your campaign data table
+        $table_name = $this->wpdb->prefix . 'cpd_campaign_data'; // Your campaign data table
 
         $sql = "SELECT MIN(campaign_start_date) AS min_date, MAX(campaign_end_date) AS max_date FROM %i";
         $prepare_args = [$table_name];
@@ -305,7 +305,7 @@ class CPD_Data_Provider {
      */
     public function get_summary_metrics( $account_id, $start_date, $end_date ) {
         $account_id = $this->normalize_account_id( $account_id ); // Normalize input
-        $campaign_table = 'dashdev_cpd_campaign_data';
+        $campaign_table = $this->wpdb->prefix . 'cpd_campaign_data';
         $visitor_table = $this->wpdb->prefix . 'cpd_visitors';
 
         // Campaign metrics query construction

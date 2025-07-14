@@ -52,7 +52,7 @@ class CPD_API {
      */
     public function register_routes() {
         $namespace = $this->plugin_name . '/v1';
-
+        
         register_rest_route( $namespace, '/data-import', array(
             'methods'             => 'POST',
             'callback'            => array( $this, 'handle_data_import_ping' ),

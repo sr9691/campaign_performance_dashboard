@@ -108,17 +108,17 @@ class CPD_Email_Handler {
 
 
     /**
-     * Schedules the hourly CRM email event.
+     * Schedules the daily CRM email event.
      * This method should be called during plugin activation.
      */
     public static function schedule_daily_crm_email() {
         if ( ! wp_next_scheduled( 'cpd_daily_crm_email_event' ) ) {
-            wp_schedule_event( time(), 'hourly', 'cpd_daily_crm_email_event' );
+            wp_schedule_event( time(), 'daily', 'cpd_daily_crm_email_event' );
         }
     }
 
     /**
-     * Unchedules the hourly CRM email event.
+     * Unchedules the daily CRM email event.
      * This method should be called during plugin deactivation.
      */
     public static function unschedule_daily_crm_email() {
@@ -377,7 +377,12 @@ class CPD_Email_Handler {
                         'website' => $visitor['website'] ?? '',
                         'city' => $visitor['city'] ?? '',
                         'state' => $visitor['state'] ?? '',
-                        'zipcode' => $visitor['zipcode'] ?? ''
+                        'zipcode' => $visitor['zipcode'] ?? '',
+                        'first_seen_at' => $visitor['first_seen_at'] ?? '',
+                        'last_seen_at' => $visitor['last_seen_at'] ?? '',
+                        'recent_page_count' => $visitor['recent_page_count'] ?? 0,
+                        'recent_page_urls' => $visitor['recent_page_urls'] ?? '',
+                        'all_time_page_views' => $visitor['all_time_page_views'] ?? 0
                     );
                 }
                 
@@ -399,10 +404,16 @@ class CPD_Email_Handler {
                         'first_seen_at' => $visitor['first_seen_at'] ?? '',
                         'last_seen_at' => $visitor['last_seen_at'] ?? '',
                         'tags' => $visitor['tags'] ?? '',
-                        'filter_matches' => $visitor['filter_matches'] ?? ''
+                        'filter_matches' => $visitor['filter_matches'] ?? '',
+                        'company_name' => $visitor['company_name'] ?? '',
+                        'estimated_employee_count' => $visitor['estimated_employee_count'] ?? '',
+                        'estimated_revenue' => $visitor['estimated_revenue'] ?? '',
+                        'industry' => $visitor['industry'] ?? '',
+                        'website' => $visitor['website'] ?? ''
                     );
                 }
             }
+
             // Send webhook request
             $headers = array(
                 'Content-Type' => 'application/json',

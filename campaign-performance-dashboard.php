@@ -1,14 +1,14 @@
 <?php
 /**
- * Plugin Name:       Direct Reach
- * Plugin URI:        https://memomarketing.com/directreach
- * Description:       A custom dashboard for clients to view their directreach campaign performance and visitor data.
+ * Plugin Name:       DirectReach Reports
+ * Plugin URI:        https://memomarketing.com/directreach/reports
+ * Description:       A custom dashboard for clients to view their campaign performance and visitor data.
  * Version:           1.0.0
  * Author:            ANSA Solutions
  * Author URI:        https://ansa.solutions/
  * License:           GPL-2.0+
  * License URI:       http://www.gnu.gnu.org/licenses/gpl-2.0.txt
- * Text Domain:       directreach
+ * Text Domain:       reports
  * Domain Path:       /languages
  */
 
@@ -104,7 +104,7 @@ function cpd_dashboard_run() {
     $plugin->run();
 
     // Instantiate your admin class here
-    $plugin_name = 'cpd-dashboard';
+    $plugin_name = 'reports';
     $version = CPD_DASHBOARD_VERSION;
     $cpd_admin = new CPD_Admin( $plugin_name, $version );
     
@@ -115,4 +115,3 @@ function cpd_dashboard_run() {
     add_action( 'cpd_daily_crm_email_event', array( 'CPD_Email_Handler', 'daily_crm_email_cron_callback' ) );
 }
 add_action( 'plugins_loaded', 'cpd_dashboard_run' );
-

@@ -117,7 +117,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                 <canvas id="impressions-chart-canvas"></canvas>
             </div>
             <div class="chart-container" style="flex: 1;">
-                <h3>Impressions by Ad Group</h3>
+                <h3>Impressions by Group</h3>
                 <canvas id="ad-group-chart-canvas"></canvas>
             </div>
         </div>

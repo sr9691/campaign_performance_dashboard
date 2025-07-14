@@ -160,7 +160,7 @@ class CPD_Public {
                         'ajax_url' => admin_url( 'admin-ajax.php' ),
                         'nonce' => wp_create_nonce( 'cpd_admin_nonce' ), // Admin specific nonce for admin management actions
                         'memo_seal_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Seal.png',
-                        'memo_logo_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png',
+                        'memo_logo_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png', // default client logo
                         'dashboard_url' => get_option( 'cpd_client_dashboard_url', '' ), // Pass the dashboard URL to JS
                     )
                 );
@@ -171,6 +171,7 @@ class CPD_Public {
                     'cpd_dashboard_ajax_nonce',
                     array(
                         'nonce' => wp_create_nonce( 'cpd_get_dashboard_data_nonce' ),
+                        'memo_logo_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png', // default client logo
                     )
                 );
             }
@@ -264,7 +265,7 @@ class CPD_Public {
                     'dashboard_nonce'  => wp_create_nonce( 'cpd_get_dashboard_data_nonce' ), // Specific nonce for dashboard data
                     'is_admin_user' => $is_admin,
                     'memo_seal_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Seal.png',
-                    'memo_logo_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png',
+                    'memo_logo_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png', // default client logo
                     // Data for non-admins is included here initially
                     // For admins, these will be empty arrays as they fetch dynamically
                     'campaign_data_by_ad_group' => $campaign_data_by_ad_group,

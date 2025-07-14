@@ -566,7 +566,7 @@ jQuery(document).ready(function($) {
 
                     // Load eligible visitors if CRM email management section is active
                     // This function will be defined later in the CRM section update
-                    console.log("setActiveSection: Checking if CRM Emails section is active for loading visitors.");
+                    // console.log("setActiveSection: Checking if CRM Emails section is active for loading visitors.");
                     if (targetHashId === 'crm-email-management') {
                         // Make sure loadEligibleVisitors is defined within scope or globally accessible if called here
                         if (typeof loadEligibleVisitors === 'function') {
@@ -1087,10 +1087,9 @@ jQuery(document).ready(function($) {
         // Initialize button state
         updateButtonState();
 
-        triggerOnDemandSendButton.on('click', function() {
+        triggerOnDemandSendButton.off('click').on('click', function() {
             const button = $(this);
             const selectedAccountId = crmClientFilter.val();
-
             if (selectedAccountId === 'all') {
                 alert('Please select a specific client to send on-demand emails.');
                 return;
@@ -1127,6 +1126,7 @@ jQuery(document).ready(function($) {
         });
 
         eligibleVisitorsTableBody.on('click', '.undo-crm-button', function() {
+            return;
             const button = $(this);
             const visitorInternalId = button.data('visitor-internal-id');
 
