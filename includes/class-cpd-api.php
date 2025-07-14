@@ -119,6 +119,23 @@ class CPD_API {
                 ),
             ),
         ) );
+
+        register_rest_route( $namespace, '/campaign-data-csv-import', array(
+            'methods'             => 'POST',
+            'callback'            => array( $this, 'handle_campaign_csv_import' ),
+            'permission_callback' => array( $this, 'verify_api_key' ),
+            'args'                => array(
+                'csv_url' => array(
+                    'required'          => true,
+                    'sanitize_callback' => 'esc_url_raw',
+                    'validate_callback' => function($param, $request, $key) {
+                        return filter_var($param, FILTER_VALIDATE_URL) !== false;
+                    },
+                    'description'       => 'URL of the CSV file to download and import',
+                ),
+            ),
+        ) );           
+
     }
 
     /**
@@ -180,7 +197,7 @@ class CPD_API {
             return new WP_REST_Response( array( 'message' => 'Empty or invalid JSON payload for campaign data (expected array of items).', 'status' => 400 ), 400 );
         }
 
-        $campaign_data_table = 'dashdev_cpd_campaign_data';
+        $campaign_data_table = $this->wpdb->prefix . 'cpd_campaign_data';
 
         $import_status = 'success';
         $import_messages = [];
@@ -454,5 +471,284 @@ class CPD_API {
         }
 
         return new WP_REST_Response( array( 'message' => 'Visitor data import process completed with status: ' . $import_status . '.', 'details' => $import_messages ), $response_status );
+    }
+
+    /**
+     * NEW - Handles campaign data import from a CSV file URL.
+     * Downloads the CSV, parses it, and appends all rows to the database.
+     *
+     * @param WP_REST_Request $request The REST API request.
+     * @return WP_REST_Response The API response.
+     */
+    public function handle_campaign_csv_import( WP_REST_Request $request ) {
+        global $wpdb;
+        
+        $csv_url = $request->get_param('csv_url');
+        // Use the fixed table name that matches your actual database table
+        $table_name = 'dr_cpd_campaign_data';
+        
+        $import_status = 'success';
+        $import_messages = [];
+        $rows_processed = 0;
+        $rows_succeeded = 0;
+        $rows_failed = 0;
+        
+        try {
+            // Step 1: Download CSV file
+            $csv_content = $this->download_csv_file($csv_url);
+            if (!$csv_content) {
+                $this->log_api_action(0, 'API_CSV_IMPORT_FAILED', 'Failed to download CSV file from URL: ' . $csv_url);
+                return new WP_REST_Response(array(
+                    'message' => 'Failed to download CSV file from provided URL.',
+                    'status' => 400
+                ), 400);
+            }
+            
+            // Step 2: Parse CSV content
+            $csv_data = $this->parse_csv_content($csv_content);
+            if (empty($csv_data)) {
+                $this->log_api_action(0, 'API_CSV_IMPORT_FAILED', 'No valid data found in CSV file from URL: ' . $csv_url);
+                return new WP_REST_Response(array(
+                    'message' => 'No valid data found in CSV file.',
+                    'status' => 400
+                ), 400);
+            }
+            
+            // Step 3: Process each row and append to database
+            foreach ($csv_data as $row_index => $row) {
+                $rows_processed++;
+                
+                try {
+                    $success = $this->insert_campaign_row($table_name, $row, $row_index);
+                    if ($success) {
+                        $rows_succeeded++;
+                    } else {
+                        $rows_failed++;
+                        $import_status = 'partial_success';
+                    }
+                } catch (Exception $e) {
+                    $rows_failed++;
+                    $import_status = 'partial_success';
+                    $import_messages[] = "Row " . ($row_index + 2) . " failed: " . $e->getMessage(); // +2 because 0-indexed + header row
+                }
+            }
+            
+        } catch (Exception $e) {
+            $import_status = 'failed';
+            $import_messages[] = 'Critical error during CSV import: ' . $e->getMessage();
+            $this->log_api_action(0, 'API_CSV_IMPORT_FATAL', 'Fatal error for CSV Import. ' . $e->getMessage() . ' URL: ' . $csv_url);
+            return new WP_REST_Response(array(
+                'message' => 'CSV import failed critically.',
+                'details' => $import_messages
+            ), 500);
+        }
+        
+        // Log the import results
+        $log_description = 'API CSV Campaign Data Import. Status: ' . $import_status . 
+                        '. URL: ' . $csv_url . 
+                        '. Total rows: ' . $rows_processed . 
+                        '. Succeeded: ' . $rows_succeeded . 
+                        '. Failed: ' . $rows_failed;
+        
+        $this->log_api_action(0, 'API_CSV_IMPORT', $log_description);
+        
+        // Determine response status
+        $response_status = 200;
+        if ($import_status === 'partial_success') {
+            $response_status = 202; // Accepted, but with some issues
+        }
+        
+        return new WP_REST_Response(array(
+            'message' => 'CSV import completed with status: ' . $import_status,
+            'summary' => array(
+                'total_rows' => $rows_processed,
+                'succeeded' => $rows_succeeded,
+                'failed' => $rows_failed,
+                'source_url' => $csv_url
+            ),
+            'details' => $import_messages
+        ), $response_status);
+    }
+
+    /**
+     * Downloads CSV content from a given URL.
+     *
+     * @param string $url The URL to download from.
+     * @return string|false The CSV content or false on failure.
+     */
+    private function download_csv_file($url) {
+        // Use WordPress HTTP API
+        $response = wp_remote_get($url, array(
+            'timeout' => 30,
+            'headers' => array(
+                'User-Agent' => 'WordPress/CPD-Dashboard'
+            )
+        ));
+        
+        if (is_wp_error($response)) {
+            error_log('CPD_API: Failed to download CSV. Error: ' . $response->get_error_message());
+            return false;
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        if ($response_code !== 200) {
+            error_log('CPD_API: Failed to download CSV. HTTP Status: ' . $response_code);
+            return false;
+        }
+        
+        $body = wp_remote_retrieve_body($response);
+        if (empty($body)) {
+            error_log('CPD_API: Downloaded CSV file is empty.');
+            return false;
+        }
+        
+        return $body;
+    }
+
+    /**
+     * Parses CSV content into an array of associative arrays.
+     *
+     * @param string $csv_content The raw CSV content.
+     * @return array Array of parsed rows with column headers as keys.
+     */
+    private function parse_csv_content($csv_content) {
+        $lines = explode("\n", trim($csv_content));
+        
+        if (empty($lines)) {
+            return array();
+        }
+        
+        // Parse header row
+        $headers = str_getcsv($lines[0]);
+        $parsed_data = array();
+        
+        // Parse data rows
+        for ($i = 1; $i < count($lines); $i++) {
+            $line = trim($lines[$i]);
+            if (empty($line)) {
+                continue; // Skip empty lines
+            }
+            
+            $row = str_getcsv($line);
+            
+            // Skip rows that don't have the expected number of columns
+            if (count($row) !== count($headers)) {
+                error_log('CPD_API: Skipping malformed row ' . ($i + 1) . '. Expected ' . count($headers) . ' columns, got ' . count($row));
+                continue;
+            }
+            
+            // Combine headers with row data
+            $parsed_data[] = array_combine($headers, $row);
+        }
+        
+        return $parsed_data;
+    }
+
+    /**
+     * Inserts a single campaign row into the database.
+     *
+     * @param string $table_name The table name to insert into.
+     * @param array $row The row data as associative array.
+     * @param int $row_index The row index for error reporting.
+     * @return bool True on success, false on failure.
+     */
+    private function insert_campaign_row($table_name, $row, $row_index) {
+        global $wpdb;
+        
+        // Debug: Log the first few rows to understand the data structure
+        if ($row_index < 3) {
+            error_log('CPD_API Debug - Row ' . ($row_index + 2) . ' keys: ' . implode(', ', array_keys($row)));
+            error_log('CPD_API Debug - Row ' . ($row_index + 2) . ' account id value: "' . ($row['account id'] ?? 'NOT_FOUND') . '"');
+            error_log('CPD_API Debug - Row ' . ($row_index + 2) . ' date value: "' . ($row['date'] ?? 'NOT_FOUND') . '"');
+        }
+        
+        // Map CSV columns to database columns and sanitize data
+        $data_to_insert = array(
+            'account_id'                    => sanitize_text_field($row['account id'] ?? ''),
+            'date'                          => sanitize_text_field($row['date'] ?? null),
+            'organization_name'             => sanitize_text_field($row['organization name'] ?? null),
+            'account_name'                  => sanitize_text_field($row['account name'] ?? null),
+            'campaign_id'                   => sanitize_text_field($row['campaign id'] ?? null),
+            'campaign_name'                 => sanitize_text_field($row['campaign name'] ?? null),
+            'campaign_start_date'           => sanitize_text_field($row['campaign start date'] ?? null),
+            'campaign_end_date'             => sanitize_text_field($row['campaign end date'] ?? null),
+            'campaign_budget'               => floatval($row['campaign budget'] ?? 0),
+            'ad_group_id'                   => sanitize_text_field($row['adgroup id'] ?? null),
+            'ad_group_name'                 => sanitize_text_field($row['adgroup name'] ?? null),
+            'creative_id'                   => sanitize_text_field($row['creative id'] ?? null),
+            'creative_name'                 => sanitize_text_field($row['creative_name'] ?? null),
+            'creative_size'                 => sanitize_text_field($row['creative size'] ?? null),
+            'creative_url'                  => esc_url_raw($row['creative url'] ?? null),
+            'advertiser_bid_type'           => sanitize_text_field($row['advertiser bid type'] ?? null),
+            'budget_type'                   => sanitize_text_field($row['budget type'] ?? null),
+            'cpm'                           => floatval($row['cpm'] ?? 0),
+            'cpv'                           => floatval($row['cpv'] ?? 0),
+            'market'                        => sanitize_text_field($row['market'] ?? null),
+            'contact_number'                => sanitize_text_field($row['contract number'] ?? null),
+            'external_ad_group_id'          => sanitize_text_field($row['external adgroup id'] ?? null),
+            'total_impressions_contracted'  => intval($row['total impressions contracted'] ?? 0),
+            'impressions'                   => intval($row['impressions'] ?? 0),
+            'clicks'                        => intval($row['clicks'] ?? 0),
+            'ctr'                           => floatval($row['ctr'] ?? 0),
+            'visits'                        => intval($row['visits'] ?? 0),
+            'total_spent'                   => floatval($row['total spent'] ?? 0),
+            'secondary_actions'             => intval($row['secondary action'] ?? 0),
+            'secondary_action_rate'         => floatval($row['secondary action rate'] ?? 0),
+            'website'                       => sanitize_text_field($row['website'] ?? null),
+            'direction'                     => sanitize_text_field($row['directions'] ?? null),
+            'click_to_call'                 => intval($row['click to call'] ?? 0),
+            'cta_more_info'                 => intval($row['more info'] ?? 0),
+            'coupon'                        => intval($row['coupon'] ?? 0),
+            'daily_reach'                   => intval($row['daily reach'] ?? 0),
+            'video_start'                   => intval($row['video start'] ?? 0),
+            'first_quartile'                => intval($row['first quartile'] ?? 0),
+            'midpoint'                      => intval($row['midpoint'] ?? 0),
+            'third_quartile'                => intval($row['third quartile'] ?? 0),
+            'video_complete'                => intval($row['video end'] ?? 0),
+        );
+        
+        // Enhanced validation with detailed logging
+        $account_id = trim($data_to_insert['account_id']);
+        $date = trim($data_to_insert['date']);
+        
+        if (empty($account_id) || empty($date)) {
+            error_log('CPD_API: Skipping row ' . ($row_index + 2) . ' - validation failed. account_id: "' . $account_id . '", date: "' . $date . '"');
+            error_log('CPD_API: Available columns in row: ' . implode(', ', array_keys($row)));
+            return false;
+        }
+        
+        // Validate date format (should be YYYY-MM-DD)
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+            error_log('CPD_API: Skipping row ' . ($row_index + 2) . ' - invalid date format: "' . $date . '"');
+            return false;
+        }
+        
+        // Validate that account_id is numeric (based on your CSV data)
+        if (!is_numeric($account_id)) {
+            error_log('CPD_API: Skipping row ' . ($row_index + 2) . ' - account_id is not numeric: "' . $account_id . '"');
+            return false;
+        }
+        
+        // Log successful validation for first few rows
+        if ($row_index < 3) {
+            error_log('CPD_API Debug - Row ' . ($row_index + 2) . ' passed validation. account_id: "' . $account_id . '", date: "' . $date . '"');
+            error_log('CPD_API Debug - Using table: ' . $table_name);
+        }
+        
+        // Insert the row
+        $result = $wpdb->insert($table_name, $data_to_insert);
+        
+        if ($result === false) {
+            error_log('CPD_API: Failed to insert row ' . ($row_index + 2) . '. Database error: ' . $wpdb->last_error);
+            error_log('CPD_API: SQL Last Query: ' . $wpdb->last_query);
+            return false;
+        }
+        
+        // Log success for first few rows
+        if ($row_index < 3) {
+            error_log('CPD_API Debug - Row ' . ($row_index + 2) . ' inserted successfully. Insert ID: ' . $wpdb->insert_id);
+        }
+        
+        return true;
     }
 }
