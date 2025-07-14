@@ -305,7 +305,7 @@ class CPD_Data_Provider {
      */
     public function get_summary_metrics( $account_id, $start_date, $end_date ) {
         $account_id = $this->normalize_account_id( $account_id ); // Normalize input
-        $campaign_table = 'dashdev_cpd_campaign_data';
+        $campaign_table = $this->wpdb->prefix . 'cpd_campaign_data';
         $visitor_table = $this->wpdb->prefix . 'cpd_visitors';
 
         // Campaign metrics query construction
