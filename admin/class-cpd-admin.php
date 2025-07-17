@@ -44,6 +44,9 @@ class CPD_Admin {
         // NEW: Hook for manual settings submission
         add_action( 'admin_post_cpd_save_general_settings', array( $this, 'handle_save_general_settings' ) );
         add_action( 'admin_post_nopriv_cpd_save_general_settings', array( $this, 'handle_save_general_settings' ) ); // For logged out users, though settings are admin only
+        add_action( 'wp_ajax_cpd_save_intelligence_settings', array( $this, 'ajax_save_intelligence_settings' ) );
+        add_action( 'wp_ajax_cpd_save_intelligence_defaults', array( $this, 'ajax_save_intelligence_defaults' ) );
+        add_action( 'wp_ajax_cpd_test_intelligence_webhook', array( $this, 'ajax_test_intelligence_webhook' ) );
 
         // AJAX hooks for Admin dashboard interactivity
         add_action( 'wp_ajax_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
@@ -374,6 +377,20 @@ class CPD_Admin {
         $all_users = get_users( array( 'role__in' => array( 'administrator', 'client' ) ) );
         $all_client_accounts_for_dropdown = $this->data_provider->get_all_client_accounts();
         $data_provider = $this->data_provider;
+        
+                // Get current intelligence settings for use in the template
+        $intelligence_webhook_url = get_option( 'cpd_intelligence_webhook_url', '' );
+        $makecom_api_key = get_option( 'cpd_makecom_api_key', '' );
+        $intelligence_rate_limit = get_option( 'cpd_intelligence_rate_limit', 5 );
+        $intelligence_timeout = get_option( 'cpd_intelligence_timeout', 30 );
+        $intelligence_auto_generate_crm = get_option( 'cpd_intelligence_auto_generate_crm', 'no' );
+        $intelligence_processing_method = get_option( 'cpd_intelligence_processing_method', 'serial' );
+        $intelligence_batch_size = get_option( 'cpd_intelligence_batch_size', 5 );
+        $intelligence_crm_timeout = get_option( 'cpd_intelligence_crm_timeout', 300 );
+        
+        // Default settings for new clients
+        $intelligence_default_enabled = get_option( 'cpd_intelligence_default_enabled', 'no' );
+        $intelligence_require_context = get_option( 'cpd_intelligence_require_context', 'no' );
 
         // Include the admin page template (this should now contain only management sections)
         include CPD_DASHBOARD_PLUGIN_DIR . 'admin/views/admin-page.php';
@@ -513,14 +530,49 @@ class CPD_Admin {
      * AJAX handler for adding a new client.
      */
     public function ajax_handle_add_client() {
-        if ( ! current_user_can( 'manage_options' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) { wp_send_json_error( array( 'message' => 'Security check failed.' ) ); }
+        if ( ! current_user_can( 'manage_options' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => 'Security check failed.' ) );
+        }
+        
         $this->wpdb->hide_errors();
-        $client_name = sanitize_text_field( $_POST['client_name'] ); $account_id = sanitize_text_field( $_POST['account_id'] ); $logo_url = esc_url_raw( $_POST['logo_url'] ); $webpage_url = esc_url_raw( $_POST['webpage_url'] ); $crm_feed_email = sanitize_text_field( $_POST['crm_feed_email'] );
-        $result = $this->wpdb->insert( $this->client_table, array( 'account_id' => $account_id, 'client_name' => $client_name, 'logo_url' => $logo_url, 'webpage_url' => $webpage_url, 'crm_feed_email' => $crm_feed_email, ) );
+        
+        // Original fields
+        $client_name = sanitize_text_field( $_POST['client_name'] );
+        $account_id = sanitize_text_field( $_POST['account_id'] );
+        $logo_url = esc_url_raw( $_POST['logo_url'] );
+        $webpage_url = esc_url_raw( $_POST['webpage_url'] );
+        $crm_feed_email = sanitize_text_field( $_POST['crm_feed_email'] );
+        
+        // NEW: AI Intelligence fields
+        $ai_intelligence_enabled = isset( $_POST['ai_intelligence_enabled'] ) ? 1 : 0;
+        $client_context_info = sanitize_textarea_field( $_POST['client_context_info'] );
+        
+        $result = $this->wpdb->insert(
+            $this->client_table,
+            array(
+                'account_id' => $account_id,
+                'client_name' => $client_name,
+                'logo_url' => $logo_url,
+                'webpage_url' => $webpage_url,
+                'crm_feed_email' => $crm_feed_email,
+                // NEW: AI Intelligence fields
+                'ai_intelligence_enabled' => $ai_intelligence_enabled,
+                'client_context_info' => $client_context_info,
+                'ai_settings_updated_at' => current_time( 'mysql' ),
+                'ai_settings_updated_by' => get_current_user_id(),
+            ),
+            array( '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%d' )
+        );
+        
         $user_id = get_current_user_id();
-        if ( $result ) { $this->log_action( $user_id, 'CLIENT_ADDED', 'Client "' . $client_name . '" (ID: ' . $account_id . ') was added via AJAX.' ); wp_send_json_success( array( 'message' => 'Client added successfully!' ) ); } else { $this->log_action( $user_id, 'CLIENT_ADD_FAILED', 'Failed to add client "' . $client_name . '" via AJAX.' ); wp_send_json_error( array( 'message' => 'Failed to add client. Account ID might already exist.' ) ); }
+        if ( $result ) {
+            $this->log_action( $user_id, 'CLIENT_ADDED', 'Client "' . $client_name . '" (ID: ' . $account_id . ') was added via AJAX with AI ' . ( $ai_intelligence_enabled ? 'enabled' : 'disabled' ) . '.' );
+            wp_send_json_success( array( 'message' => 'Client added successfully!' ) );
+        } else {
+            $this->log_action( $user_id, 'CLIENT_ADD_FAILED', 'Failed to add client "' . $client_name . '" via AJAX.' );
+            wp_send_json_error( array( 'message' => 'Failed to add client. Account ID might already exist.' ) );
+        }
     }
-
     /**
      * Handle the form submission for deleting a client.
      */
@@ -568,12 +620,19 @@ class CPD_Admin {
         }
         
         $client_id = isset( $_POST['client_id'] ) ? intval( $_POST['client_id'] ) : 0;
-        if ( $client_id <= 0 ) { wp_send_json_error( array( 'message' => 'Invalid client ID.' ) ); }
+        if ( $client_id <= 0 ) {
+            wp_send_json_error( array( 'message' => 'Invalid client ID.' ) );
+        }
         
+        // Original fields
         $client_name = sanitize_text_field( $_POST['client_name'] );
         $logo_url = esc_url_raw( $_POST['logo_url'] );
         $webpage_url = esc_url_raw( $_POST['webpage_url'] );
         $crm_feed_email = sanitize_text_field( $_POST['crm_feed_email'] );
+        
+        // NEW: AI Intelligence fields
+        $ai_intelligence_enabled = isset( $_POST['ai_intelligence_enabled'] ) ? 1 : 0;
+        $client_context_info = sanitize_textarea_field( $_POST['client_context_info'] );
         
         $updated = $this->wpdb->update(
             $this->client_table,
@@ -582,15 +641,20 @@ class CPD_Admin {
                 'logo_url' => $logo_url,
                 'webpage_url' => $webpage_url,
                 'crm_feed_email' => $crm_feed_email,
+                // NEW: AI Intelligence fields
+                'ai_intelligence_enabled' => $ai_intelligence_enabled,
+                'client_context_info' => $client_context_info,
+                'ai_settings_updated_at' => current_time( 'mysql' ),
+                'ai_settings_updated_by' => get_current_user_id(),
             ),
             array( 'id' => $client_id ),
-            array( '%s', '%s', '%s', '%s' ),
+            array( '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%d' ),
             array( '%d' )
         );
-
+    
         $user_id = get_current_user_id();
         if ( $updated !== false ) {
-            $this->log_action( $user_id, 'CLIENT_EDITED_AJAX', 'Client ID ' . $client_id . ' was edited via AJAX.' );
+            $this->log_action( $user_id, 'CLIENT_EDITED_AJAX', 'Client ID ' . $client_id . ' was edited via AJAX with AI ' . ( $ai_intelligence_enabled ? 'enabled' : 'disabled' ) . '.' );
             wp_send_json_success( array( 'message' => 'Client updated successfully!' ) );
         } else {
             $this->log_action( $user_id, 'CLIENT_EDIT_FAILED_AJAX', 'Failed to edit client ID ' . $client_id . ' via AJAX.' );
@@ -809,5 +873,215 @@ class CPD_Admin {
     public static function get_plugin_name() {
         return 'cpd-dashboard';
     }
+
+    public function ajax_save_intelligence_settings() {
+        // Check permissions and nonce
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Insufficient permissions.' ) );
+        }
+        
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => 'Security check failed.' ) );
+        }
+        
+        // Debug logging to see what's being received
+        error_log( 'Intelligence Settings - Raw POST data: ' . print_r( $_POST, true ) );
+        
+        // Validate and sanitize input
+        $webhook_url = esc_url_raw( $_POST['intelligence_webhook_url'] ?? '' );
+        $api_key = sanitize_text_field( $_POST['makecom_api_key'] ?? '' );
+        $rate_limit = intval( $_POST['intelligence_rate_limit'] ?? 5 );
+        $timeout = intval( $_POST['intelligence_timeout'] ?? 30 );
+        $auto_generate_crm = isset( $_POST['intelligence_auto_generate_crm'] ) ? 'yes' : 'no';
+        $processing_method = sanitize_text_field( $_POST['intelligence_processing_method'] ?? 'serial' );
+        $batch_size = intval( $_POST['intelligence_batch_size'] ?? 5 );
+        $crm_timeout = intval( $_POST['intelligence_crm_timeout'] ?? 300 );
+        
+        // Validate required fields
+        if ( empty( $webhook_url ) || empty( $api_key ) ) {
+            wp_send_json_error( array( 'message' => 'Webhook URL and API Key are required.' ) );
+        }
+        
+        // Validate ranges
+        if ( $rate_limit < 1 || $rate_limit > 10 ) {
+            wp_send_json_error( array( 'message' => 'Rate limit must be between 1 and 10.' ) );
+        }
+        
+        if ( $timeout < 10 || $timeout > 120 ) {
+            wp_send_json_error( array( 'message' => 'Timeout must be between 10 and 120 seconds.' ) );
+        }
+        
+        if ( $batch_size < 1 || $batch_size > 20 ) {
+            wp_send_json_error( array( 'message' => 'Batch size must be between 1 and 20.' ) );
+        }
+        
+        if ( $crm_timeout < 60 || $crm_timeout > 900 ) {
+            wp_send_json_error( array( 'message' => 'CRM timeout must be between 60 and 900 seconds.' ) );
+        }
+        
+        // FIXED: Save settings individually with proper error handling
+        $results = array();
+        $all_success = true;
+        
+        // Use a different approach - delete and add the option to force update
+        delete_option( 'cpd_intelligence_webhook_url' );
+        $results['webhook_url'] = add_option( 'cpd_intelligence_webhook_url', $webhook_url );
+        
+        delete_option( 'cpd_makecom_api_key' );
+        $results['api_key'] = add_option( 'cpd_makecom_api_key', $api_key );
+        
+        delete_option( 'cpd_intelligence_rate_limit' );
+        $results['rate_limit'] = add_option( 'cpd_intelligence_rate_limit', $rate_limit );
+        
+        delete_option( 'cpd_intelligence_timeout' );
+        $results['timeout'] = add_option( 'cpd_intelligence_timeout', $timeout );
+        
+        delete_option( 'cpd_intelligence_auto_generate_crm' );
+        $results['auto_generate'] = add_option( 'cpd_intelligence_auto_generate_crm', $auto_generate_crm );
+        
+        delete_option( 'cpd_intelligence_processing_method' );
+        $results['processing_method'] = add_option( 'cpd_intelligence_processing_method', $processing_method );
+        
+        delete_option( 'cpd_intelligence_batch_size' );
+        $results['batch_size'] = add_option( 'cpd_intelligence_batch_size', $batch_size );
+        
+        delete_option( 'cpd_intelligence_crm_timeout' );
+        $results['crm_timeout'] = add_option( 'cpd_intelligence_crm_timeout', $crm_timeout );
+        
+        // Check results
+        $failed_options = array();
+        foreach ( $results as $key => $result ) {
+            error_log( "Option {$key}: " . ( $result ? 'SUCCESS' : 'FAILED' ) );
+            if ( ! $result ) {
+                $failed_options[] = $key;
+                $all_success = false;
+            }
+        }
+        
+        if ( $all_success ) {
+            // Log the action
+            $this->log_action( get_current_user_id(), 'INTELLIGENCE_SETTINGS_SAVED', 'Intelligence settings updated via AJAX.' );
+            wp_send_json_success( array( 'message' => 'Intelligence settings saved successfully!' ) );
+        } else {
+            $error_message = 'Failed to save: ' . implode( ', ', $failed_options );
+            $this->log_action( get_current_user_id(), 'INTELLIGENCE_SETTINGS_FAILED', 'Failed to save intelligence settings: ' . $error_message );
+            wp_send_json_error( array( 'message' => 'Failed to save some settings: ' . $error_message ) );
+        }
+    }
+    /**
+     * Also fix the defaults handler with the same approach
+     */
+    public function ajax_save_intelligence_defaults() {
+        // Check permissions and nonce
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Insufficient permissions.' ) );
+        }
+        
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => 'Security check failed.' ) );
+        }
+        
+        // Get and sanitize input
+        $default_enabled = isset( $_POST['intelligence_default_enabled'] ) ? 'yes' : 'no';
+        $require_context = isset( $_POST['intelligence_require_context'] ) ? 'yes' : 'no';
+        
+        // Save settings with the same robust approach
+        $options_to_update = array(
+            'cpd_intelligence_default_enabled' => $default_enabled,
+            'cpd_intelligence_require_context' => $require_context
+        );
+        
+        $failed_updates = array();
+        $updated_count = 0;
+        
+        foreach ( $options_to_update as $option_name => $option_value ) {
+            $current_value = get_option( $option_name );
+            
+            if ( $current_value !== $option_value ) {
+                $result = update_option( $option_name, $option_value );
+                if ( $result ) {
+                    $updated_count++;
+                } else {
+                    $failed_updates[] = $option_name;
+                }
+            }
+        }
+        
+        if ( empty( $failed_updates ) ) {
+            // Log the action
+            $this->log_action( get_current_user_id(), 'INTELLIGENCE_DEFAULTS_SAVED', 
+                "Intelligence default settings updated via AJAX. {$updated_count} options changed." );
+            
+            wp_send_json_success( array( 
+                'message' => 'Default settings saved successfully!',
+                'updated_count' => $updated_count 
+            ) );
+        } else {
+            $error_message = 'Failed to update: ' . implode( ', ', $failed_updates );
+            $this->log_action( get_current_user_id(), 'INTELLIGENCE_DEFAULTS_FAILED', 
+                'Failed to save intelligence default settings via AJAX: ' . $error_message );
+            
+            wp_send_json_error( array( 'message' => 'Failed to save some settings: ' . $error_message ) );
+        }
+    }
+    /**
+     * AJAX handler to test intelligence webhook
+     */
+    public function ajax_test_intelligence_webhook() {
+        // Check permissions and nonce - FIXED to use cpd_admin_nonce
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( array( 'message' => 'Insufficient permissions.' ) );
+        }
+        
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_admin_nonce' ) ) {
+            wp_send_json_error( array( 'message' => 'Security check failed.' ) );
+        }
+        
+        $webhook_url = esc_url_raw( $_POST['webhook_url'] ?? '' );
+        $api_key = sanitize_text_field( $_POST['api_key'] ?? '' );
+        
+        if ( empty( $webhook_url ) || empty( $api_key ) ) {
+            wp_send_json_error( array( 'message' => 'Webhook URL and API key are required for testing.' ) );
+        }
+        
+        // Create test payload
+        $test_payload = array(
+            'api_key' => $api_key,
+            'request_type' => 'test_connection',
+            'test_data' => array(
+                'timestamp' => current_time( 'mysql' ),
+                'test_id' => uniqid( 'cpd_test_' ),
+                'source' => 'Campaign Performance Dashboard'
+            )
+        );
+        
+        // Send test request
+        $response = wp_remote_post( $webhook_url, array(
+            'timeout' => 30,
+            'headers' => array(
+                'Content-Type' => 'application/json',
+            ),
+            'body' => wp_json_encode( $test_payload ),
+            'sslverify' => true
+        ) );
+        
+        if ( is_wp_error( $response ) ) {
+            $error_message = $response->get_error_message();
+            $this->log_action( get_current_user_id(), 'WEBHOOK_TEST_FAILED', 'Intelligence webhook test failed: ' . $error_message );
+            wp_send_json_error( array( 'message' => 'Connection failed: ' . $error_message ) );
+        }
+        
+        $response_code = wp_remote_retrieve_response_code( $response );
+        $response_body = wp_remote_retrieve_body( $response );
+        
+        if ( $response_code >= 200 && $response_code < 300 ) {
+            $this->log_action( get_current_user_id(), 'WEBHOOK_TEST_SUCCESS', 'Intelligence webhook test successful.' );
+            wp_send_json_success( array( 'message' => 'Webhook connection successful!' ) );
+        } else {
+            $this->log_action( get_current_user_id(), 'WEBHOOK_TEST_FAILED', 'Intelligence webhook test failed with HTTP ' . $response_code . ': ' . $response_body );
+            wp_send_json_error( array( 'message' => 'Webhook test failed (HTTP ' . $response_code . ')' ) );
+        }
+    }
+
 
 }

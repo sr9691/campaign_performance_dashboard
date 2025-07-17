@@ -59,6 +59,13 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                 </li>
 
                 <li>
+                    <a href="#intelligence" class="nav-link" data-target="intelligence-section">
+                        <i class="fas fa-brain"></i>
+                        Client Intelligence
+                    </a>
+                </li>
+
+                <li>
                     <a href="#logs" class="nav-link" data-target="logs-section">
                         <i class="fas fa-list-alt"></i>
                         Action Logs
@@ -113,6 +120,30 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                             <label for="crm_feed_email">CRM Feed Email</label>
                             <input type="email" id="crm_feed_email" name="crm_feed_email">
                         </div>
+                        
+                        <div class="ai-intelligence-toggle">
+                            <div>&nbsp;</div>
+                            <input type="checkbox" 
+                                   id="new_ai_intelligence_enabled" 
+                                   name="ai_intelligence_enabled" 
+                                   value="1"
+                                   <?php checked( $intelligence_default_enabled, 'yes' ); ?>>
+                            <label for="new_ai_intelligence_enabled">Enable AI Intelligence for this client</label>
+                        </div>
+                        <small>When enabled, visitors from this client can have AI intelligence generated for enhanced insights.</small>
+
+                        
+                        <div id="edit-client-context-group" class="form-group" style="display: none;">
+                            <label for="edit_client_context_info" class="context-info-label">About This Client</label>
+                            <textarea id="edit_client_context_info" 
+                                      name="client_context_info" 
+                                      rows="10" 
+                                      maxlength="2000" 
+                                      placeholder="Describe the client's business, industry, target audience, or specific needs..."></textarea>
+                            <?php if ( $intelligence_require_context === 'yes' ): ?>
+                                <small style="color: #dc3545; font-weight: 600;"></small>
+                            <?php endif; ?>
+                        </div>                    
                     </div>
                     <div class="form-actions">
                         <button type="submit">Add Client</button>
@@ -131,6 +162,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                                 <th>Logo</th>
                                 <th>Webpage URL</th>
                                 <th>CRM Feed Email</th>
+                                <th>Intelligence</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -142,7 +174,10 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                                         data-account-id="<?php echo esc_attr( $client->account_id ); ?>"
                                         data-logo-url="<?php echo esc_url( $client->logo_url ); ?>"
                                         data-webpage-url="<?php echo esc_url( $client->webpage_url ); ?>"
-                                        data-crm-email="<?php echo esc_attr( $client->crm_feed_email ); ?>">
+                                        data-crm-email="<?php echo esc_attr( $client->crm_feed_email ); ?>"
+                                        data-ai-intelligence-enabled="<?php echo esc_attr( $client->ai_intelligence_enabled ?? 0 ); ?>"
+                                        data-client-context-info="<?php echo esc_attr( $client->client_context_info ?? '' ); ?>">
+                                        
                                         <td><?php echo esc_html( wp_unslash( $client->client_name ) ); ?></td>
                                         <td><?php echo esc_html( $client->account_id ); ?></td>
                                         <td>
@@ -162,6 +197,22 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                                             <?php endif; ?>
                                         </td>
                                         <td><?php echo esc_html( $client->crm_feed_email ); ?></td>
+                                        <td>
+                                            <div style="display: flex; align-items: center; gap: 10px;">
+                                                <span class="ai-status-badge <?php echo $client->ai_intelligence_enabled ? 'ai-enabled' : 'ai-disabled'; ?>">
+                                                    <?php echo $client->ai_intelligence_enabled ? '✓ Enabled' : '✗ Disabled'; ?>
+                                                </span>
+                                                <?php if ( $client->ai_intelligence_enabled && !empty( $client->client_context_info ) ): ?>
+                                                    <i class="fas fa-info-circle" 
+                                                       title="Has context information" 
+                                                       style="color: #28a745; cursor: help;"></i>
+                                                <?php elseif ( $client->ai_intelligence_enabled ): ?>
+                                                    <i class="fas fa-exclamation-triangle" 
+                                                       title="No context information" 
+                                                       style="color: #ffc107; cursor: help;"></i>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
                                         <td class="actions-cell">
                                             <button class="action-button edit-client" title="Edit Client">
                                                 <i class="fas fa-edit"></i>
@@ -415,7 +466,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                     </div>
                 </form>
             </div>                        
-
+<!--
             <div class="settings-section">
                 <h3>Data Management</h3>
                 <div class="data-management-actions">
@@ -430,7 +481,8 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
 
                 </div>
             </div>
-            </div>
+-->
+</div>
 
 
 <div id="crm-email-management-section" class="card section-content">
@@ -484,6 +536,232 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                 </div>
             </div>
         </div>
+
+        <div id="intelligence-section" class="card section-content">
+            <h2>Client Intelligence Settings</h2>
+        
+            <?php
+            // Load intelligence classes and get current settings
+            $intelligence_configured = false;
+            $intelligence_stats = array();
+            
+            $intelligence_file = CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-intelligence.php';
+            if ( file_exists( $intelligence_file ) ) {
+                require_once $intelligence_file;
+                if ( class_exists( 'CPD_Intelligence' ) ) {
+                    $intelligence = new CPD_Intelligence();
+                    $intelligence_configured = $intelligence->is_intelligence_configured();
+                    $intelligence_stats = $intelligence->get_intelligence_statistics();
+                }
+            }
+            ?>
+        
+            <!-- Intelligence Status Dashboard -->
+            <div class="intelligence-status-section" style="margin-bottom: 30px;">
+                <h3>Intelligence Status</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0;">
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; border-left: 4px solid <?php echo $intelligence_configured ? '#28a745' : '#dc3545'; ?>;">
+                        <strong>Configuration Status</strong><br>
+                        <span style="color: <?php echo $intelligence_configured ? '#28a745' : '#dc3545'; ?>; font-size: 18px; font-weight: bold;">
+                            <?php echo $intelligence_configured ? '✓ Configured' : '✗ Not Configured'; ?>
+                        </span>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; border-left: 4px solid #007cba;">
+                        <strong>Total Requests</strong><br>
+                        <span style="color: #007cba; font-size: 18px; font-weight: bold;">
+                            <?php echo isset( $intelligence_stats['total_requests'] ) ? number_format( $intelligence_stats['total_requests'] ) : '0'; ?>
+                        </span>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; border-left: 4px solid #007cba;">
+                        <strong>Today's Requests</strong><br>
+                        <span style="color: #007cba; font-size: 18px; font-weight: bold;">
+                            <?php echo isset( $intelligence_stats['today_requests'] ) ? number_format( $intelligence_stats['today_requests'] ) : '0'; ?>
+                        </span>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; border-left: 4px solid #28a745;">
+                        <strong>Success Rate</strong><br>
+                        <span style="color: #28a745; font-size: 18px; font-weight: bold;">
+                            <?php echo isset( $intelligence_stats['success_rate'] ) ? $intelligence_stats['success_rate'] . '%' : '0%'; ?>
+                        </span>
+                    </div>
+                </div>
+        
+                <?php if ( isset( $intelligence_stats['by_status'] ) && ! empty( $intelligence_stats['by_status'] ) ): ?>
+                <div style="margin-top: 15px;">
+                    <strong>Requests by Status:</strong>
+                    <div style="display: flex; gap: 15px; margin-top: 10px; flex-wrap: wrap;">
+                        <?php foreach ( $intelligence_stats['by_status'] as $status => $count ): ?>
+                            <span style="background: #e9ecef; padding: 8px 12px; border-radius: 4px; font-size: 13px; font-weight: 500;">
+                                <?php echo esc_html( ucfirst( $status ) ) . ': ' . number_format( $count ); ?>
+                            </span>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+            </div>
+        
+            <!-- API Configuration Section -->
+            <div class="settings-section">
+                <h3>API Configuration</h3>
+                <form id="intelligence-settings-form" method="post">
+                    <?php wp_nonce_field( 'cpd_intelligence_settings_nonce' ); ?>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="intelligence_webhook_url">Make.com Webhook URL</label>
+                            <input type="url" 
+                                   id="intelligence_webhook_url" 
+                                   name="intelligence_webhook_url" 
+                                   value="<?php echo esc_attr( get_option( 'cpd_intelligence_webhook_url', '' ) ); ?>" 
+                                   placeholder="https://hook.integromat.com/..." 
+                                   required>
+                            <small>The Make.com webhook URL for processing intelligence requests.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="makecom_api_key">Make.com API Key</label>
+                            <input type="text" 
+                                   id="makecom_api_key" 
+                                   name="makecom_api_key" 
+                                   value="<?php echo esc_attr( get_option( 'cpd_makecom_api_key', '' ) ); ?>" 
+                                   placeholder="Enter your API key..." 
+                                   required>
+                            <small>Your Make.com API key for authentication.</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="intelligence_rate_limit">Rate Limit (per visitor per day)</label>
+                            <input type="number" 
+                                   id="intelligence_rate_limit" 
+                                   name="intelligence_rate_limit" 
+                                   value="<?php echo esc_attr( get_option( 'cpd_intelligence_rate_limit', 5 ) ); ?>" 
+                                   min="1" 
+                                   max="10" 
+                                   required>
+                            <small>Maximum intelligence requests per visitor per day (1-10).</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="intelligence_timeout">API Timeout (seconds)</label>
+                            <input type="number" 
+                                   id="intelligence_timeout" 
+                                   name="intelligence_timeout" 
+                                   value="<?php echo esc_attr( get_option( 'cpd_intelligence_timeout', 30 ) ); ?>" 
+                                   min="10" 
+                                   max="120" 
+                                   required>
+                            <small>API request timeout in seconds (10-120).</small>
+                        </div>
+                    </div>
+        
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" 
+                                       name="intelligence_auto_generate_crm" 
+                                       value="1" 
+                                       <?php checked( 1, get_option( 'cpd_intelligence_auto_generate_crm', 1 ) ); ?>>
+                                Auto-generate for CRM Export
+                            </label>
+                            <small>Automatically generate intelligence for CRM exports.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="intelligence_processing_method">Processing Method</label>
+                            <select name="intelligence_processing_method" id="intelligence_processing_method">
+                                <option value="batch" <?php selected( 'batch', get_option( 'cpd_intelligence_processing_method', 'batch' ) ); ?>>Batch Processing</option>
+                                <option value="serial" <?php selected( 'serial', get_option( 'cpd_intelligence_processing_method', 'batch' ) ); ?>>Serial Processing</option>
+                            </select>
+                            <small>How to process multiple intelligence requests.</small>
+                        </div>
+                    </div>
+        
+                    <div class="form-actions" style="display: flex; gap: 15px; align-items: center;">
+                        <button type="submit" class="button-primary">Save Intelligence Settings</button>
+                        <button type="button" id="test-webhook-btn" class="button-secondary">Test Webhook</button>
+                        <div id="webhook-test-result" style="margin-left: 15px;"></div>
+                    </div>
+                </form>
+            </div>
+        
+            <!-- Default Client Settings Section -->
+            <div class="settings-section">
+                <h3>Default Client Settings</h3>
+                <form id="intelligence-defaults-form" method="post">
+                    <?php wp_nonce_field( 'cpd_intelligence_defaults_nonce' ); ?>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" 
+                                       name="intelligence_default_enabled" 
+                                       value="1" 
+                                       <?php checked( 1, get_option( 'cpd_intelligence_default_enabled', 0 ) ); ?>>
+                                Enable AI for New Clients
+                            </label>
+                            <small>Enable AI intelligence for new clients by default.</small>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" 
+                                       name="intelligence_require_context" 
+                                       value="1" 
+                                       <?php checked( 1, get_option( 'cpd_intelligence_require_context', 0 ) ); ?>>
+                                Require Client Context
+                            </label>
+                            <small>Require client context information for AI intelligence.</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="button-primary">Save Default Settings</button>
+                    </div>
+                </form>
+            </div>
+        
+            <!-- Recent Intelligence Requests -->
+            <?php if ( class_exists( 'CPD_Intelligence' ) && isset( $intelligence ) ): ?>
+            <div class="settings-section">
+                <h3>Recent Intelligence Requests</h3>
+                <?php
+                $recent_requests = $intelligence->get_recent_intelligence_requests( 10 );
+                if ( ! empty( $recent_requests ) ):
+                ?>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Visitor</th>
+                                <th>Client</th>
+                                <th>Status</th>
+                                <th>Requested</th>
+                                <th>User</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ( $recent_requests as $request ): ?>
+                            <tr>
+                                <td><?php echo esc_html( $request->id ); ?></td>
+                                <td><?php echo esc_html( $request->first_name . ' ' . $request->last_name ); ?></td>
+                                <td><?php echo esc_html( $request->client_name ); ?></td>
+                                <td>
+                                    <span class="status-badge status-<?php echo esc_attr( $request->status ); ?>">
+                                        <?php echo esc_html( ucfirst( $request->status ) ); ?>
+                                    </span>
+                                </td>
+                                <td><?php echo esc_html( date( 'M j, Y g:i A', strtotime( $request->created_at ) ) ); ?></td>
+                                <td><?php echo esc_html( $request->user_name ?: 'System' ); ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <?php else: ?>
+                <p style="color: #666; font-style: italic;">No intelligence requests found.</p>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+        </div>
+
+
 
         <div id="logs-section" class="card section-content">
             <h2>Action Logs</h2>
@@ -550,6 +828,18 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         <label for="edit_crm_feed_email">CRM Feed Email</label>
                         <input type="email" id="edit_crm_feed_email" name="crm_feed_email">
                     </div>
+                    <div class="form-group ai-intelligence-section">
+                        <h3>Client Intelligence</h3>
+                        <div class="ai-intelligence-toggle">
+                            <input type="checkbox" 
+                                   id="new_ai_intelligence_enabled" 
+                                   name="ai_intelligence_enabled" 
+                                   value="1"
+                                   <?php checked( $intelligence_default_enabled, 'yes' ); ?>>
+                            <label for="new_ai_intelligence_enabled">Enable AI Intelligence for this client</label>
+                        </div>
+                        <small>When enabled, visitors from this client can have AI intelligence generated for enhanced insights.</small>
+                    </div>                    
                     <div class="form-actions">
                         <button type="submit">Save Changes</button>
                     </div>

@@ -122,7 +122,7 @@ jQuery(document).ready(function($) {
 
     // NEW: Function to refresh user table
     function refreshUserTable() {
-        console.log('cpd-dashboard.js: Refreshing user table...');
+        // console.log('cpd-dashboard.js: Refreshing user table...');
         
         $.ajax({
             url: cpd_admin_ajax.ajax_url,
@@ -179,6 +179,9 @@ jQuery(document).ready(function($) {
      * @param {Array} data The campaign data from the AJAX response.
      */
     function renderImpressionsChart(data) {
+        console.log ("Impressions Chart in Admin JS. Should not be here");
+        return;
+        
         const ctx = $('#impressions-chart-canvas');
         if (ctx.length === 0) {
             console.warn("Canvas #impressions-chart-canvas not found.");
@@ -231,7 +234,7 @@ jQuery(document).ready(function($) {
                 }
             }
         });
-        console.log("Created new Impressions Chart instance.");
+        // console.log("Created new Impressions Chart instance.");
     }
 
     /**
@@ -239,6 +242,9 @@ jQuery(document).ready(function($) {
      * @param {Array} data The campaign data from the AJAX response.
      */
     function renderImpressionsByAdGroupChart(data) {
+        console.log ("Impressions Chart in Admin JS. Should not be here");
+        return;
+        
         const ctx = $('#ad-group-chart-canvas');
         if (ctx.length === 0) {
             console.warn("Canvas #ad-group-chart-canvas not found.");
@@ -318,7 +324,7 @@ jQuery(document).ready(function($) {
                 }
             }
         });
-        console.log("Created new Impressions By Ad Group Chart instance.");
+        // console.log("Created new Impressions By Ad Group Chart instance.");
     }
 
     // A simple function to handle AJAX requests to our custom endpoint for visitor updates.
@@ -365,6 +371,12 @@ jQuery(document).ready(function($) {
             return false;
         }
     };
+    
+    
+    
+    
+    
+    
 
     // Function to load dashboard data via AJAX
     function loadDashboardData(clientId, duration) {
@@ -859,6 +871,26 @@ jQuery(document).ready(function($) {
             $('#edit_webpage_url').val(webpageUrl);
             $('#edit_crm_feed_email').val(crmEmail);
 
+            // NEW: AI Intelligence fields
+            const aiToggle = $('#edit_ai_intelligence_enabled');
+            const contextGroup = $('#edit-client-context-group');
+            const contextField = $('#edit_client_context_info');
+            
+            if (aiToggle.length) {
+                const isAiEnabled = row.data('ai-intelligence-enabled') == 1 || row.data('ai-intelligence-enabled') === true;
+                aiToggle.prop('checked', isAiEnabled);
+                console.log('cpd-dashboard.js: AI Intelligence enabled:', isAiEnabled);
+            }
+            
+            if (contextField.length) {
+                contextField.val(row.data('client-context-info') || '');
+            }
+            
+            if (contextGroup.length) {
+                const shouldShow = row.data('ai-intelligence-enabled') == 1 || row.data('ai-intelligence-enabled') === true;
+                contextGroup.toggle(shouldShow);
+            }
+
             editClientModal.fadeIn();
         });
 
@@ -1279,5 +1311,185 @@ jQuery(document).ready(function($) {
             return false;
         }
     });
+
+    // ==================================================================
+    // INTELLIGENCE SETTINGS FUNCTIONALITY
+    // ==================================================================
+    
+    // Intelligence Settings JavaScript - Add after existing code
+    console.log('CPD Intelligence Settings: JavaScript loaded');
+    
+    // 1. AJAX URL (use the existing global)
+    const ajaxUrl = typeof cpd_admin_ajax !== 'undefined' ? cpd_admin_ajax.ajax_url : ajaxurl;
+    
+    // 2. Webhook testing functionality
+    const testWebhookBtn = $('#test-webhook-btn');
+    const testResult = $('#webhook-test-result');
+    
+    if (testWebhookBtn.length) {
+        testWebhookBtn.on('click', function() {
+            const webhookUrl = $('#intelligence_webhook_url').val();
+            const apiKey = $('#makecom_api_key').val();
+            
+            if (!webhookUrl || !apiKey) {
+                testResult.html('<span style="color: #dc3545;">⚠️ Please enter both Webhook URL and API Key</span>');
+                return;
+            }
+            
+            testWebhookBtn.prop('disabled', true).text('Testing...');
+            testResult.html('<span style="color: #6c757d;">🔄 Testing connection...</span>');
+            
+            // AJAX request to test webhook
+            $.ajax({
+                url: ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'cpd_test_intelligence_webhook',
+                    nonce: cpd_admin_ajax.nonce, // Use existing nonce system
+                    webhook_url: webhookUrl,
+                    api_key: apiKey
+                },
+                success: function(response) {
+                    if (response.success) {
+                        testResult.html('<span style="color: #28a745;">✅ ' + response.data.message + '</span>');
+                    } else {
+                        testResult.html('<span style="color: #dc3545;">❌ ' + response.data.message + '</span>');
+                    }
+                },
+                error: function() {
+                    console.error('Webhook test error');
+                    testResult.html('<span style="color: #dc3545;">❌ Connection failed</span>');
+                },
+                complete: function() {
+                    testWebhookBtn.prop('disabled', false).text('Test Webhook');
+                }
+            });
+        });
+    }
+    
+    // 3. Intelligence Settings Form Submission
+    const intelligenceForm = $('#intelligence-settings-form');
+    if (intelligenceForm.length) {
+        intelligenceForm.off('submit').on('submit', function(e) { // Add .off('submit') to prevent double binding
+            e.preventDefault();
+            e.stopPropagation(); // Prevent event bubbling
+            
+            const submitBtn = intelligenceForm.find('button[type="submit"]');
+            const originalText = submitBtn.text();
+            
+            // Prevent double submission
+            if (submitBtn.prop('disabled')) {
+                return false;
+            }
+            
+            submitBtn.prop('disabled', true).text('Saving...');
+            
+            // Get form data manually to ensure proper serialization
+            const formData = {
+                action: 'cpd_save_intelligence_settings',
+                nonce: cpd_admin_ajax.nonce,
+                intelligence_webhook_url: $('#intelligence_webhook_url').val(),
+                makecom_api_key: $('#makecom_api_key').val(),
+                intelligence_rate_limit: $('#intelligence_rate_limit').val(),
+                intelligence_timeout: $('#intelligence_timeout').val(),
+                intelligence_auto_generate_crm: $('#intelligence_auto_generate_crm').is(':checked') ? '1' : '',
+                intelligence_processing_method: $('#intelligence_processing_method').val(),
+                intelligence_batch_size: $('#intelligence_batch_size').val(),
+                intelligence_crm_timeout: $('#intelligence_crm_timeout').val()
+            };
+            
+            console.log('Sending intelligence settings data:', formData);
+            
+            $.ajax({
+                url: cpd_admin_ajax.ajax_url,
+                type: 'POST',
+                data: formData,
+                success: function(response) {
+                    if (response.success) {
+                        alert('✅ ' + response.data.message);
+                    } else {
+                        alert('❌ Error: ' + response.data.message);
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('AJAX error:', error);
+                    alert('❌ An error occurred while saving settings');
+                },
+                complete: function() {
+                    submitBtn.prop('disabled', false).text(originalText);
+                }
+            });
+            
+            return false; // Ensure form doesn't submit normally
+        });
+    }
+    
+    // 4. Intelligence Defaults Form Submission
+    const defaultsForm = $('#intelligence-defaults-form');
+    if (defaultsForm.length) {
+        defaultsForm.on('submit', function(e) {
+            e.preventDefault();
+            
+            const submitBtn = defaultsForm.find('button[type="submit"]');
+            const originalText = submitBtn.text();
+            
+            submitBtn.prop('disabled', true).text('Saving...');
+            
+            const formData = defaultsForm.serialize() + '&action=cpd_save_intelligence_defaults&nonce=' + cpd_admin_ajax.nonce;
+            
+            $.ajax({
+                url: ajaxUrl,
+                type: 'POST',
+                data: formData,
+                success: function(response) {
+                    if (response.success) {
+                        alert('✅ ' + response.data.message);
+                    } else {
+                        alert('❌ Error: ' + response.data.message);
+                    }
+                },
+                error: function() {
+                    console.error('Save error');
+                    alert('❌ An error occurred while saving default settings');
+                },
+                complete: function() {
+                    submitBtn.prop('disabled', false).text(originalText);
+                }
+            });
+        });
+    }
+    
+    // 5. AI Intelligence Toggle for Add Client Form
+    const newAiToggle = $('#new_ai_intelligence_enabled');
+    const newContextGroup = $('#new-client-context-group');
+    
+    if (newAiToggle.length && newContextGroup.length) {
+        // Initial state
+        newContextGroup.toggle(newAiToggle.is(':checked'));
+        
+        newAiToggle.on('change', function() {
+            const isChecked = $(this).is(':checked');
+            newContextGroup.toggle(isChecked);
+            if (isChecked) {
+                newContextGroup[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        });
+    }
+    
+    // 6. AI Intelligence Toggle for Edit Client Form
+    const editAiToggle = $('#edit_ai_intelligence_enabled');
+    const editContextGroup = $('#edit-client-context-group');
+    
+    if (editAiToggle.length && editContextGroup.length) {
+        editAiToggle.on('change', function() {
+            const isChecked = $(this).is(':checked');
+            editContextGroup.toggle(isChecked);
+            if (isChecked) {
+                editContextGroup[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        });
+    }
+    
+    console.log('CPD Intelligence Settings: All event listeners attached');
 
 });
