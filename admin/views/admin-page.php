@@ -121,29 +121,29 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                             <input type="email" id="crm_feed_email" name="crm_feed_email">
                         </div>
                         
-                        <div class="ai-intelligence-toggle">
-                            <div>&nbsp;</div>
-                            <input type="checkbox" 
-                                   id="new_ai_intelligence_enabled" 
-                                   name="ai_intelligence_enabled" 
-                                   value="1"
-                                   <?php checked( $intelligence_default_enabled, 'yes' ); ?>>
-                            <label for="new_ai_intelligence_enabled">Enable AI Intelligence for this client</label>
+                        <div class="form-group ai-intelligence-toggle">
+                            <label for="new_ai_intelligence_enabled">
+                                <input type="checkbox" 
+                                       id="new_ai_intelligence_enabled" 
+                                       name="ai_intelligence_enabled" 
+                                       value="1"
+                                       <?php checked( $intelligence_default_enabled, 'yes' ); ?>>
+                                Enable AI Intelligence for this client
+                            </label>
+                            <small>When enabled, visitors from this client can have AI intelligence generated for enhanced insights.</small>
                         </div>
-                        <small>When enabled, visitors from this client can have AI intelligence generated for enhanced insights.</small>
-
                         
-                        <div id="edit-client-context-group" class="form-group" style="display: none;">
-                            <label for="edit_client_context_info" class="context-info-label">About This Client</label>
-                            <textarea id="edit_client_context_info" 
-                                      name="client_context_info" 
-                                      rows="10" 
-                                      maxlength="2000" 
-                                      placeholder="Describe the client's business, industry, target audience, or specific needs..."></textarea>
-                            <?php if ( $intelligence_require_context === 'yes' ): ?>
-                                <small style="color: #dc3545; font-weight: 600;"></small>
-                            <?php endif; ?>
-                        </div>                    
+                    <div id="new-client-context-group" class="form-group" style="display: none;">
+                        <label for="new_client_context_info" class="context-info-label">About This Client</label>
+                        <textarea id="new_client_context_info" 
+                                  name="client_context_info" 
+                                  rows="4" 
+                                  maxlength="2000" 
+                                  placeholder="Describe the client's business, industry, target audience, or specific needs..."></textarea>
+                        <small>This information helps AI generate more relevant and targeted intelligence about visitors.</small>
+                        <?php if ( $intelligence_require_context === 'yes' ): ?>
+                            <small style="color: #dc3545; font-weight: 600;">Context information is required for AI-enabled clients.</small>
+                        <?php endif; ?>
                     </div>
                     <div class="form-actions">
                         <button type="submit">Add Client</button>
@@ -829,18 +829,33 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         <input type="email" id="edit_crm_feed_email" name="crm_feed_email">
                     </div>
                     <div class="form-group ai-intelligence-section">
-                        <h3>Client Intelligence</h3>
+                        <h3>AI Intelligence Settings</h3>
                         <div class="ai-intelligence-toggle">
-                            <input type="checkbox" 
-                                   id="new_ai_intelligence_enabled" 
-                                   name="ai_intelligence_enabled" 
-                                   value="1"
-                                   <?php checked( $intelligence_default_enabled, 'yes' ); ?>>
-                            <label for="new_ai_intelligence_enabled">Enable AI Intelligence for this client</label>
+                            <label for="edit_ai_intelligence_enabled">
+                                <input type="checkbox" 
+                                       id="edit_ai_intelligence_enabled" 
+                                       name="ai_intelligence_enabled" 
+                                       value="1">
+                                Enable AI Intelligence for this client
+                            </label>
+                            <small>When enabled, visitors from this client can have AI intelligence generated for enhanced insights.</small>
                         </div>
-                        <small>When enabled, visitors from this client can have AI intelligence generated for enhanced insights.</small>
-                    </div>                    
-                    <div class="form-actions">
+                        
+                        <!-- ✅ NEW: Context Information Section (Initially Hidden) -->
+                        <div id="edit-client-context-group" class="form-group" style="display: none; margin-top: 15px;">
+                            <label for="edit_client_context_info" class="context-info-label">About This Client</label>
+                            <textarea id="edit_client_context_info" 
+                                      name="client_context_info" 
+                                      rows="4" 
+                                      maxlength="2000" 
+                                      placeholder="Describe the client's business, industry, target audience, or specific needs..."></textarea>
+                            <small>This information helps AI generate more relevant and targeted intelligence about visitors.</small>
+                            <?php if ( $intelligence_require_context === 'yes' ): ?>
+                                <small style="color: #dc3545; font-weight: 600;">Context information is required for AI-enabled clients.</small>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <div class="form-actions">
                         <button type="submit">Save Changes</button>
                     </div>
                 </form>
