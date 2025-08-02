@@ -761,6 +761,7 @@ class CPD_Admin {
      * AJAX handler for getting dashboard data.
      */
     public function ajax_get_dashboard_data() {
+        return;
         // Change the nonce check here to match the new specific nonce
         if ( ! current_user_can( 'read' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_get_dashboard_data_nonce' ) ) { // ALL users (read cap) can get dashboard data
             wp_send_json_error( 'Security check failed.' );
@@ -1024,6 +1025,8 @@ class CPD_Admin {
             wp_send_json_error( array( 'message' => 'Failed to save some settings: ' . $error_message ) );
         }
     }
+
+
     /**
      * AJAX handler to test intelligence webhook
      */
@@ -1044,20 +1047,64 @@ class CPD_Admin {
             wp_send_json_error( array( 'message' => 'Webhook URL and API key are required for testing.' ) );
         }
         
-        // Create test payload
+        // Create proper visitor intelligence test payload matching the expected format
         $test_payload = array(
             'api_key' => $api_key,
-            'request_type' => 'test_connection',
-            'test_data' => array(
-                'timestamp' => current_time( 'mysql' ),
+            'request_type' => 'serial',
+            'client_email' => 'test@client.com',
+            'client_context' => array(
+                'client_id' => 0,
+                'client_name' => 'Test Client Company',
+                'about_client' => 'This is a test client for webhook validation. They are in the technology sector.',
+                'industry_focus' => 'Technology',
+                'target_audience' => 'B2B Technology Companies',
+                'ai_enabled' => true
+            ),
+            'visitor_data' => array(
+                'visitor_id' => 999999,
+                'client_id' => 1,
+                'personal_info' => array(
+                    'first_name' => 'John',
+                    'last_name' => 'Smith',
+                    'full_name' => 'John Smith',
+                    'job_title' => 'Chief Technology Officer',
+                    'linkedin_url' => 'https://linkedin.com/in/johnsmith-test'
+                ),
+                'company_info' => array(
+                    'company_name' => 'Test Technology Corp',
+                    'website' => 'https://testtech.com',
+                    'industry' => 'Software Development',
+                    'estimated_employee_count' => '100-500',
+                    'estimated_revenue' => '$10M-$50M',
+                    'location' => array(
+                        'city' => 'San Francisco',
+                        'state' => 'CA',
+                        'zipcode' => '94102'
+                    )
+                ),
+                'engagement_data' => array(
+                    'first_seen_at' => current_time( 'mysql' ),
+                    'last_seen_at' => current_time( 'mysql' ),
+                    'all_time_page_views' => 15,
+                    'recent_page_count' => 5,
+                    'recent_page_urls' => array(
+                        'https://client.com/products',
+                        'https://client.com/about',
+                        'https://client.com/contact'
+                    ),
+                    'most_recent_referrer' => 'https://google.com'
+                )
+            ),
+            'test_metadata' => array(
+                'test_timestamp' => current_time( 'mysql' ),
                 'test_id' => uniqid( 'cpd_test_' ),
-                'source' => 'Campaign Performance Dashboard'
+                'source' => 'Campaign Performance Dashboard - Webhook Test'
             )
         );
         
         // Send test request
         $response = wp_remote_post( $webhook_url, array(
-            'timeout' => 30,
+            'timeout' => 300,
             'headers' => array(
                 'Content-Type' => 'application/json',
             ),
@@ -1075,13 +1122,20 @@ class CPD_Admin {
         $response_body = wp_remote_retrieve_body( $response );
         
         if ( $response_code >= 200 && $response_code < 300 ) {
-            $this->log_action( get_current_user_id(), 'WEBHOOK_TEST_SUCCESS', 'Intelligence webhook test successful.' );
-            wp_send_json_success( array( 'message' => 'Webhook connection successful!' ) );
+            $this->log_action( get_current_user_id(), 'WEBHOOK_TEST_SUCCESS', 'Intelligence webhook test successful. Response: ' . substr( $response_body, 0, 200 ) );
+            wp_send_json_success( array( 
+                'message' => 'Webhook connection successful!',
+                'response_code' => $response_code,
+                'response_preview' => substr( $response_body, 0, 200 ) . ( strlen( $response_body ) > 200 ? '...' : '' )
+            ) );
         } else {
             $this->log_action( get_current_user_id(), 'WEBHOOK_TEST_FAILED', 'Intelligence webhook test failed with HTTP ' . $response_code . ': ' . $response_body );
-            wp_send_json_error( array( 'message' => 'Webhook test failed (HTTP ' . $response_code . ')' ) );
+            wp_send_json_error( array( 
+                'message' => 'Webhook test failed (HTTP ' . $response_code . ')',
+                'response_code' => $response_code,
+                'response_body' => $response_body
+            ) );
         }
     }
-
 
 }

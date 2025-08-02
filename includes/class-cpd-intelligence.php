@@ -1,7 +1,7 @@
 <?php
 /**
- * CPD Intelligence Handler - Phase 1 Implementation
- * Basic intelligence handler class for AI Intelligence feature
+ * CPD Intelligence Handler - Updated with Phase 3 API Integration
+ * Full intelligence handler class for AI Intelligence feature
  *
  * @package CPD_Dashboard
  */
@@ -28,35 +28,53 @@ class CPD_Intelligence {
 
     /**
      * Request visitor intelligence for a specific visitor
-     * Phase 1: Basic structure with client AI enablement validation
+     * Updated: Full implementation with Make.com API integration
      */
     public function request_visitor_intelligence( $visitor_id, $user_id ) {
         try {
+            error_log("CPD_Intelligence: Starting request for visitor_id: $visitor_id, user_id: $user_id");
+            
             // Get visitor data
             $visitor = $this->get_visitor_data( $visitor_id );
             if ( ! $visitor ) {
+                error_log("CPD_Intelligence: Visitor $visitor_id not found");
                 throw new Exception( 'Visitor not found' );
             }
+            error_log("CPD_Intelligence: Visitor found - account_id: " . $visitor->account_id);
 
             // Get client data and check AI enablement
             $client = $this->get_client_data( $visitor->account_id );
             if ( ! $client ) {
+                error_log("CPD_Intelligence: Client not found for account_id: " . $visitor->account_id);
                 throw new Exception( 'Client not found' );
             }
+            error_log("CPD_Intelligence: Client found - AI enabled: " . ($client->ai_intelligence_enabled ? 'YES' : 'NO'));
 
             // Check if AI intelligence is enabled for this client
             if ( ! $client->ai_intelligence_enabled ) {
+                error_log("CPD_Intelligence: AI Intelligence not enabled for client");
                 throw new Exception( 'AI Intelligence is not enabled for this client' );
+            }
+
+            // Check if Make.com webhook is configured
+            $webhook_url = get_option( 'cpd_intelligence_webhook_url' );
+            $api_key = get_option( 'cpd_makecom_api_key' );
+            
+            if ( empty( $webhook_url ) || empty( $api_key ) ) {
+                error_log("CPD_Intelligence: Webhook not configured - URL: " . ($webhook_url ? 'SET' : 'NOT SET') . ", API Key: " . ($api_key ? 'SET' : 'NOT SET'));
+                throw new Exception( 'Intelligence webhook not configured. Please configure Make.com settings.' );
             }
 
             // Check rate limiting
             if ( ! $this->check_rate_limit( $visitor_id, $client->id ) ) {
+                error_log("CPD_Intelligence: Rate limit exceeded");
                 throw new Exception( 'Rate limit exceeded for this visitor' );
             }
 
             // Check if intelligence already exists
             $existing_intelligence = $this->get_existing_intelligence( $visitor_id, $client->id );
             if ( $existing_intelligence ) {
+                error_log("CPD_Intelligence: Existing intelligence found - status: " . $existing_intelligence->status);
                 return array(
                     'success' => true,
                     'status' => $existing_intelligence->status,
@@ -69,16 +87,30 @@ class CPD_Intelligence {
             $intelligence_id = $this->create_intelligence_record( $visitor_id, $client->id, $user_id, $visitor, $client );
             
             if ( ! $intelligence_id ) {
+                error_log("CPD_Intelligence: Failed to create intelligence record");
                 throw new Exception( 'Failed to create intelligence record' );
             }
+            
+            error_log("CPD_Intelligence: Intelligence record created with ID: $intelligence_id");
 
-            // Phase 1: Return pending status (actual API call will be implemented in Phase 3)
-            return array(
-                'success' => true,
-                'status' => 'pending',
-                'intelligence_id' => $intelligence_id,
-                'message' => 'Intelligence request created successfully'
-            );
+            // NEW: Make actual API call to Make.com
+            $api_result = $this->make_intelligence_api_call( $visitor, $client, $intelligence_id, $api_key, $webhook_url );
+            
+            if ( $api_result['success'] ) {
+                error_log("CPD_Intelligence: API call successful for intelligence ID: $intelligence_id");
+                return array(
+                    'success' => true,
+                    'status' => 'completed', // Changed from 'pending' to 'completed'
+                    'intelligence_id' => $intelligence_id,
+                    'message' => 'Intelligence generated successfully',
+                    'intelligence_data' => $api_result['intelligence_data'] ?? null
+                );
+            } else {
+                error_log("CPD_Intelligence: API call failed: " . $api_result['error']);
+                // Update intelligence record with error
+                $this->update_intelligence_status( $intelligence_id, 'failed', null, $api_result['error'] );
+                throw new Exception( 'API request failed: ' . $api_result['error'] );
+            }
 
         } catch ( Exception $e ) {
             error_log( 'CPD Intelligence Error: ' . $e->getMessage() );
@@ -89,6 +121,236 @@ class CPD_Intelligence {
         }
     }
 
+    /**
+     * NEW: Make actual API call to Make.com webhook
+     */
+    private function make_intelligence_api_call( $visitor, $client, $intelligence_id, $api_key, $webhook_url ) {
+        try {
+            error_log("CPD_Intelligence: Preparing API call for intelligence ID: $intelligence_id");
+            
+            // Prepare client context
+            $client_context = $this->prepare_client_context( $client );
+            
+            // Prepare visitor data payload (matching admin test format)
+            $visitor_payload = $this->prepare_visitor_payload( $visitor );
+            
+            // Create the full API payload
+            $api_payload = array(
+                'api_key' => $api_key,
+                'request_type' => 'single_visitor_intelligence',
+                'intelligence_id' => $intelligence_id,
+                'client_context' => $client_context,
+                'visitor_data' => $visitor_payload,
+                'request_metadata' => array(
+                    'request_timestamp' => current_time( 'mysql' ),
+                    'request_id' => uniqid( 'cpd_intel_' ),
+                    'source' => 'Campaign Performance Dashboard - Manual Request'
+                )
+            );
+            
+            error_log("CPD_Intelligence: Sending API request to: $webhook_url");
+            
+            // Get timeout setting
+            $timeout = get_option( 'cpd_intelligence_timeout', 30 );
+            
+            // Make the API request
+            $response = wp_remote_post( $webhook_url, array(
+                'timeout' => $timeout,
+                'headers' => array(
+                    'Content-Type' => 'application/json',
+                ),
+                'body' => wp_json_encode( $api_payload ),
+                'sslverify' => true
+            ) );
+            
+            if ( is_wp_error( $response ) ) {
+                $error_message = $response->get_error_message();
+                error_log("CPD_Intelligence: API request failed - " . $error_message);
+                return array(
+                    'success' => false,
+                    'error' => 'Connection failed: ' . $error_message
+                );
+            }
+            
+            $response_code = wp_remote_retrieve_response_code( $response );
+            $response_body = wp_remote_retrieve_body( $response );
+            
+            error_log("CPD_Intelligence: API response code: $response_code");
+            
+            if ( $response_code >= 200 && $response_code < 300 ) {
+                // Parse the response data
+                $intelligence_data = json_decode( $response_body, true );
+                
+                if ( $intelligence_data && json_last_error() === JSON_ERROR_NONE ) {
+                    // Update the intelligence record with the completed data
+                    $this->update_intelligence_status( $intelligence_id, 'completed', $intelligence_data );
+                    
+                    // Log successful API call
+                    $this->log_intelligence_action( 
+                        get_current_user_id(), 
+                        'intelligence_api_success', 
+                        "Intelligence API call successful and completed for visitor ID: {$visitor->id}, Intelligence ID: $intelligence_id"
+                    );
+                    
+                    return array(
+                        'success' => true,
+                        'response_code' => $response_code,
+                        'intelligence_data' => $intelligence_data
+                    );
+                } else {
+                    // Invalid JSON response - mark as failed
+                    $error_msg = 'Invalid JSON response from Make.com';
+                    $this->update_intelligence_status( $intelligence_id, 'failed', null, $error_msg );
+                    
+                    error_log("CPD_Intelligence: Invalid JSON response: $response_body");
+                    
+                    return array(
+                        'success' => false,
+                        'error' => $error_msg
+                    );
+                }
+            } else {
+                error_log("CPD_Intelligence: API request failed with HTTP $response_code: $response_body");
+                
+                // Update intelligence record with failure
+                $error_message = "API request failed (HTTP $response_code)";
+                $this->update_intelligence_status( $intelligence_id, 'failed', null, $error_message );
+                
+                // Log failed API call
+                $this->log_intelligence_action( 
+                    get_current_user_id(), 
+                    'intelligence_api_failed', 
+                    "Intelligence API call failed for visitor ID: {$visitor->id}, Intelligence ID: $intelligence_id. HTTP $response_code: $response_body"
+                );
+                
+                return array(
+                    'success' => false,
+                    'error' => "API request failed (HTTP $response_code): $response_body"
+                );
+            }
+            
+        } catch ( Exception $e ) {
+            error_log("CPD_Intelligence: Exception in API call: " . $e->getMessage());
+            return array(
+                'success' => false,
+                'error' => 'API call exception: ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * NEW: Prepare client context for API call
+     */
+    private function prepare_client_context( $client ) {
+        return array(
+            'client_id' => $client->id,
+            'client_name' => $client->client_name,
+            'about_client' => $client->client_context_info ?: '',
+            'industry_focus' => $this->extract_industry_from_context( $client->client_context_info ),
+            'target_audience' => $this->extract_audience_from_context( $client->client_context_info ),
+            'ai_enabled' => (bool) $client->ai_intelligence_enabled,
+            'webpage_url' => $client->webpage_url ?: ''
+        );
+    }
+
+    /**
+     * NEW: Prepare visitor data payload for API call
+     */
+    private function prepare_visitor_payload( $visitor ) {
+        // Parse recent page URLs if they're stored as JSON string
+        $recent_page_urls = array();
+        if ( ! empty( $visitor->recent_page_urls ) ) {
+            $decoded_urls = json_decode( $visitor->recent_page_urls, true );
+            if ( is_array( $decoded_urls ) ) {
+                $recent_page_urls = $decoded_urls;
+            } else {
+                // If not JSON, treat as comma-separated string
+                $recent_page_urls = array_map( 'trim', explode( ',', $visitor->recent_page_urls ) );
+            }
+        }
+        
+        return array(
+            'visitor_id' => $visitor->id,
+            'client_id' => $visitor->account_id,
+            'personal_info' => array(
+                'first_name' => $visitor->first_name ?: '',
+                'last_name' => $visitor->last_name ?: '',
+                'full_name' => trim( ($visitor->first_name ?: '') . ' ' . ($visitor->last_name ?: '') ),
+                'job_title' => $visitor->job_title ?: '',
+                'linkedin_url' => $visitor->linkedin_url ?: ''
+            ),
+            'company_info' => array(
+                'company_name' => $visitor->company_name ?: '',
+                'website' => $visitor->website ?: '',
+                'industry' => $visitor->industry ?: '',
+                'estimated_employee_count' => $visitor->estimated_employee_count ?: '',
+                'estimated_revenue' => $visitor->estimated_revenue ?: '',
+                'location' => array(
+                    'city' => $visitor->city ?: '',
+                    'state' => $visitor->state ?: '',
+                    'zipcode' => $visitor->zipcode ?: ''
+                )
+            ),
+            'engagement_data' => array(
+                'first_seen_at' => $visitor->first_seen_at ?: '',
+                'last_seen_at' => $visitor->last_seen_at ?: '',
+                'all_time_page_views' => (int) ($visitor->all_time_page_views ?: 0),
+                'recent_page_count' => (int) ($visitor->recent_page_count ?: 0),
+                'recent_page_urls' => $recent_page_urls,
+                'most_recent_referrer' => $visitor->most_recent_referrer ?: ''
+            )
+        );
+    }
+
+    /**
+     * NEW: Extract industry information from client context
+     */
+    private function extract_industry_from_context( $context ) {
+        if ( empty( $context ) ) {
+            return '';
+        }
+        
+        // Simple keyword extraction for industry
+        $industry_keywords = array(
+            'technology', 'tech', 'software', 'saas', 'healthcare', 'medical', 
+            'finance', 'financial', 'retail', 'ecommerce', 'manufacturing', 
+            'construction', 'education', 'consulting', 'marketing', 'real estate'
+        );
+        
+        $context_lower = strtolower( $context );
+        foreach ( $industry_keywords as $keyword ) {
+            if ( strpos( $context_lower, $keyword ) !== false ) {
+                return ucfirst( $keyword );
+            }
+        }
+        
+        return '';
+    }
+
+    /**
+     * NEW: Extract target audience from client context
+     */
+    private function extract_audience_from_context( $context ) {
+        if ( empty( $context ) ) {
+            return '';
+        }
+        
+        // Simple keyword extraction for audience
+        $audience_keywords = array(
+            'b2b', 'b2c', 'enterprise', 'small business', 'startups', 
+            'consumers', 'professionals', 'executives'
+        );
+        
+        $context_lower = strtolower( $context );
+        foreach ( $audience_keywords as $keyword ) {
+            if ( strpos( $context_lower, $keyword ) !== false ) {
+                return ucwords( $keyword );
+            }
+        }
+        
+        return '';
+    }
+    
     /**
      * Get visitor data by ID
      */

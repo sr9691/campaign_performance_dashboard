@@ -160,12 +160,49 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
             // This is primarily for the first page load before AJAX updates.
             if ( ! empty( $visitor_data ) ) :
                 foreach ( $visitor_data as $visitor ) :
-                // error_log('Debug: Visitor ID before HTML generation: ' . (isset($visitor->id) ? $visitor->id : 'ID NOT SET') . ' | Visitor object: ' . print_r($visitor, true));
-                ?>
+                    // Check if client has AI intelligence enabled
+                    $client_ai_enabled = isset($visitor->ai_intelligence_enabled) && ($visitor->ai_intelligence_enabled === true || $visitor->ai_intelligence_enabled === 1);
+                    // Get intelligence status
+                    $intelligence_status = isset($visitor->intelligence_status) ? $visitor->intelligence_status : 'none';
+                    
+                    // Generate AI Intelligence icon HTML if enabled
+                    $ai_intelligence_icon_html = '';
+                    if ($client_ai_enabled) {
+                        $intelligence_title = '';
+                        switch ($intelligence_status) {
+                            case 'none':
+                                $intelligence_title = 'Generate AI Intelligence';
+                                break;
+                            case 'pending':
+                                $intelligence_title = 'AI Intelligence Processing...';
+                                break;
+                            case 'completed':
+                                $intelligence_title = 'AI Intelligence Available (click for details)';
+                                break;
+                            case 'failed':
+                                $intelligence_title = 'AI Intelligence Failed (click to retry)';
+                                break;
+                            default:
+                                $intelligence_title = 'AI Intelligence';
+                                break;
+                        }
+                        
+                        $ai_intelligence_icon_html = sprintf(
+                            '<span class="icon ai-intelligence-icon status-%s" title="%s" data-intelligence-status="%s">
+                                <i class="fas fa-brain"></i>
+                            </span>',
+                            esc_attr($intelligence_status),
+                            esc_attr($intelligence_title),
+                            esc_attr($intelligence_status)
+                        );
+                    }
+                    ?>
+
                     <div class="visitor-card"
                         data-visitor-id="<?php echo esc_attr( $visitor->id ); ?>"
                         data-last-seen-at="<?php echo esc_attr( $visitor->last_seen_at ?? 'N/A' ); ?>"
                         data-recent-page-count="<?php echo esc_attr( $visitor->recent_page_count ?? '0' ); ?>"
+                        data-client-ai-enabled="<?php echo $client_ai_enabled ? 'true' : 'false'; ?>"
                         data-recent-page-urls="<?php
                             $recent_urls = [];
                             if (!empty($visitor->recent_page_urls)) {
@@ -205,6 +242,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
                                     <i class="fab fa-linkedin"></i>
                                 </a>
                             <?php endif; ?>
+                            <?php echo $ai_intelligence_icon_html; // Include AI intelligence icon ?>
                             <span class="icon info-icon" title="More Info">
                                 <i class="fas fa-info-circle"></i>
                             </span>

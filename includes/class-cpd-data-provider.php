@@ -183,26 +183,51 @@ class CPD_Data_Provider {
      * @return array An array of visitor data rows.
      */
     public function get_visitor_data( $account_id ) {
-        // error_log('CPD_Data_Provider::get_visitor_data - Account ID Passed: ' . $account_id);
         $account_id = $this->normalize_account_id( $account_id ); // Normalize input
-        $table_name = $this->wpdb->prefix . 'cpd_visitors';
+        $visitor_table = $this->wpdb->prefix . 'cpd_visitors';
+        $intelligence_table = $this->wpdb->prefix . 'cpd_visitor_intelligence';
+        $clients_table = $this->wpdb->prefix . 'cpd_clients';
         
-        $sql_select_order = "SELECT * FROM %i WHERE is_archived = %d AND is_crm_added = %d";
-        $prepare_args = [$table_name, 0, 0]; // 0 for not archived, 0 for not CRM-added
+        // Get visitors with intelligence status
+        $sql_select_order = "
+            SELECT v.*, 
+                   COALESCE(i.status, 'none') as intelligence_status,
+                   COALESCE(c.ai_intelligence_enabled, 0) as ai_intelligence_enabled,
+                   c.client_name
+            FROM %i AS v
+            LEFT JOIN %i AS c ON v.account_id = c.account_id
+            LEFT JOIN (
+                SELECT visitor_id, status
+                FROM %i 
+                WHERE id IN (
+                    SELECT MAX(id) 
+                    FROM %i 
+                    GROUP BY visitor_id
+                )
+            ) AS i ON v.id = i.visitor_id
+            WHERE v.is_archived = %d AND v.is_crm_added = %d";
+        
+        $prepare_args = [
+            $visitor_table, 
+            $clients_table, 
+            $intelligence_table, 
+            $intelligence_table, 
+            0, // not archived
+            0  // not CRM-added
+        ];
 
         // Only add account_id filter if it's explicitly provided (not null)
         if ( $account_id !== null ) { // Check for normalized null
-            $sql_select_order .= " AND account_id = %s";
+            $sql_select_order .= " AND v.account_id = %s";
             $prepare_args[] = $account_id;
         }
         
-        $sql_select_order .= " ORDER BY last_seen_at DESC";
+        $sql_select_order .= " ORDER BY v.last_seen_at DESC";
 
         // Prepare the query
         $sql_query = $this->wpdb->prepare( $sql_select_order, ...$prepare_args );
         
         $results = $this->wpdb->get_results( $sql_query );
-        // error_log('CPD_Data_Provider::get_visitor_data - Account ID Passed: ' . $results);
 
         if ( empty( $results ) ) {
             error_log('CPD_Data_Provider: get_visitor_data returned no results for account_id: ' . ($account_id ?? 'ALL'));
@@ -211,9 +236,8 @@ class CPD_Data_Provider {
             error_log('CPD_Data_Provider: Database error for visitor data: ' . $this->wpdb->last_error);
         }
 
-        // Ensure CPD_Referrer_Logo class is loaded (it should already be via class-cpd-public.php or class-cpd-admin.php)
+        // Ensure CPD_Referrer_Logo class is loaded
         if ( ! class_exists( 'CPD_Referrer_Logo' ) ) {
-            // Adjust path if necessary based on your plugin structure
             require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-referrer-logo.php';
         }
 
@@ -222,10 +246,25 @@ class CPD_Data_Provider {
             $visitor->referrer_logo_url = CPD_Referrer_Logo::get_logo_for_visitor( $visitor );
             $visitor->referrer_alt_text = CPD_Referrer_Logo::get_alt_text_for_visitor( $visitor );
             $visitor->referrer_tooltip = CPD_Referrer_Logo::get_referrer_url_for_visitor( $visitor );
+            
+            $visitor->ai_intelligence_enabled = (bool) $visitor->ai_intelligence_enabled;
+            
+            if ( !$visitor->ai_intelligence_enabled ) {
+                // If AI is not enabled for this client, set status to 'disabled'
+                $visitor->intelligence_status = 'disabled';
+            } else {
+                // If AI is enabled, use the status from the query (defaults to 'none' if no intelligence record exists)
+                if ( empty($visitor->intelligence_status) || $visitor->intelligence_status === null ) {
+                    $visitor->intelligence_status = 'none';
+                }
+                // Otherwise, keep the existing status (pending, completed, failed)
+            }
+            // error_log("Visitor {$visitor->id}: AI enabled = " . ($visitor->ai_intelligence_enabled ? 'true' : 'false') . ", Status = {$visitor->intelligence_status}");
         }
 
         return $results;
     }
+    
     
     /**
      * NEW: Get eligible visitor data for CRM emails (is_crm_added = 1 AND crm_sent IS NULL).
@@ -362,4 +401,151 @@ class CPD_Data_Provider {
 
         return $final_summary;
     }
-}
+    
+    
+    
+    /**
+     * Check if a client has AI intelligence enabled
+     *
+     * @param string $account_id The account ID.
+     * @return bool True if AI intelligence is enabled, false otherwise.
+     */
+    public function is_client_ai_enabled( $account_id ) {
+        $clients_table = $this->wpdb->prefix . 'cpd_clients';
+        
+        $result = $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT ai_intelligence_enabled FROM $clients_table WHERE account_id = %s",
+                $account_id
+            )
+        );
+
+        return $result == 1;
+    }
+
+    /**
+     * Get client context information for AI intelligence
+     *
+     * @param string $account_id The account ID.
+     * @return string The client context information.
+     */
+    public function get_client_context( $account_id ) {
+        $clients_table = $this->wpdb->prefix . 'cpd_clients';
+        
+        $result = $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT client_context_info FROM $clients_table WHERE account_id = %s",
+                $account_id
+            )
+        );
+
+        return $result ? $result : '';
+    }
+
+    /**
+     * Get visitor data with intelligence information for a specific visitor
+     *
+     * @param int $visitor_id The visitor ID.
+     * @return object|null The visitor object with intelligence data or null if not found.
+     */
+    public function get_visitor_with_intelligence( $visitor_id ) {
+        $visitor_table = $this->wpdb->prefix . 'cpd_visitors';
+        $intelligence_table = $this->wpdb->prefix . 'cpd_visitor_intelligence';
+        $clients_table = $this->wpdb->prefix . 'cpd_clients';
+        
+        $sql = "
+            SELECT v.*, 
+                   c.ai_intelligence_enabled,
+                   c.client_context_info,
+                   i.status as intelligence_status,
+                   i.response_data as intelligence_data,
+                   i.created_at as intelligence_created_at,
+                   i.updated_at as intelligence_updated_at
+            FROM %i AS v
+            LEFT JOIN %i AS c ON v.account_id = c.account_id
+            LEFT JOIN (
+                SELECT visitor_id, status, response_data, created_at, updated_at
+                FROM %i 
+                WHERE id IN (
+                    SELECT MAX(id) 
+                    FROM %i 
+                    WHERE visitor_id = %d
+                    GROUP BY visitor_id
+                )
+            ) AS i ON v.id = i.visitor_id
+            WHERE v.id = %d";
+        
+        $query = $this->wpdb->prepare( 
+            $sql, 
+            $visitor_table, 
+            $clients_table, 
+            $intelligence_table, 
+            $intelligence_table, 
+            $visitor_id,
+            $visitor_id 
+        );
+        
+        $result = $this->wpdb->get_row( $query );
+
+        if ( $this->wpdb->last_error ) {
+            error_log('CPD_Data_Provider: Database error for visitor with intelligence: ' . $this->wpdb->last_error);
+        }
+
+        // Decode intelligence data if present
+        if ( $result && $result->intelligence_data ) {
+            $result->intelligence_data = json_decode( $result->intelligence_data, true );
+        }
+
+        return $result;
+    }
+
+    /**
+     * Get intelligence statistics for admin dashboard
+     *
+     * @return array Statistics about intelligence usage.
+     */
+    public function get_intelligence_statistics() {
+        $intelligence_table = $this->wpdb->prefix . 'cpd_visitor_intelligence';
+        $clients_table = $this->wpdb->prefix . 'cpd_clients';
+        
+        $stats = array();
+        
+        // Total intelligence requests
+        $stats['total_requests'] = $this->wpdb->get_var(
+            "SELECT COUNT(*) FROM $intelligence_table"
+        );
+        
+        // Requests by status
+        $status_counts = $this->wpdb->get_results(
+            "SELECT status, COUNT(*) as count FROM $intelligence_table GROUP BY status"
+        );
+        
+        $stats['by_status'] = array();
+        foreach ( $status_counts as $status ) {
+            $stats['by_status'][$status->status] = $status->count;
+        }
+        
+        // Today's requests
+        $today = date( 'Y-m-d' );
+        $stats['today_requests'] = $this->wpdb->get_var(
+            $this->wpdb->prepare(
+                "SELECT COUNT(*) FROM $intelligence_table WHERE DATE(created_at) = %s",
+                $today
+            )
+        );
+        
+        // AI-enabled clients count
+        $stats['ai_enabled_clients'] = $this->wpdb->get_var(
+            "SELECT COUNT(*) FROM $clients_table WHERE ai_intelligence_enabled = 1"
+        );
+        
+        // Success rate (completed vs total)
+        $completed = isset( $stats['by_status']['completed'] ) ? $stats['by_status']['completed'] : 0;
+        $stats['success_rate'] = $stats['total_requests'] > 0 ? 
+            round( ( $completed / $stats['total_requests'] ) * 100, 2 ) : 0;
+
+        return $stats;
+    }
+
+
+}    

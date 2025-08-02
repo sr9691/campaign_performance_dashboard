@@ -15,17 +15,20 @@ class CPD_Public {
     private $plugin_name;
     private $version;
     private $data_provider;
-
+    private $intelligence;
+    
     public function __construct( $plugin_name, $version ) {
-        
         
         $this->plugin_name = $plugin_name;
         $this->version = $version;
+        
         // Initialize the data provider here, as it's used in enqueue_scripts_data and display_dashboard
         require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-data-provider.php';
         require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-referrer-logo.php';
+        require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-intelligence.php';
         
         $this->data_provider = new CPD_Data_Provider();
+        $this->intelligence = new CPD_Intelligence();
 
         // Add AJAX handlers for front-end.
         add_action( 'wp_ajax_cpd_update_visitor_status', array( $this, 'update_visitor_status_callback' ) );
@@ -34,6 +37,16 @@ class CPD_Public {
         // Add new AJAX handler for fetching dashboard data
         add_action( 'wp_ajax_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
         add_action( 'wp_ajax_nopriv_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
+
+        // Add AJAX handlers for AI Intelligence
+        add_action( 'wp_ajax_cpd_request_visitor_intelligence', array( $this, 'ajax_request_visitor_intelligence' ) );
+        add_action( 'wp_ajax_nopriv_cpd_request_visitor_intelligence', array( $this, 'ajax_request_visitor_intelligence' ) );
+        
+        add_action( 'wp_ajax_cpd_get_visitor_intelligence_status', array( $this, 'ajax_get_visitor_intelligence_status' ) );
+        add_action( 'wp_ajax_nopriv_cpd_get_visitor_intelligence_status', array( $this, 'ajax_get_visitor_intelligence_status' ) );
+        
+        add_action( 'wp_ajax_cpd_get_visitor_intelligence_data', array( $this, 'ajax_get_visitor_intelligence_data' ) );
+        add_action( 'wp_ajax_nopriv_cpd_get_visitor_intelligence_data', array( $this, 'ajax_get_visitor_intelligence_data' ) );
 
         // Add scripts and styles with a high priority to load after the theme's.
         add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_styles' ), 99 );
@@ -53,7 +66,122 @@ class CPD_Public {
 
         // Register shortcode
         add_shortcode( 'campaign_dashboard', array( $this, 'display_dashboard' ) );
+
     }
+
+
+    /**
+     * AJAX handler for requesting visitor intelligence
+     */
+    public function ajax_request_visitor_intelligence() {
+        
+        if ( ! current_user_can( 'read' ) ) {
+            wp_send_json_error( 'User capability check failed.', 403 );
+        }
+        
+        $visitor_id = isset( $_POST['visitor_id'] ) ? intval( $_POST['visitor_id'] ) : 0;
+        $user_id = get_current_user_id();
+    
+        if ( $visitor_id <= 0 ) {
+            wp_send_json_error( 'Invalid visitor ID.', 400 );
+        }
+    
+        $visitor_id = isset( $_POST['visitor_id'] ) ? intval( $_POST['visitor_id'] ) : 0;
+        $user_id = get_current_user_id();
+
+        if ( $visitor_id <= 0 ) {
+            wp_send_json_error( 'Invalid visitor ID.', 400 );
+        }
+
+        // Request intelligence using the intelligence handler
+        $result = $this->intelligence->request_visitor_intelligence( $visitor_id, $user_id );
+
+        if ( $result['success'] ) {
+            wp_send_json_success( array(
+                'status' => $result['status'],
+                'intelligence_id' => $result['intelligence_id'],
+                'message' => $result['message']
+            ) );
+        } else {
+            wp_send_json_error( $result['error'], 400 );
+        }
+    }
+
+    /**
+     * AJAX handler for getting visitor intelligence status
+     */
+    public function ajax_get_visitor_intelligence_status() {
+
+
+        $nonce_key = isset( $_POST['nonce'] ) ? $_POST['nonce'] : '';
+        
+        if ( ! current_user_can( 'read' ) || 
+             ( ! wp_verify_nonce( $nonce_key, 'cpd_intelligence_nonce' ) && 
+               ! wp_verify_nonce( $nonce_key, 'cpd_visitor_nonce' ) ) ) {
+            wp_send_json_error( 'Security check failed.', 403 );
+        }
+        
+        $visitor_id = isset( $_POST['visitor_id'] ) ? intval( $_POST['visitor_id'] ) : 0;
+
+        if ( $visitor_id <= 0 ) {
+            wp_send_json_error( 'Invalid visitor ID.', 400 );
+        }
+
+        // Get intelligence status using the intelligence handler
+        $status = $this->intelligence->get_visitor_intelligence_status( $visitor_id );
+
+        wp_send_json_success( $status );
+    }
+
+    /**
+     * AJAX handler for getting visitor intelligence data
+     */
+    public function ajax_get_visitor_intelligence_data() {
+
+
+        $nonce_key = isset( $_POST['nonce'] ) ? $_POST['nonce'] : '';
+        
+        if ( ! current_user_can( 'read' ) || 
+             ( ! wp_verify_nonce( $nonce_key, 'cpd_intelligence_nonce' )) {
+            wp_send_json_error( 'Security check failed.', 403 );
+        }
+
+        $visitor_id = isset( $_POST['visitor_id'] ) ? intval( $_POST['visitor_id'] ) : 0;
+
+        if ( $visitor_id <= 0 ) {
+            wp_send_json_error( 'Invalid visitor ID.', 400 );
+        }
+
+        // Get the latest intelligence record for this visitor
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cpd_visitor_intelligence';
+        
+        $intelligence_record = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT * FROM $table_name WHERE visitor_id = %d AND status = 'completed' ORDER BY created_at DESC LIMIT 1",
+                $visitor_id
+            )
+        );
+
+        if ( ! $intelligence_record ) {
+            wp_send_json_error( 'No intelligence data found.', 404 );
+        }
+
+        // Decode the response data
+        $response_data = json_decode( $intelligence_record->response_data, true );
+        
+        if ( ! $response_data ) {
+            wp_send_json_error( 'Invalid intelligence data.', 500 );
+        }
+
+        wp_send_json_success( array(
+            'intelligence_id' => $intelligence_record->id,
+            'intelligence' => $response_data,
+            'created_at' => $intelligence_record->created_at,
+            'updated_at' => $intelligence_record->updated_at
+        ) );
+    }
+
 
     /**
      * Hide admin bar on dashboard pages
@@ -145,36 +273,6 @@ class CPD_Public {
 
             wp_enqueue_script( $this->plugin_name . '-public', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-public-dashboard.js', array( 'jquery', 'chart-js' ), $script_version, true );
 
-            if ( current_user_can( 'manage_options' ) ) { // Load only for administrators
-                $script_path_admin = CPD_DASHBOARD_PLUGIN_DIR . 'assets/js/cpd-dashboard.js';
-                $script_version_admin = file_exists( $script_path_admin ) ? filemtime( $script_path_admin ) : $this->version;
-
-                wp_enqueue_script( $this->plugin_name . '-admin', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-dashboard.js', array( 'jquery', 'chart-js' ), $script_version_admin, true );
-
-                // Also localize the admin AJAX data, which is needed by cpd-dashboard.js
-                // Keep cpd_admin_ajax for admin-specific actions handled by cpd-dashboard.js
-                wp_localize_script(
-                    $this->plugin_name . '-admin',
-                    'cpd_admin_ajax', // This matches the name used in cpd-dashboard.js
-                    array(
-                        'ajax_url' => admin_url( 'admin-ajax.php' ),
-                        'nonce' => wp_create_nonce( 'cpd_admin_nonce' ), // Admin specific nonce for admin management actions
-                        'memo_seal_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Seal.png',
-                        'memo_logo_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png', // default client logo
-                        'dashboard_url' => get_option( 'cpd_client_dashboard_url', '' ), // Pass the dashboard URL to JS
-                    )
-                );
-
-                // Add a separate nonce for dashboard data fetching (used by both admin & client JS for dashboard data fetch)
-                wp_localize_script(
-                    $this->plugin_name . '-admin', // Associate with admin script since it uses this nonce
-                    'cpd_dashboard_ajax_nonce',
-                    array(
-                        'nonce' => wp_create_nonce( 'cpd_get_dashboard_data_nonce' ),
-                        'memo_logo_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png', // default client logo
-                    )
-                );
-            }
         }
     }
 
@@ -261,19 +359,18 @@ class CPD_Public {
                 'cpd_dashboard_data',
                 array(
                     'ajax_url' => admin_url( 'admin-ajax.php' ),
-                    'visitor_nonce'    => wp_create_nonce( 'cpd_visitor_nonce' ), // Specific nonce for visitor updates
-                    'dashboard_nonce'  => wp_create_nonce( 'cpd_get_dashboard_data_nonce' ), // Specific nonce for dashboard data
+                    'visitor_nonce'      => wp_create_nonce( 'cpd_visitor_nonce' ), // Specific nonce for visitor updates
+                    'dashboard_nonce'    => wp_create_nonce( 'cpd_get_dashboard_data_nonce' ), // Specific nonce for dashboard data
+                    'intelligence_nonce' => wp_create_nonce( 'cpd_intelligence_nonce' ), // FIXED: Add intelligence nonce
                     'is_admin_user' => $is_admin,
                     'memo_seal_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Seal.png',
-                    'memo_logo_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png', // default client logo
-                    // Data for non-admins is included here initially
-                    // For admins, these will be empty arrays as they fetch dynamically
+                    'memo_logo_url' => CPD_DASHBOARD_PLUGIN_URL . 'assets/images/MEMO_Logo.png',
                     'campaign_data_by_ad_group' => $campaign_data_by_ad_group,
                     'campaign_data_by_date'     => $campaign_data_by_date,
                     'summary_metrics'           => $summary_metrics,
                     'visitor_data'              => $visitor_data,
                     'current_client_account_id' => $client_account ? $client_account->account_id : null,
-                    'initial_duration'          => $duration_param, // Pass initial duration to JS
+                    'initial_duration'          => isset($duration_param) ? $duration_param : 'campaign',
                 )
             );
         }
@@ -334,12 +431,40 @@ class CPD_Public {
         $campaign_data_by_date = $this->data_provider->get_campaign_data_by_date( $client_id, $start_date, $end_date );
         $visitor_data = $this->data_provider->get_visitor_data( $client_id );
 
+        // Check if client has AI intelligence enabled and add intelligence status to visitor data
+        $client_ai_enabled = false;
+        if ( $client_id !== null ) {
+            global $wpdb;
+            $clients_table = $wpdb->prefix . 'cpd_clients';
+            $client_ai_enabled = $wpdb->get_var( 
+                $wpdb->prepare( "SELECT ai_intelligence_enabled FROM $clients_table WHERE account_id = %s", $client_id )
+            ) == 1;
+        }
+
         if (!empty($visitor_data)) {
             foreach ($visitor_data as $visitor) {
                 // Add the logo URL, alt text, and tooltip for each visitor using the existing class
                 $visitor->logo_url = CPD_Referrer_Logo::get_logo_for_visitor($visitor);
                 $visitor->alt_text = CPD_Referrer_Logo::get_alt_text_for_visitor($visitor);
                 $visitor->tooltip_text = CPD_Referrer_Logo::get_referrer_url_for_visitor($visitor);
+
+                // For each visitor, check AI enablement based on their specific account_id
+                $visitor_client_ai_enabled = false;
+                if ($visitor->account_id) {
+                    $visitor_client_ai_enabled = $this->data_provider->is_client_ai_enabled($visitor->account_id);
+                }
+                
+                $visitor->ai_intelligence_enabled = $visitor_client_ai_enabled;
+                
+                // If AI is not enabled for this visitor's client, set status to 'disabled'
+                if (!$visitor_client_ai_enabled) {
+                    $visitor->intelligence_status = 'disabled';
+                }
+                // If AI is enabled, the intelligence_status should already be set by get_visitor_data()
+                // but let's ensure it has a default value
+                if ($visitor_client_ai_enabled && !isset($visitor->intelligence_status)) {
+                    $visitor->intelligence_status = 'none';
+                }                
             }
         }
 
@@ -358,6 +483,7 @@ class CPD_Public {
             'campaign_data_by_date' => $campaign_data_by_date,
             'visitor_data' => $visitor_data,
             'client_logo_url' => $client_logo_url,
+            'client_ai_enabled' => $client_ai_enabled,
         ) );
     }
     /**
@@ -439,6 +565,26 @@ class CPD_Public {
         $summary_metrics = $this->data_provider->get_summary_metrics( $target_account_id_for_data, $start_date, $end_date );
         $campaign_data = $this->data_provider->get_campaign_data_by_ad_group( $target_account_id_for_data, $start_date, $end_date );
         $visitor_data = $this->data_provider->get_visitor_data( $target_account_id_for_data );
+
+        // Add AI intelligence information to visitor data
+        if (!empty($visitor_data)) {
+            foreach ($visitor_data as $visitor) {
+                // Get AI enablement for each visitor's specific client
+                $visitor_client_ai_enabled = false;
+                if ($visitor->account_id) {
+                    $visitor_client_ai_enabled = $this->data_provider->is_client_ai_enabled($visitor->account_id);
+                }
+                
+                $visitor->ai_intelligence_enabled = $visitor_client_ai_enabled;
+                
+                // Set intelligence status based on AI enablement
+                if (!$visitor_client_ai_enabled) {
+                    $visitor->intelligence_status = 'disabled';
+                } else if (!isset($visitor->intelligence_status)) {
+                    $visitor->intelligence_status = 'none';
+                }
+            }
+        }
 
         // Pass the plugin name and selected_client_id_from_url to the template
         $plugin_name = $this->plugin_name;

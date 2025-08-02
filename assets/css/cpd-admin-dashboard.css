@@ -196,14 +196,23 @@ body.wp-admin .admin-page-container .admin-sidebar .admin-dashboard-link {
 }
 
 /* ========================================
-   CONTENT SECTIONS
+   CONTENT SECTIONS - Optimized Display Logic
    ======================================== */
-body.wp-admin .admin-page-container .section-content {
+
+/* Default: Hide all sections. This rule must be before the .active rule. */
+body.wp-admin .admin-page-container .admin-main-content .section-content {
     display: none !important;
+    visibility: hidden !important; /* Adding visibility for extra certainty */
+    opacity: 0 !important; /* Adding opacity for extra certainty */
 }
 
-body.wp-admin .admin-page-container .section-content.active {
+/* Show only the active section. This rule must be after the 'hide' rule and highly specific. */
+body.wp-admin .admin-page-container .admin-main-content .section-content.active {
     display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    /* Optional: add transition for a smoother effect */
+    transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
 }
 
 body.wp-admin .admin-page-container h1 {
@@ -669,39 +678,6 @@ body.wp-admin .admin-page-container .no-url {
     font-size: 0.9rem !important;
 }
 
-/* ========================================
-   DATA MANAGEMENT SECTION
-   ======================================== */
-body.wp-admin .admin-page-container .data-management-actions {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 30px !important;
-    margin-top: 20px !important;
-}
-
-body.wp-admin .admin-page-container .action-group {
-    padding: 25px !important;
-    background-color: #f8f9fa !important;
-    border-radius: var(--border-radius) !important;
-    border: 1px solid var(--line-color) !important;
-    text-align: center !important;
-}
-
-body.wp-admin .admin-page-container .action-group h4 {
-    font-size: 1.1rem !important;
-    font-weight: 600 !important;
-    margin: 0 0 10px 0 !important;
-    color: var(--primary-color) !important;
-    font-family: var(--font-family) !important;
-}
-
-body.wp-admin .admin-page-container .action-group p {
-    font-size: 0.9rem !important;
-    color: var(--text-color-light) !important;
-    margin: 0 0 20px 0 !important;
-    font-family: var(--font-family) !important;
-    line-height: 1.4 !important;
-}
 
 /* ========================================
    REFERRER LOGO MAPPING STYLES
@@ -1170,3 +1146,4 @@ body.wp-admin .admin-page-container #clients-section .action-button {
         padding: 1px 3px !important;
     }
 }
+

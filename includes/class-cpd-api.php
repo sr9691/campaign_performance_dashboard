@@ -422,8 +422,6 @@ class CPD_API {
                     'filter_matches' => sanitize_text_field( $row['filter_matches'] ?? '' ),
                     'profile_type'  => sanitize_text_field( $row['profile_type'] ?? '' ),
                     'status'        => sanitize_text_field( $row['status'] ?? 'active' ),
-                    'is_crm_added'  => intval( $row['is_crm_added'] ?? 0 ),
-                    'is_archived'   => intval( $row['is_archived'] ?? 0 ),
                     'visit_time'    => $visit_time_formatted,
                 );
                 

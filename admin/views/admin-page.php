@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-// Variables passed from CPD_Admin::render_admin_management_page()
+// Variables passed from CPD_Admin::render_admin_management_page
 // $plugin_name
 // $all_clients
 // $logs
@@ -50,21 +50,18 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         Settings
                     </a>
                 </li>
-
                 <li>
-                    <a href="#crm-emails" class="nav-link" data-target="crm-email-management-section">
+                    <a href="#crm-emails" class="nav-link" data-target="crm-emails-section">
                         <i class="fas fa-envelope"></i>
                         CRM Emails
                     </a>
                 </li>
-
                 <li>
                     <a href="#intelligence" class="nav-link" data-target="intelligence-section">
                         <i class="fas fa-brain"></i>
                         Client Intelligence
                     </a>
                 </li>
-
                 <li>
                     <a href="#logs" class="nav-link" data-target="logs-section">
                         <i class="fas fa-list-alt"></i>
@@ -89,7 +86,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
             </a>
         </div>
     </div>
-
+    
     <div class="admin-main-content">
         <h1>Admin Management</h1>
 
@@ -233,7 +230,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                 </div>
             </div>
         </div>
-
+        </div>
         <div id="users-section" class="card section-content">
             <h2>User Management</h2>
 
@@ -466,6 +463,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                     </div>
                 </form>
             </div>                        
+
 <!--
             <div class="settings-section">
                 <h3>Data Management</h3>
@@ -481,11 +479,12 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
 
                 </div>
             </div>
--->
-</div>
+            -->
+
+        </div>
 
 
-<div id="crm-email-management-section" class="card section-content">
+        <div id="crm-emails-section" class="card section-content">
             <h2>CRM Email Management</h2>
 
             <!-- Consolidated Client Filter at Top -->
@@ -604,7 +603,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
             <div class="settings-section">
                 <h3>API Configuration</h3>
                 <form id="intelligence-settings-form" method="post">
-                    <?php wp_nonce_field( 'cpd_intelligence_settings_nonce' ); ?>
+                    <?php wp_nonce_field( 'cpd_intelligence_settings_nonce', '_wpnonce_intelligence_settings' ); ?>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="intelligence_webhook_url">Make.com Webhook URL</label>
@@ -686,7 +685,7 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
             <div class="settings-section">
                 <h3>Default Client Settings</h3>
                 <form id="intelligence-defaults-form" method="post">
-                    <?php wp_nonce_field( 'cpd_intelligence_defaults_nonce' ); ?>
+                    <?php wp_nonce_field( 'cpd_intelligence_defaults_nonce', '_wpnonce_intelligence_defaults' ); ?>
                     <div class="form-grid">
                         <div class="form-group">
                             <label>
@@ -903,73 +902,3 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
     </div>
 </div>
 
-<script>
-// Navigation functionality
-document.addEventListener('DOMContentLoaded', function() {
-    const navLinks = document.querySelectorAll('.nav-link');
-    const sections = document.querySelectorAll('.section-content');
-
-    // Determine initial active section based on hash or default to clients-section
-    const initialHash = window.location.hash ? window.location.hash.substring(1) : 'clients'; // Changed default to 'clients' for consistency
-    let activeSectionId = initialHash + '-section'; // Initialize with the full section ID
-
-    // Fallback if the initial hash doesn't correspond to a valid section
-    if (!document.getElementById(activeSectionId)) {
-        activeSectionId = 'clients-section'; // Default to clients-section
-    }
-
-    // Function to set active section based on ID
-    function setActiveSection(targetSectionId) {
-        // Remove active class from all nav links and sections
-        navLinks.forEach(link => link.classList.remove('active'));
-        sections.forEach(section => section.classList.remove('active'));
-
-        // Find and activate the target section
-        const targetElement = document.getElementById(targetSectionId);
-        if (targetElement) {
-            targetElement.classList.add('active');
-        }
-
-        // Find and activate the corresponding nav link
-        const targetNavLink = document.querySelector(`a[data-target="${targetSectionId}"]`);
-        if (targetNavLink) {
-            targetNavLink.classList.add('active');
-        }
-
-        // Update URL hash without jumping
-        const cleanedHash = targetSectionId.replace('-section', '');
-        if (history.pushState) {
-            history.pushState(null, null, '#' + cleanedHash);
-        } else {
-            window.location.hash = '#' + cleanedHash;
-        }
-
-        // If CRM Emails section is active, trigger loadEligibleVisitors (assuming it's defined in cpd-dashboard.js)
-        if (cleanedHash === 'crm-emails' && typeof loadEligibleVisitors === 'function') {
-            loadEligibleVisitors();
-        }
-    }
-
-    // Set initial active state on load
-    setActiveSection(activeSectionId);
-
-    // Add click listeners to navigation links
-    navLinks.forEach(link => {
-        link.addEventListener('click', function(e) {
-            const targetSectionId = this.getAttribute('data-target');
-
-            // Only prevent default if it's a section navigation link (has data-target attribute and is not a dashboard link)
-            if (targetSectionId && !this.classList.contains('admin-dashboard-link')) {
-                e.preventDefault();
-                setActiveSection(targetSectionId);
-            }
-        });
-    });
-
-    // Handle hash changes from browser back/forward buttons or manual hash entry
-    window.addEventListener('hashchange', function() {
-        const newHash = window.location.hash ? window.location.hash.substring(1) : 'clients'; // Default to 'clients'
-        setActiveSection(newHash + '-section');
-    });
-});
-</script>
