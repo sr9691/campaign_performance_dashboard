@@ -131,12 +131,25 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         </div>
                         
                     <div id="new-client-context-group" class="form-group" style="display: none;">
-                        <label for="new_client_context_info" class="context-info-label">About This Client</label>
-                        <textarea id="new_client_context_info" 
-                                  name="client_context_info" 
-                                  rows="4" 
-                                  maxlength="2000" 
-                                  placeholder="Describe the client's business, industry, target audience, or specific needs..."></textarea>
+                            <label for="new_client_context_info" class="context-info-label">
+                                About This Client
+                                <i class="fas fa-question-circle context-help-icon" 
+                                title="Click for JSON template" 
+                                data-target="add-context"></i>
+                            </label>
+                            <textarea id="new_client_context_info" 
+                            name="client_context_info" 
+                            rows="8" 
+                            maxlength="2000" 
+                            placeholder="Enter client context as JSON object..."></textarea>
+                            <div style="margin-top: 8px;">
+                                <button type="button" class="button button-small format-json-btn" 
+                                        data-target="new_client_context_info" 
+                                        style="font-size: 12px; padding: 4px 8px;">
+                                    <i class="fas fa-magic"></i> Format JSON
+                                </button>
+                                <small style="margin-left: 10px; color: #666;">Click to clean and format your JSON</small>
+                            </div>
                         <small>This information helps AI generate more relevant and targeted intelligence about visitors.</small>
                         <?php if ( $intelligence_require_context === 'yes' ): ?>
                             <small style="color: #dc3545; font-weight: 600;">Context information is required for AI-enabled clients.</small>
@@ -842,12 +855,25 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         
                         <!-- ✅ NEW: Context Information Section (Initially Hidden) -->
                         <div id="edit-client-context-group" class="form-group" style="display: none; margin-top: 15px;">
-                            <label for="edit_client_context_info" class="context-info-label">About This Client</label>
-                            <textarea id="edit_client_context_info" 
-                                      name="client_context_info" 
-                                      rows="4" 
-                                      maxlength="2000" 
-                                      placeholder="Describe the client's business, industry, target audience, or specific needs..."></textarea>
+                                <label for="edit_client_context_info" class="context-info-label">
+                                    About This Client
+                                    <i class="fas fa-question-circle context-help-icon" 
+                                    title="Click for JSON template" 
+                                    data-target="edit-context"></i>
+                                </label>
+                                <textarea id="edit_client_context_info" 
+                                name="client_context_info" 
+                                rows="8" 
+                                maxlength="2000" 
+                                placeholder="Enter client context as JSON object..."></textarea>
+                            <div style="margin-top: 8px;">
+                                <button type="button" class="button button-small format-json-btn" 
+                                        data-target="edit_client_context_info" 
+                                        style="font-size: 12px; padding: 4px 8px;">
+                                    <i class="fas fa-magic"></i> Format JSON
+                                </button>
+                                <small style="margin-left: 10px; color: #666;">Click to clean and format your JSON</small>
+                            </div>                                
                             <small>This information helps AI generate more relevant and targeted intelligence about visitors.</small>
                             <?php if ( $intelligence_require_context === 'yes' ): ?>
                                 <small style="color: #dc3545; font-weight: 600;">Context information is required for AI-enabled clients.</small>
@@ -900,5 +926,61 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
             </div>
         </div>
     </div>
+
+    <!-- JSON Template Help Popup -->
+    <div id="json-template-popup" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width: 700px;">
+            <span class="close">&times;</span>
+            <h2>Client Context JSON Template</h2>
+            <p>Copy and paste this template, then customize the values for your client:</p>
+            
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 4px; margin: 15px 0; font-family: monospace; font-size: 14px; position: relative;">
+                <button type="button" id="copy-template-btn" style="position: absolute; top: 10px; right: 10px; padding: 5px 10px; background: #007cba; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">
+                    Copy
+                </button>
+                <pre id="json-template-text" style="margin: 0; white-space: pre-wrap; word-wrap: break-word;">{
+    "templateId": "marketing_campaign_v1",
+    "clientName": "Your Client Name",
+    "industry": "Technology",
+    "targetAudience": "Small business owners",
+    "brandTone": "Professional yet friendly",
+    "mainObjective": "Increase lead generation",
+    "keyFeatures": "AI-powered analytics, 24/7 support",
+    "budgetRange": "10k-50k",
+    "timeline": "Q2 2025"
+    }</pre>
+            </div>
+            
+            <div style="background: #e8f4f8; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                <h4 style="margin-top: 0; color: #0073aa;">Field Descriptions:</h4>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    <li><strong>templateId:</strong> Required. Identifies which template to use (e.g., "marketing_campaign_v1")</li>
+                    <li><strong>clientName:</strong> The client's company name</li>
+                    <li><strong>industry:</strong> Client's business sector</li>
+                    <li><strong>targetAudience:</strong> Who the client wants to reach</li>
+                    <li><strong>brandTone:</strong> How the client communicates</li>
+                    <li><strong>mainObjective:</strong> Primary business goal</li>
+                    <li><strong>keyFeatures:</strong> Main products/services offered</li>
+                    <li><strong>budgetRange:</strong> Marketing budget range</li>
+                    <li><strong>timeline:</strong> Project timeline or goals</li>
+                </ul>
+            </div>
+            
+            <div style="background: #fff3cd; padding: 15px; border-radius: 4px; margin: 15px 0;">
+                <h4 style="margin-top: 0; color: #856404;">Important Notes:</h4>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    <li>All fields except <code>templateId</code> are optional</li>
+                    <li>Use double quotes around all text values</li>
+                    <li>Keep the structure flat (no nested objects)</li>
+                    <li>Add or remove fields as needed for your client</li>
+                </ul>
+            </div>
+            
+            <div class="form-actions">
+                <button type="button" id="use-template-btn" class="button-primary">Use This Template</button>
+            </div>
+        </div>
+    </div>
+
 </div>
 

@@ -545,8 +545,17 @@ class CPD_Admin {
         
         // NEW: AI Intelligence fields
         $ai_intelligence_enabled = isset( $_POST['ai_intelligence_enabled'] ) ? 1 : 0;
-        $client_context_info = sanitize_textarea_field( $_POST['client_context_info'] );
-        
+        // Properly handle WordPress slashing for JSON content
+        $client_context_info = isset( $_POST['client_context_info'] ) ? stripslashes( wp_unslash( $_POST['client_context_info'] ) ) : '';
+
+        // Validate JSON structure if AI is enabled and context is provided
+        if ( $ai_intelligence_enabled && ! empty( trim( $client_context_info ) ) ) {
+            $validation = $this->validate_client_context_json( $client_context_info );
+            if ( ! $validation['valid'] ) {
+                wp_send_json_error( array( 'message' => 'Client Context Error: ' . $validation['error'] ) );
+            }
+        }
+
         $result = $this->wpdb->insert(
             $this->client_table,
             array(
@@ -632,8 +641,17 @@ class CPD_Admin {
         
         // NEW: AI Intelligence fields
         $ai_intelligence_enabled = isset( $_POST['ai_intelligence_enabled'] ) ? 1 : 0;
-        $client_context_info = sanitize_textarea_field( $_POST['client_context_info'] );
-        
+        // Properly handle WordPress slashing for JSON content
+        $client_context_info = isset( $_POST['client_context_info'] ) ? stripslashes( wp_unslash( $_POST['client_context_info'] ) ) : '';
+
+        // Validate JSON structure if AI is enabled and context is provided
+        if ( $ai_intelligence_enabled && ! empty( trim( $client_context_info ) ) ) {
+            $validation = $this->validate_client_context_json( $client_context_info );
+            if ( ! $validation['valid'] ) {
+                wp_send_json_error( array( 'message' => 'Client Context Error: ' . $validation['error'] ) );
+            }
+        }
+                
         $updated = $this->wpdb->update(
             $this->client_table,
             array(
@@ -969,6 +987,76 @@ class CPD_Admin {
             wp_send_json_error( array( 'message' => 'Failed to save some settings: ' . $error_message ) );
         }
     }
+
+    /**
+     * Validate client context JSON structure - Enhanced
+     */
+    private function validate_client_context_json( $context_json ) {
+        if ( empty( trim( $context_json ) ) ) {
+            return array( 'valid' => true ); // Empty is allowed
+        }
+        
+        // Clean the JSON text
+        $clean_json = trim( $context_json );
+        
+        // Remove BOM if present
+        $clean_json = preg_replace('/^\xEF\xBB\xBF/', '', $clean_json);
+        
+       
+        $decoded = json_decode( $clean_json, true );
+        
+        if ( json_last_error() !== JSON_ERROR_NONE ) {
+            $error_msg = 'Invalid JSON format: ' . json_last_error_msg();
+            
+            // Add more helpful error context
+            switch ( json_last_error() ) {
+                case JSON_ERROR_SYNTAX:
+                    $error_msg .= ' (Check for missing commas, quotes, or brackets)';
+                    break;
+                case JSON_ERROR_UTF8:
+                    $error_msg .= ' (Invalid UTF-8 characters)';
+                    break;
+                case JSON_ERROR_DEPTH:
+                    $error_msg .= ' (JSON too deeply nested)';
+                    break;
+            }
+            
+            return array( 
+                'valid' => false, 
+                'error' => $error_msg
+            );
+        }
+        
+        if ( ! is_array( $decoded ) || ! isset( $decoded['templateId'] ) ) {
+            return array( 
+                'valid' => false, 
+                'error' => 'JSON must be an object with templateId field' 
+            );
+        }
+        
+        if ( empty( $decoded['templateId'] ) || ! is_string( $decoded['templateId'] ) ) {
+            return array( 
+                'valid' => false, 
+                'error' => 'templateId is required and must be a string' 
+            );
+        }
+        
+        // Check for flat structure (no nested objects except arrays)
+        foreach ( $decoded as $key => $value ) {
+            if ( is_array( $value ) && ! empty( $value ) ) {
+                // Check if it's an associative array (object), which we don't allow
+                if ( array_keys( $value ) !== range( 0, count( $value ) - 1 ) ) {
+                    return array( 
+                        'valid' => false, 
+                        'error' => 'Nested objects are not allowed. Use flat structure only.' 
+                    );
+                }
+            }
+        }
+        
+        return array( 'valid' => true, 'decoded' => $decoded );
+    }
+
     /**
      * Also fix the defaults handler with the same approach
      */

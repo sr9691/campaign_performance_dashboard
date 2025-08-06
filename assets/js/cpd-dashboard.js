@@ -61,6 +61,65 @@ if (typeof window.cpdAdminInitialized === "undefined") {
     const clientList = $(".account-list"); // Left sidebar client list (admin-only HTML)
     const dateRangeSelect = $(".duration-select select"); // Date range selector (exists on both)
 
+    // Client Context JSON validation function - Enhanced
+    function validateClientContextJSON(contextText) {
+        if (!contextText.trim()) {
+            return { valid: true, error: null }; // Empty is allowed
+        }
+        
+        // Clean the text first - remove any invisible characters and normalize whitespace
+        let cleanText = contextText.trim();
+        
+        // Remove any potential BOM (Byte Order Mark) characters
+        cleanText = cleanText.replace(/^\uFEFF/, '');
+        
+        // Replace smart quotes with regular quotes (common copy/paste issue)
+        cleanText = cleanText.replace(/[\u201C\u201D]/g, '"');
+        cleanText = cleanText.replace(/[\u2018\u2019]/g, "'");
+        
+        try {
+            const parsed = JSON.parse(cleanText);
+            
+            // Check if it's a flat object (no nested objects except allowed ones)
+            if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+                return { valid: false, error: 'Context must be a JSON object' };
+            }
+            
+            // Check for templateId (required)
+            if (!parsed.templateId || typeof parsed.templateId !== 'string') {
+                return { valid: false, error: 'templateId is required and must be a string' };
+            }
+            
+            // Validate structure is mostly flat
+            for (const [key, value] of Object.entries(parsed)) {
+                if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    return { valid: false, error: 'Context structure should be flat. Nested objects are not allowed except for arrays.' };
+                }
+            }
+            
+            return { valid: true, error: null, parsed: parsed };
+        } catch (e) {
+            // More detailed error messages
+            let errorMessage = 'Invalid JSON format: ';
+            if (e.message.includes('Unexpected token')) {
+                errorMessage += 'Check for missing commas, quotes, or brackets. ';
+            }
+            if (e.message.includes('position')) {
+                const position = e.message.match(/position (\d+)/);
+                if (position) {
+                    const pos = parseInt(position[1]);
+                    const contextSnippet = cleanText.substring(Math.max(0, pos - 10), pos + 10);
+                    errorMessage += `Error near: "${contextSnippet}"`;
+                }
+            } else {
+                errorMessage += e.message;
+            }
+            
+            return { valid: false, error: errorMessage };
+        }
+    }
+
+
     // NEW: Function to refresh client table
     function refreshClientTable() {
       console.log("cpd-dashboard.js: Refreshing client management table...");
@@ -421,10 +480,172 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       // ADMIN FORM HANDLERS
       // ========================================
 
+      // JSON Formatter/Cleaner functionality
+      $(document).on('click', '.format-json-btn', function() {
+          const targetId = $(this).data('target');
+          const textarea = $('#' + targetId);
+          const rawJson = textarea.val();
+          
+          if (!rawJson.trim()) {
+              alert('Please enter some JSON text first.');
+              return;
+          }
+          
+          try {
+              // Clean and parse the JSON
+              let cleanText = rawJson.trim();
+              
+              // Remove BOM
+              cleanText = cleanText.replace(/^\uFEFF/, '');
+              
+              // Replace smart quotes
+              cleanText = cleanText.replace(/[\u201C\u201D]/g, '"');
+              cleanText = cleanText.replace(/[\u2018\u2019]/g, "'");
+              
+              // Parse and reformat
+              const parsed = JSON.parse(cleanText);
+              const formatted = JSON.stringify(parsed, null, 2);
+              
+              // Update the textarea
+              textarea.val(formatted);
+              
+              // Show success
+              const btn = $(this);
+              const originalHtml = btn.html();
+              btn.html('<i class="fas fa-check"></i> Formatted!').prop('disabled', true);
+              
+              setTimeout(function() {
+                  btn.html(originalHtml).prop('disabled', false);
+              }, 2000);
+              
+          } catch (e) {
+              alert('JSON formatting failed: ' + e.message + '\n\nPlease check your JSON syntax.');
+          }
+      });
+
+
+      // JSON Template Help Popup Functionality
+      let currentContextTarget = null;
+
+      // Open popup when help icon is clicked
+      $(document).on('click', '.context-help-icon', function() {
+          currentContextTarget = $(this).data('target');
+          $('#json-template-popup').fadeIn();
+      });
+
+      // Copy template to clipboard
+      $('#copy-template-btn').on('click', function() {
+          const templateText = $('#json-template-text').text();
+          
+          if (navigator.clipboard && window.isSecureContext) {
+              // Modern clipboard API
+              navigator.clipboard.writeText(templateText).then(function() {
+                  showCopySuccess();
+              }).catch(function() {
+                  fallbackCopyToClipboard(templateText);
+              });
+          } else {
+              // Fallback for older browsers
+              fallbackCopyToClipboard(templateText);
+          }
+      });
+
+      // Use template button - copies and fills the textarea
+      $('#use-template-btn').on('click', function() {
+          const templateText = $('#json-template-text').text();
+          
+          // Determine which textarea to fill based on currentContextTarget
+          let targetTextarea;
+          if (currentContextTarget === 'add-context') {
+              targetTextarea = $('#new_client_context_info');
+          } else if (currentContextTarget === 'edit-context') {
+              targetTextarea = $('#edit_client_context_info');
+          }
+          
+          if (targetTextarea && targetTextarea.length) {
+              targetTextarea.val(templateText);
+              targetTextarea.focus();
+          }
+          
+          // Copy to clipboard as well
+          if (navigator.clipboard && window.isSecureContext) {
+              navigator.clipboard.writeText(templateText).then(function() {
+                  console.log('Template copied to clipboard');
+              });
+          }
+          
+          // Close popup
+          $('#json-template-popup').fadeOut();
+          
+          // Show success message
+          alert('Template added to the context field! You can now customize the values for your client.');
+      });
+
+      // Fallback copy function for older browsers
+      function fallbackCopyToClipboard(text) {
+          const textArea = document.createElement('textarea');
+          textArea.value = text;
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-999999px';
+          textArea.style.top = '-999999px';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          
+          try {
+              document.execCommand('copy');
+              showCopySuccess();
+          } catch (err) {
+              console.error('Failed to copy text: ', err);
+              alert('Failed to copy to clipboard. Please select and copy the text manually.');
+          }
+          
+          document.body.removeChild(textArea);
+      }
+
+      // Show copy success feedback
+      function showCopySuccess() {
+          const copyBtn = $('#copy-template-btn');
+          const originalText = copyBtn.text();
+          const originalClass = copyBtn.attr('class');
+          
+          copyBtn.addClass('copy-success').text('Copied!');
+          
+          setTimeout(function() {
+              copyBtn.removeClass('copy-success').text(originalText);
+          }, 2000);
+      }
+
+      // Close popup when clicking outside or close button
+      $('#json-template-popup .close').on('click', function() {
+          $('#json-template-popup').fadeOut();
+      });
+
+      $('#json-template-popup').on('click', function(event) {
+          if ($(event.target).hasClass('modal')) {
+              $('#json-template-popup').fadeOut();
+          }
+      });
+
+
       // --- AJAX for Management Forms ---
       $("#add-client-form").on("submit", function (event) {
         event.preventDefault();
         console.log("cpd-dashboard.js: Add Client form submitted!");
+
+      // Validate client context JSON if AI is enabled
+      const aiEnabled = $("#new_ai_intelligence_enabled").is(":checked");
+      const contextInfo = $("#new_client_context_info").val();
+      
+      if (aiEnabled && contextInfo.trim()) {
+          const validation = validateClientContextJSON(contextInfo);
+          if (!validation.valid) {
+              alert("Client Context Error: " + validation.error);
+              $("#new_client_context_info").focus();
+              return;
+          }
+      }
+
         const form = $(this);
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop("disabled", true).text("Adding...");
@@ -589,7 +810,20 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         const crmEmail = row.data("crm-email");
         const aiEnabled = row.data("ai-intelligence-enabled");
         const clientContext = row.data("client-context-info");
-
+        
+        // Handle client context - convert object back to JSON string if needed
+        let contextValue = "";
+        if (clientContext) {
+            if (typeof clientContext === 'object') {
+                // If it's already parsed as an object, stringify it with nice formatting
+                contextValue = JSON.stringify(clientContext, null, 2);
+            } else {
+                // If it's still a string, use it as-is
+                contextValue = clientContext;
+            }
+        }
+        
+        $("#edit_client_context_info").val(contextValue);
         $("#edit_client_id").val(clientId);
         $("#edit_client_name").val(clientName);
         $("#edit_account_id").val(accountId);
@@ -597,7 +831,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         $("#edit_webpage_url").val(webpageUrl);
         $("#edit_crm_feed_email").val(crmEmail);
         $("#edit_ai_intelligence_enabled").prop("checked", aiEnabled == "1");
-        $("#edit_client_context_info").val(clientContext || "");
 
         // toggleEditContextSection();
 
@@ -607,6 +840,20 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       editClientForm.on("submit", function (event) {
         event.preventDefault();
         console.log("cpd-dashboard.js: Edit Client form submitted!");
+
+        // Validate client context JSON if AI is enabled
+        const aiEnabled = $("#edit_ai_intelligence_enabled").is(":checked");
+        const contextInfo = $("#edit_client_context_info").val();
+        
+        if (aiEnabled && contextInfo.trim()) {
+            const validation = validateClientContextJSON(contextInfo);
+            if (!validation.valid) {
+                alert("Client Context Error: " + validation.error);
+                $("#edit_client_context_info").focus();
+                return;
+            }
+        }
+
         const form = $(this);
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop("disabled", true).text("Saving...");

@@ -1145,5 +1145,91 @@ body.wp-admin .admin-page-container #clients-section .action-button {
         font-size: 8px !important;
         padding: 1px 3px !important;
     }
+
+    /* Context Help Icon Styles */
+    .context-help-icon {
+        color: #666;
+        margin-left: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: color 0.2s ease;
+    }
+    
+    .context-help-icon:hover {
+        color: #0073aa;
+    }
+    
+    /* JSON Template Popup Specific Styles */
+    #json-template-popup .modal-content {
+        max-width: 700px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    #json-template-popup pre {
+        background: #f8f8f8;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 15px;
+        overflow-x: auto;
+        line-height: 1.4;
+    }
+    
+    #json-template-popup #copy-template-btn:hover {
+        background: #005a87;
+    }
+    
+    #json-template-popup .button-primary {
+        background: #0073aa;
+        border-color: #0073aa;
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+    
+    #json-template-popup .button-primary:hover {
+        background: #005a87;
+        border-color: #005a87;
+    }
+    
+    /* Copy success indicator */
+    .copy-success {
+        background: #46b450 !important;
+        color: white !important;
+    }
+
+    /* JSON Format Button */
+    .format-json-btn {
+        background: #f0f0f1 !important;
+        border: 1px solid #ccd0d4 !important;
+        color: #2c3338 !important;
+        text-decoration: none !important;
+        display: inline-block !important;
+        font-size: 12px !important;
+        line-height: 1.4 !important;
+        padding: 4px 8px !important;
+        border-radius: 3px !important;
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+    }
+
+    .format-json-btn:hover {
+        background: #e8e8e9 !important;
+        border-color: #999 !important;
+        color: #1d2327 !important;
+    }
+
+    .format-json-btn:disabled {
+        background: #46b450 !important;
+        border-color: #46b450 !important;
+        color: white !important;
+        cursor: not-allowed !important;
+    }
+
+
+
+
 }
 
