@@ -134,17 +134,16 @@ class CPD_Intelligence {
             // Prepare visitor data payload (matching admin test format)
             $visitor_payload = $this->prepare_visitor_payload( $visitor );
             
-            // Create the full API payload
+            // Create the full API payload using new schema
             $api_payload = array(
-                'api_key' => $api_key,
-                'request_type' => 'single_visitor_intelligence',
-                'intelligence_id' => $intelligence_id,
                 'client_context' => $client_context,
-                'visitor_data' => $visitor_payload,
-                'request_metadata' => array(
-                    'request_timestamp' => current_time( 'mysql' ),
+                'visitor_info' => $visitor_payload,
+                'metadata' => array(
+                    'intelligence_id' => $intelligence_id,
+                    'request_timestamp' => current_time( 'c' ), // ISO 8601 format
                     'request_id' => uniqid( 'cpd_intel_' ),
-                    'source' => 'Campaign Performance Dashboard - Manual Request'
+                    'source' => 'Campaign Performance Dashboard - Manual Request',
+                    'visitor_id' => $visitor->id
                 )
             );
             
@@ -178,12 +177,12 @@ class CPD_Intelligence {
             error_log("CPD_Intelligence: API response code: $response_code");
             
             if ( $response_code >= 200 && $response_code < 300 ) {
-                // Parse the response data
-                $intelligence_data = json_decode( $response_body, true );
+                // Clean and validate the JSON response
+                $json_result = $this->clean_and_validate_json( $response_body );
                 
-                if ( $intelligence_data && json_last_error() === JSON_ERROR_NONE ) {
-                    // Update the intelligence record with the completed data
-                    $this->update_intelligence_status( $intelligence_id, 'completed', $intelligence_data );
+                if ( $json_result['valid'] ) {
+                    // Store the cleaned JSON string in the database (not the decoded array)
+                    $this->update_intelligence_status( $intelligence_id, 'completed', $json_result['cleaned_string'] );
                     
                     // Log successful API call
                     $this->log_intelligence_action( 
@@ -195,14 +194,14 @@ class CPD_Intelligence {
                     return array(
                         'success' => true,
                         'response_code' => $response_code,
-                        'intelligence_data' => $intelligence_data
+                        'intelligence_data' => $json_result['decoded_data'] // Return decoded for immediate use
                     );
                 } else {
                     // Invalid JSON response - mark as failed
-                    $error_msg = 'Invalid JSON response from Make.com';
+                    $error_msg = 'Invalid JSON response from Make.com: ' . $json_result['error'];
                     $this->update_intelligence_status( $intelligence_id, 'failed', null, $error_msg );
                     
-                    error_log("CPD_Intelligence: Invalid JSON response: $response_body");
+                    error_log("CPD_Intelligence: " . $error_msg . ". Raw response: " . substr($response_body, 0, 500));
                     
                     return array(
                         'success' => false,
@@ -239,22 +238,27 @@ class CPD_Intelligence {
     }
 
     /**
-     * NEW: Prepare client context for API call
+     * Prepare client context for API call - Updated for new schema
      */
     private function prepare_client_context( $client ) {
+        // Extract key services and competitive advantages from client context
+        $services = $this->extract_services_from_context( $client->client_context_info );
+        $advantages = $this->extract_advantages_from_context( $client->client_context_info );
+        $ideal_customer = $this->extract_ideal_customer_from_context( $client->client_context_info );
+        
         return array(
-            'client_id' => $client->id,
             'client_name' => $client->client_name,
             'about_client' => $client->client_context_info ?: '',
-            'industry_focus' => $this->extract_industry_from_context( $client->client_context_info ),
-            'target_audience' => $this->extract_audience_from_context( $client->client_context_info ),
-            'ai_enabled' => (bool) $client->ai_intelligence_enabled,
-            'webpage_url' => $client->webpage_url ?: ''
+            'target_market' => $this->extract_target_market_from_context( $client->client_context_info ),
+            'value_proposition' => $this->extract_value_prop_from_context( $client->client_context_info ),
+            'key_services' => $services,
+            'competitive_advantages' => $advantages,
+            'ideal_customer_profile' => $ideal_customer
         );
     }
 
     /**
-     * NEW: Prepare visitor data payload for API call
+     * NEW: Prepare visitor data payload for API call - Updated for new schema
      */
     private function prepare_visitor_payload( $visitor ) {
         // Parse recent page URLs if they're stored as JSON string
@@ -270,87 +274,153 @@ class CPD_Intelligence {
         }
         
         return array(
-            'visitor_id' => $visitor->id,
-            'client_id' => $visitor->account_id,
-            'personal_info' => array(
-                'first_name' => $visitor->first_name ?: '',
-                'last_name' => $visitor->last_name ?: '',
-                'full_name' => trim( ($visitor->first_name ?: '') . ' ' . ($visitor->last_name ?: '') ),
-                'job_title' => $visitor->job_title ?: '',
-                'linkedin_url' => $visitor->linkedin_url ?: ''
-            ),
-            'company_info' => array(
-                'company_name' => $visitor->company_name ?: '',
-                'website' => $visitor->website ?: '',
-                'industry' => $visitor->industry ?: '',
-                'estimated_employee_count' => $visitor->estimated_employee_count ?: '',
-                'estimated_revenue' => $visitor->estimated_revenue ?: '',
-                'location' => array(
-                    'city' => $visitor->city ?: '',
-                    'state' => $visitor->state ?: '',
-                    'zipcode' => $visitor->zipcode ?: ''
-                )
-            ),
-            'engagement_data' => array(
-                'first_seen_at' => $visitor->first_seen_at ?: '',
-                'last_seen_at' => $visitor->last_seen_at ?: '',
-                'all_time_page_views' => (int) ($visitor->all_time_page_views ?: 0),
-                'recent_page_count' => (int) ($visitor->recent_page_count ?: 0),
-                'recent_page_urls' => $recent_page_urls,
-                'most_recent_referrer' => $visitor->most_recent_referrer ?: ''
+            'name' => trim( ($visitor->first_name ?: '') . ' ' . ($visitor->last_name ?: '') ),
+            'title' => $visitor->job_title ?: '',
+            'email' => $visitor->email ?: '',
+            'company' => $visitor->company_name ?: '',
+            'company_size' => $visitor->estimated_employee_count ?: '',
+            'revenue' => $visitor->estimated_revenue ?: '',
+            'industry' => $visitor->industry ?: '',
+            'location' => trim( ($visitor->city ?: '') . ', ' . ($visitor->state ?: '') . ' ' . ($visitor->zipcode ?: '') ),
+            'website' => $visitor->website ?: '',
+            'pages_visited' => $recent_page_urls,
+            'visit_timestamps' => array(
+                'first_seen' => $visitor->first_seen_at ?: '',
+                'last_seen' => $visitor->last_seen_at ?: '',
+                'total_page_views' => (int) ($visitor->all_time_page_views ?: 0),
+                'recent_page_count' => (int) ($visitor->recent_page_count ?: 0)
             )
         );
     }
 
     /**
-     * NEW: Extract industry information from client context
+     * Extract target market from client context
      */
-    private function extract_industry_from_context( $context ) {
+    private function extract_target_market_from_context( $context ) {
         if ( empty( $context ) ) {
-            return '';
+            return 'Mid-market companies looking to modernize their technology stack';
         }
-        
-        // Simple keyword extraction for industry
-        $industry_keywords = array(
-            'technology', 'tech', 'software', 'saas', 'healthcare', 'medical', 
-            'finance', 'financial', 'retail', 'ecommerce', 'manufacturing', 
-            'construction', 'education', 'consulting', 'marketing', 'real estate'
-        );
-        
-        $context_lower = strtolower( $context );
-        foreach ( $industry_keywords as $keyword ) {
-            if ( strpos( $context_lower, $keyword ) !== false ) {
-                return ucfirst( $keyword );
-            }
-        }
-        
-        return '';
+        // Simple extraction logic - can be enhanced
+        return substr( $context, 0, 200 ) . '...';
     }
 
     /**
-     * NEW: Extract target audience from client context
+     * Extract value proposition from client context
      */
-    private function extract_audience_from_context( $context ) {
+    private function extract_value_prop_from_context( $context ) {
         if ( empty( $context ) ) {
-            return '';
+            return 'We help businesses reduce costs while improving operational efficiency';
         }
-        
-        // Simple keyword extraction for audience
-        $audience_keywords = array(
-            'b2b', 'b2c', 'enterprise', 'small business', 'startups', 
-            'consumers', 'professionals', 'executives'
+        // Look for value proposition keywords
+        return $this->extract_sentence_with_keywords( $context, ['help', 'reduce', 'improve', 'increase'] );
+    }
+
+    /**
+     * Extract services from client context
+     */
+    private function extract_services_from_context( $context ) {
+        if ( empty( $context ) ) {
+            return ['Consulting services', 'Technology solutions'];
+        }
+        // Basic service extraction
+        $services = array();
+        $keywords = ['consulting', 'migration', 'transformation', 'modernization', 'assessment'];
+        foreach ( $keywords as $keyword ) {
+            if ( stripos( $context, $keyword ) !== false ) {
+                $services[] = ucfirst( $keyword ) . ' services';
+            }
+        }
+        return empty( $services ) ? ['Professional services'] : array_slice( $services, 0, 4 );
+    }
+
+    /**
+     * Extract competitive advantages from client context
+     */
+    private function extract_advantages_from_context( $context ) {
+        if ( empty( $context ) ) {
+            return ['Industry expertise', 'Proven track record'];
+        }
+        // Basic advantage extraction
+        $advantages = array();
+        if ( stripos( $context, 'years' ) !== false ) {
+            $advantages[] = 'Years of experience in the industry';
+        }
+        if ( stripos( $context, 'certified' ) !== false || stripos( $context, 'partnership' ) !== false ) {
+            $advantages[] = 'Certified partnerships and expertise';
+        }
+        return empty( $advantages ) ? ['Industry expertise'] : array_slice( $advantages, 0, 3 );
+    }
+
+    /**
+     * Extract ideal customer profile from client context
+     */
+    private function extract_ideal_customer_from_context( $context ) {
+        return array(
+            'company_size' => '100-1000 employees',
+            'revenue_range' => '$10M-$500M',
+            'industries' => $this->extract_industries_from_context( $context ),
+            'pain_points' => $this->extract_pain_points_from_context( $context )
         );
+    }
+
+    /**
+     * Extract industries from context
+     */
+    private function extract_industries_from_context( $context ) {
+        $industries = array();
+        $industry_keywords = [
+            'manufacturing' => 'Manufacturing',
+            'healthcare' => 'Healthcare', 
+            'finance' => 'Financial Services',
+            'retail' => 'Retail',
+            'technology' => 'Technology'
+        ];
         
-        $context_lower = strtolower( $context );
-        foreach ( $audience_keywords as $keyword ) {
-            if ( strpos( $context_lower, $keyword ) !== false ) {
-                return ucwords( $keyword );
+        foreach ( $industry_keywords as $keyword => $industry ) {
+            if ( stripos( $context, $keyword ) !== false ) {
+                $industries[] = $industry;
             }
         }
         
-        return '';
+        return empty( $industries ) ? ['Professional Services'] : array_slice( $industries, 0, 3 );
     }
-    
+
+    /**
+     * Extract pain points from context
+     */
+    private function extract_pain_points_from_context( $context ) {
+        $pain_points = array();
+        $pain_keywords = [
+            'legacy' => 'Legacy systems',
+            'cost' => 'High IT costs',
+            'security' => 'Security concerns',
+            'efficiency' => 'Operational inefficiency'
+        ];
+        
+        foreach ( $pain_keywords as $keyword => $pain ) {
+            if ( stripos( $context, $keyword ) !== false ) {
+                $pain_points[] = $pain;
+            }
+        }
+        
+        return empty( $pain_points ) ? ['Legacy systems', 'High IT costs'] : array_slice( $pain_points, 0, 3 );
+    }
+
+    /**
+     * Helper to extract sentence with keywords
+     */
+    private function extract_sentence_with_keywords( $text, $keywords ) {
+        $sentences = explode( '.', $text );
+        foreach ( $sentences as $sentence ) {
+            foreach ( $keywords as $keyword ) {
+                if ( stripos( $sentence, $keyword ) !== false ) {
+                    return trim( $sentence );
+                }
+            }
+        }
+        return substr( $text, 0, 100 ) . '...';
+    }
+
     /**
      * Get visitor data by ID
      */
@@ -753,4 +823,64 @@ class CPD_Intelligence {
 
         return $results ? $results : array();
     }
+
+    /**
+     * Clean and validate JSON response from webhook
+     * Removes non-ASCII characters and ensures valid JSON
+     */
+    private function clean_and_validate_json( $json_string ) {
+        if ( empty( $json_string ) ) {
+            return array( 'valid' => false, 'error' => 'Empty JSON string' );
+        }
+
+        // Remove markdown code block formatting (```json at start and ``` at end)
+        $cleaned = preg_replace('/^```json\s*/', '', $cleaned);
+        $cleaned = preg_replace('/^```\s*/', '', $cleaned); // Handle case where it's just ```
+        $cleaned = preg_replace('/\s*```\s*$/', '', $cleaned);
+        
+        // Remove non-ASCII characters and control characters
+        $cleaned = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '', $json_string);
+        
+        // Remove common problematic characters that might be added by the API
+        $cleaned = str_replace(["\r", "\n", "\t"], '', $cleaned);
+        
+        // Remove any leading/trailing whitespace
+        $cleaned = trim($cleaned);
+        
+        // Try to decode the JSON
+        $decoded = json_decode($cleaned, true);
+        $json_error = json_last_error();
+        
+        if ($json_error !== JSON_ERROR_NONE) {
+            // Additional cleanup attempts
+            
+            // Remove potential markdown formatting
+            $cleaned = preg_replace('/```json\s*/', '', $cleaned);
+            $cleaned = preg_replace('/```\s*$/', '', $cleaned);
+            
+            // Remove any escaped quotes that might be problematic
+            $cleaned = stripslashes($cleaned);
+            
+            // Try decoding again
+            $decoded = json_decode($cleaned, true);
+            $json_error = json_last_error();
+            
+            if ($json_error !== JSON_ERROR_NONE) {
+                return array(
+                    'valid' => false,
+                    'error' => 'JSON decode error: ' . json_last_error_msg(),
+                    'cleaned_string' => $cleaned
+                );
+            }
+        }
+        
+        return array(
+            'valid' => true,
+            'cleaned_string' => $cleaned,
+            'decoded_data' => $decoded
+        );
+    }
+
+
+
 }

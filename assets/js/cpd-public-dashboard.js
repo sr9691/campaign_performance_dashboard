@@ -1011,7 +1011,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // NEW: Function to load intelligence data for modal
+    // Function to load intelligence data for modal
     async function loadIntelligenceDataForModal(visitorId) {
         const intelligenceSection = document.querySelector('.intelligence-section .intelligence-loading');
         if (!intelligenceSection) return;
@@ -1037,62 +1037,22 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Intelligence modal data response:', data);
 
             if (data.success && data.data && data.data.intelligence) {
-                const intelligence = data.data.intelligence;
-                const intelligenceHTML = `
-                    <div class="intelligence-data">
-                        ${intelligence.person_summary ? `
-                            <div class="intelligence-item">
-                                <h4><i class="fas fa-user-circle"></i> Person Summary</h4>
-                                <p>${intelligence.person_summary}</p>
-                            </div>
-                        ` : ''}
-                        
-                        ${intelligence.company_summary ? `
-                            <div class="intelligence-item">
-                                <h4><i class="fas fa-building"></i> Company Analysis</h4>
-                                <p>${intelligence.company_summary}</p>
-                            </div>
-                        ` : ''}
-                        
-                        ${intelligence.industry_insights ? `
-                            <div class="intelligence-item">
-                                <h4><i class="fas fa-chart-line"></i> Industry Insights</h4>
-                                <p>${intelligence.industry_insights}</p>
-                            </div>
-                        ` : ''}
-                        
-                        ${intelligence.key_insights && intelligence.key_insights.length > 0 ? `
-                            <div class="intelligence-item">
-                                <h4><i class="fas fa-lightbulb"></i> Key Insights</h4>
-                                <ul>
-                                    ${intelligence.key_insights.map(insight => `<li>${insight}</li>`).join('')}
-                                </ul>
-                            </div>
-                        ` : ''}
-                        
-                        ${intelligence.recommended_approach ? `
-                            <div class="intelligence-item">
-                                <h4><i class="fas fa-route"></i> Recommended Approach</h4>
-                                <p>${intelligence.recommended_approach}</p>
-                            </div>
-                        ` : ''}
-                        
-                        ${intelligence.lead_qualification_score !== undefined ? `
-                            <div class="intelligence-item">
-                                <h4><i class="fas fa-star"></i> Lead Quality Score</h4>
-                                <div class="score-bar">
-                                    <div class="score-fill" style="width: ${intelligence.lead_qualification_score}%"></div>
-                                    <span class="score-text">${intelligence.lead_qualification_score}/100</span>
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        <div class="intelligence-meta">
-                            <small><i class="fas fa-info-circle"></i> Generated with client-specific context</small>
-                        </div>
-                    </div>
-                `;
+                let intelligence;
                 
+                // Parse the intelligence data if it's a string
+                if (typeof data.data.intelligence === 'string') {
+                    try {
+                        intelligence = JSON.parse(data.data.intelligence);
+                        console.log('Parsed intelligence data:', intelligence);
+                    } catch (parseError) {
+                        console.error('Failed to parse intelligence JSON:', parseError);
+                        throw new Error('Invalid intelligence data format');
+                    }
+                } else {
+                    intelligence = data.data.intelligence;
+                }
+                
+                const intelligenceHTML = renderStructuredIntelligence(intelligence);
                 intelligenceSection.innerHTML = intelligenceHTML;
             } else {
                 intelligenceSection.innerHTML = `
@@ -1111,7 +1071,153 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Function to render structured intelligence data with new schema
+    function renderStructuredIntelligence(intelligence) {
+        let html = '<div class="intelligence-data">';
+        
+        // Company Overview & Fit - check both possible field names
+        const companyOverview = intelligence['🏢 Company Overview & Fit'] || intelligence['Company Overview & Fit'];
+        if (companyOverview) {
+            html += '<div class="intelligence-item">';
+            html += '<h4><i class="fas fa-building"></i> Company Overview & Fit</h4>';
+            html += '<p>' + companyOverview + '</p>';
+            html += '</div>';
+        }
+        
+        // Decision Makers - check multiple possible field names
+        const decisionMakers = intelligence['👥 Top Technology Decision-Makers'] || 
+                            intelligence['Top {{Target Roles}} Contacts'] ||
+                            intelligence['Top Technology Decision-Makers'];
+        
+        if (decisionMakers) {
+            html += '<div class="intelligence-item">';
+            html += '<h4><i class="fas fa-users"></i> Top Technology Decision-Makers</h4>';
+            
+            if (Array.isArray(decisionMakers)) {
+                html += '<ul>';
+                decisionMakers.forEach(function(person) {
+                    html += '<li><strong>' + (person.Name || 'TBD') + '</strong>';
+                    if (person.Title) html += ' - ' + person.Title;
+                    if (person.Relevance) html += '<br><small>' + person.Relevance + '</small>';
+                    html += '</li>';
+                });
+                html += '</ul>';
+            } else if (typeof decisionMakers === 'string') {
+                // Parse markdown table if it's a string
+                html += parseMarkdownTable(decisionMakers);
+            }
+            html += '</div>';
+        }
+        
+        // Email Templates - Look for fields that start with "Email for"
+        let emailsFound = false;
+        let emailsHtml = '';
 
+        Object.keys(intelligence).forEach(function(key) {
+            if (key.startsWith('Email for ')) {
+                const email = intelligence[key];
+                
+                if (email && typeof email === 'object') {
+                    // Check for both possible structures
+                    const subject = email.Subject || email['Email Subject'] || 'No Subject';
+                    const body = email.Body || email['Email Body'] || 'No Body';
+                    
+                    if (subject !== 'No Subject' && body !== 'No Body') {
+                        if (!emailsFound) {
+                            emailsHtml += '<div class="intelligence-item">';
+                            emailsHtml += '<h4><i class="fas fa-envelope"></i> Suggested Emails</h4>';
+                            emailsFound = true;
+                        }
+                        
+                        // Extract contact name from field key
+                        const contactName = key.replace('Email for ', '');
+                        
+                        // Create unique ID for this email
+                        const emailId = 'email-' + key.replace(/[^a-zA-Z0-9]/g, '');
+                        
+                        emailsHtml += '<div class="email-subject-row">';
+                        emailsHtml += '<span class="email-contact">' + contactName + ':</span> ';
+                        emailsHtml += '<a href="#" class="email-popup-link" data-email-id="' + emailId + '" data-subject="' + encodeURIComponent(subject) + '" data-body="' + encodeURIComponent(body) + '" data-contact="' + encodeURIComponent(contactName) + '">';
+                        emailsHtml += subject;
+                        emailsHtml += '</a>';
+                        emailsHtml += '</div>';
+                    }
+                }
+            }
+        });
+
+        if (emailsFound) {
+            emailsHtml += '</div>';
+            html += emailsHtml;
+        }
+
+        // SDR Summary - handle the numbered object structure
+        const sdrSummary = intelligence['📝 SDR Summary'] || intelligence['SDR Summary'];
+        
+        if (sdrSummary && typeof sdrSummary === 'object' && sdrSummary !== null) {
+            html += '<div class="intelligence-item">';
+            html += '<h4><i class="fas fa-clipboard-list"></i> SDR Summary</h4>';
+            
+            // Handle the numbered structure we see in the console
+            const tacticalRec = sdrSummary['Tactical recommendation for first outreach step'] || 
+                            sdrSummary['1'];
+            const leadWith = sdrSummary['What to lead with'] || 
+                            sdrSummary['2'];
+            const priority = sdrSummary['Who the SDR should prioritize first'] || 
+                            sdrSummary['3'];
+            const fit = sdrSummary['Why this company is a fit'] || 
+                    sdrSummary['4'];
+            
+            if (fit) html += '<p><strong>Fit:</strong> ' + fit + '</p>';
+            if (priority) html += '<p><strong>Priority:</strong> ' + priority + '</p>';
+            if (leadWith) html += '<p><strong>Lead With:</strong> ' + leadWith + '</p>';
+            if (tacticalRec) html += '<p><strong>First Outreach:</strong> ' + tacticalRec + '</p>';
+            
+            html += '</div>';
+        }
+        
+        html += '<div class="intelligence-meta">';
+        html += '<small><i class="fas fa-info-circle"></i> Generated with client-specific context</small>';
+        html += '</div>';
+        
+        html += '</div>';
+        return html;
+    }
+
+    // Helper function to parse markdown table into clean HTML
+    function parseMarkdownTable(markdownText) {
+        // Split by lines and find table rows
+        const lines = markdownText.split('\n').map(line => line.trim()).filter(line => line);
+        
+        // Find lines that look like table rows (contain |)
+        const tableLines = lines.filter(line => line.includes('|') && !line.match(/^\s*\|\s*[-\s|]*\s*\|\s*$/));
+        
+        if (tableLines.length === 0) {
+            return '<p>' + markdownText + '</p>';
+        }
+        
+        let html = '<ul>';
+        
+        // Skip header row (first line), process data rows
+        for (let i = 1; i < tableLines.length; i++) {
+            const cells = tableLines[i].split('|').map(cell => cell.trim()).filter(cell => cell);
+            
+            if (cells.length >= 3) {
+                const name = cells[0] || 'TBD';
+                const title = cells[1] || '';
+                const relevance = cells[2] || '';
+                
+                html += '<li>';
+                html += '<strong>' + name + '</strong>';
+                if (title) html += ' - ' + title;
+                if (relevance) html += '<br><small>' + relevance + '</small>';
+                html += '</li>';
+            }
+        }
+        
+        html += '</ul>';
+        return html;
+    }
 
     // Modal close functionality
     if (modalCloseButton) {
@@ -1173,6 +1279,68 @@ document.addEventListener('DOMContentLoaded', () => {
             await loadClientDashboardData(currentClientId, durationSelector.value); // Pass explicit clientId and new duration
         });
     }
+
+
+    // Function to handle email popup clicks
+    function handleEmailPopupClick(event) {
+        event.preventDefault();
+        
+        const link = event.target;
+        const subject = decodeURIComponent(link.dataset.subject);
+        const body = decodeURIComponent(link.dataset.body);
+        const contact = decodeURIComponent(link.dataset.contact);
+        
+        console.log('Email popup clicked:', { subject, body, contact }); // Debug log
+        
+        // Create email popup modal
+        const emailPopupHtml = `
+            <div class="email-popup-overlay">
+                <div class="email-popup-content">
+                    <div class="email-popup-header">
+                        <h3><i class="fas fa-envelope"></i> Email Template - ${contact}</h3>
+                        <span class="email-popup-close">&times;</span>
+                    </div>
+                    <div class="email-popup-body">
+                        <div class="email-field">
+                            <strong>Subject:</strong>
+                            <div class="email-subject-display">${subject}</div>
+                        </div>
+                        <div class="email-field">
+                            <strong>Body:</strong>
+                            <div class="email-body-display">${body.replace(/\n/g, '<br>')}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add popup to page
+        document.body.insertAdjacentHTML('beforeend', emailPopupHtml);
+        
+        // Add event listeners for closing
+        const popup = document.querySelector('.email-popup-overlay');
+        const closeBtn = popup.querySelector('.email-popup-close');
+        
+        closeBtn.addEventListener('click', () => {
+            popup.remove();
+        });
+        
+        popup.addEventListener('click', (e) => {
+            if (e.target === popup) {
+                popup.remove();
+            }
+        });
+    }
+    
+    // Add event delegation for email popup links - Updated to work with dynamically added content
+    document.addEventListener('click', function(event) {
+        console.log('Click detected on:', event.target); // Debug log
+        
+        if (event.target.classList.contains('email-popup-link')) {
+            console.log('Email link clicked!'); // Debug log
+            handleEmailPopupClick(event);
+        }
+    });
 
     // --- Initial Data Load ---
     console.log('cpd-public-dashboard.js: Initializing dashboard data load.');
