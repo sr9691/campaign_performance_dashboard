@@ -136,6 +136,8 @@ class CPD_Intelligence {
             
             // Create the full API payload using new schema
             $api_payload = array(
+                'api_key' => $api_key,  // NEW: Include API key in payload
+                'request_type' => 'visitor_intelligence',  // NEW: Specify request type
                 'client_context' => $client_context,
                 'visitor_info' => $visitor_payload,
                 'metadata' => array(
@@ -143,7 +145,8 @@ class CPD_Intelligence {
                     'request_timestamp' => current_time( 'c' ), // ISO 8601 format
                     'request_id' => uniqid( 'cpd_intel_' ),
                     'source' => 'Campaign Performance Dashboard - Manual Request',
-                    'visitor_id' => $visitor->id
+                    'visitor_id' => $visitor->id,
+                    'account_id' => $visitor->account_id  // NEW: Include account_id in metadata
                 )
             );
             
@@ -238,7 +241,7 @@ class CPD_Intelligence {
     }
 
     /**
-     * Prepare client context for API call - Updated for new schema
+     * Prepare client context for API call - Updated for new schema with account_id
      */
     private function prepare_client_context( $client ) {
         // Extract key services and competitive advantages from client context
@@ -247,18 +250,22 @@ class CPD_Intelligence {
         $ideal_customer = $this->extract_ideal_customer_from_context( $client->client_context_info );
         
         return array(
+            'account_id' => $client->account_id,  // NEW: Include account_id
+            'client_id' => $client->id,           // NEW: Include internal client_id
             'client_name' => $client->client_name,
             'about_client' => $client->client_context_info ?: '',
+            'webpage_url' => $client->webpage_url ?: '',  // NEW: Include client website
             'target_market' => $this->extract_target_market_from_context( $client->client_context_info ),
             'value_proposition' => $this->extract_value_prop_from_context( $client->client_context_info ),
             'key_services' => $services,
             'competitive_advantages' => $advantages,
-            'ideal_customer_profile' => $ideal_customer
+            'ideal_customer_profile' => $ideal_customer,
+            'ai_enabled' => (bool) $client->ai_intelligence_enabled  // NEW: Include AI status
         );
     }
 
     /**
-     * NEW: Prepare visitor data payload for API call - Updated for new schema
+     * Prepare visitor data payload for API call - Updated for new schema
      */
     private function prepare_visitor_payload( $visitor ) {
         // Parse recent page URLs if they're stored as JSON string
@@ -274,6 +281,8 @@ class CPD_Intelligence {
         }
         
         return array(
+            'visitor_id' => $visitor->id,  // Include internal visitor ID
+            'account_id' => $visitor->account_id,  // account_id
             'name' => trim( ($visitor->first_name ?: '') . ' ' . ($visitor->last_name ?: '') ),
             'title' => $visitor->job_title ?: '',
             'email' => $visitor->email ?: '',
@@ -833,13 +842,16 @@ class CPD_Intelligence {
             return array( 'valid' => false, 'error' => 'Empty JSON string' );
         }
 
+        // Start with the original string
+        $cleaned = $json_string;
+
         // Remove markdown code block formatting (```json at start and ``` at end)
         $cleaned = preg_replace('/^```json\s*/', '', $cleaned);
         $cleaned = preg_replace('/^```\s*/', '', $cleaned); // Handle case where it's just ```
         $cleaned = preg_replace('/\s*```\s*$/', '', $cleaned);
         
         // Remove non-ASCII characters and control characters
-        $cleaned = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '', $json_string);
+        $cleaned = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '', $cleaned);
         
         // Remove common problematic characters that might be added by the API
         $cleaned = str_replace(["\r", "\n", "\t"], '', $cleaned);
@@ -854,7 +866,7 @@ class CPD_Intelligence {
         if ($json_error !== JSON_ERROR_NONE) {
             // Additional cleanup attempts
             
-            // Remove potential markdown formatting
+            // Remove potential markdown formatting again (in case there were nested blocks)
             $cleaned = preg_replace('/```json\s*/', '', $cleaned);
             $cleaned = preg_replace('/```\s*$/', '', $cleaned);
             
