@@ -789,9 +789,9 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                     </thead>
                     <tbody>
                         <?php 
-                            error_log('CPD Debug: Logs variable contains ' . count($logs) . ' entries');
+                            // error_log('CPD Debug: Logs variable contains ' . count($logs) . ' entries');
                             if (!empty($logs)) {
-                                error_log('CPD Debug: First log entry: ' . print_r($logs[0], true));
+                                // error_log('CPD Debug: First log entry: ' . print_r($logs[0], true));
                             }
                         ?>
                         <?php if ( ! empty( $logs ) ) : ?>

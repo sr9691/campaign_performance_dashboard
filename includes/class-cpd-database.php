@@ -146,7 +146,7 @@ class CPD_Database {
         ) $this->charset_collate;";
         dbDelta( $sql_visitors );
 
-        // NEW: Table for Visitor Intelligence Data
+        // Table for Visitor Intelligence Data
         $table_name_intelligence = $this->wpdb->prefix . 'cpd_visitor_intelligence';
         $sql_intelligence = "CREATE TABLE $table_name_intelligence (
             id bigint(20) NOT NULL AUTO_INCREMENT,
@@ -182,6 +182,17 @@ class CPD_Database {
         ) $this->charset_collate;";
         dbDelta( $sql_logs );
 
+        // NEW: Create Hot List Settings table
+        if (!class_exists('CPD_Hot_List_Database')) {
+            require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-hot-list-database.php';
+        }
+        
+        $hot_list_db = new CPD_Hot_List_Database();
+        $hot_list_db->create_table();
+
+        // Set plugin version for migration tracking
+        update_option( 'cpd_database_version', '1.2.0' ); // Update version for Hot List
+        
         // Set plugin version for migration tracking
         update_option( 'cpd_database_version', '1.1.0' );
         
@@ -199,8 +210,14 @@ class CPD_Database {
             $this->migrate_to_1_1_0();
             update_option( 'cpd_database_version', '1.1.0' );
         }
-    }
 
+        // Migration for Hot List features (1.1.0 -> 1.2.0)
+        if ( version_compare( $current_version, '1.2.0', '<' ) ) {
+            $this->migrate_to_1_2_0();
+            update_option( 'cpd_database_version', '1.2.0' );
+        }
+    }
+    
     /**
      * Migration to add AI Intelligence features to existing installations
      */
@@ -268,6 +285,23 @@ class CPD_Database {
             }
         }
     }
+
+    /**
+     * Migration to add Hot List features
+     */
+    private function migrate_to_1_2_0() {
+        if (!class_exists('CPD_Hot_List_Database')) {
+            require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-hot-list-database.php';
+        }
+        
+        $hot_list_db = new CPD_Hot_List_Database();
+        
+        if (!$hot_list_db->table_exists()) {
+            $hot_list_db->create_table();
+            // error_log( 'CPD Database: Created Hot List Settings table during migration' );
+        }
+    }
+
 
     /**
      * Check if a column exists in a table

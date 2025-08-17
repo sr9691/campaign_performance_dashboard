@@ -31,7 +31,7 @@ require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-dashboard.php';
 // Include the admin class as well
 require_once CPD_DASHBOARD_PLUGIN_DIR . 'admin/class-cpd-admin.php';
 
-// NEW: Include AI Intelligence classes
+// Include AI Intelligence classes
 require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-intelligence.php';
 require_once CPD_DASHBOARD_PLUGIN_DIR . 'admin/class-cpd-admin-intelligence-settings.php';
 
@@ -44,7 +44,7 @@ function cpd_dashboard_activate() {
     $cpd_database = new CPD_Database();
     $cpd_database->create_tables();
     
-    // NEW: Handle database migrations for AI Intelligence features
+    // Handle database migrations for AI Intelligence features
     $cpd_database->migrate_database();
 
     // Register the custom client role on activation.
@@ -57,8 +57,8 @@ function cpd_dashboard_activate() {
     require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-email-handler.php';
     CPD_Email_Handler::schedule_daily_crm_email();
     
-    // NEW: Log activation with AI Intelligence support
-    error_log( 'CPD Dashboard activated with AI Intelligence support - Version ' . CPD_DASHBOARD_VERSION );
+    // Flush rewrite rules for hot list settings
+    flush_rewrite_rules();
 }
 
 /**
@@ -72,7 +72,7 @@ function cpd_dashboard_deactivate() {
     require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-email-handler.php';
     CPD_Email_Handler::unschedule_daily_crm_email();
     
-    // NEW: Clear intelligence cleanup schedule
+    // Clear intelligence cleanup schedule
     wp_clear_scheduled_hook( 'cpd_intelligence_cleanup' );
     
     error_log( 'CPD Dashboard deactivated' );
@@ -81,7 +81,7 @@ function cpd_dashboard_deactivate() {
 register_activation_hook( __FILE__, 'cpd_dashboard_activate' );
 register_deactivation_hook( __FILE__, 'cpd_dashboard_deactivate' );
 
-// NEW: Handle plugin updates and migrations
+// Handle plugin updates and migrations
 add_action( 'plugins_loaded', 'cpd_dashboard_check_version' );
 
 /**
@@ -116,7 +116,7 @@ function cpd_dashboard_register_roles() {
             'upload_files'        => false,  // Don't allow file uploads.
             'edit_posts'          => false,  // Don't allow editing posts.
             'cpd_view_dashboard'  => true,   // Custom capability for viewing dashboard (PRESERVED)
-            // NEW: AI Intelligence capability
+            // AI Intelligence capability
             'cpd_request_intelligence' => true, // Allow clients to request intelligence for their visitors
         )
     );
@@ -131,7 +131,7 @@ function cpd_dashboard_add_capabilities() {
     $admin_role = get_role('administrator');
     if ($admin_role) {
         $admin_role->add_cap('cpd_view_dashboard');
-        // NEW: AI Intelligence capabilities for admins
+        // AI Intelligence capabilities for admins
         $admin_role->add_cap('cpd_manage_intelligence');
         $admin_role->add_cap('cpd_configure_intelligence');
         $admin_role->add_cap('cpd_view_intelligence_stats');
@@ -145,7 +145,7 @@ function cpd_dashboard_add_capabilities() {
     $client_role = get_role('client');
     if ($client_role) {
         $client_role->add_cap('cpd_view_dashboard');
-        // NEW: AI Intelligence and other capabilities for clients
+        // AI Intelligence and other capabilities for clients
         $client_role->add_cap('cpd_request_intelligence');
         $client_role->add_cap('cpd_view_own_data');
         $client_role->add_cap('cpd_export_own_data');
@@ -171,15 +171,44 @@ function cpd_dashboard_run() {
     // Register the cron hook - THIS IS THE KEY ADDITION (PRESERVED)
     add_action( 'cpd_daily_crm_email_event', array( 'CPD_Email_Handler', 'daily_crm_email_cron_callback' ) );
     
-    // NEW: Initialize AI Intelligence admin settings (only in admin)
+    // Initialize AI Intelligence admin settings (only in admin)
     if ( is_admin() && class_exists( 'CPD_Admin_Intelligence_Settings' ) ) {
         new CPD_Admin_Intelligence_Settings();
     }
 }
+
 add_action( 'plugins_loaded', 'cpd_dashboard_run' );
+/**
+ * Add URL rewrite rules for Hot List Settings
+ */
+add_action( 'init', 'cpd_add_hot_list_rewrite_rules' );
+add_filter( 'query_vars', 'cpd_add_hot_list_query_vars' );
+add_action( 'template_redirect', 'cpd_handle_hot_list_settings_template' );
+
+function cpd_add_hot_list_rewrite_rules() {
+    // Add rewrite rule for hot-list-settings
+    add_rewrite_rule(
+        '^campaign-dashboard/hot-list-settings/?$',
+        'index.php?cpd_hot_list_settings=1',
+        'top'
+    );
+}
+
+function cpd_add_hot_list_query_vars( $vars ) {
+    $vars[] = 'cpd_hot_list_settings';
+    return $vars;
+}
+
+function cpd_handle_hot_list_settings_template() {
+    if ( get_query_var( 'cpd_hot_list_settings' ) ) {
+        // Load the hot list settings page
+        include CPD_DASHBOARD_PLUGIN_DIR . 'public/hot-list-settings.php';
+        exit;
+    }
+}
 
 /**
- * NEW: Plugin uninstall cleanup
+ * Plugin uninstall cleanup
  */
 register_uninstall_hook( __FILE__, 'cpd_dashboard_uninstall' );
 
@@ -208,7 +237,7 @@ function cpd_dashboard_uninstall() {
 }
 
 /**
- * NEW: Add admin notices for intelligence feature
+ * Add admin notices for intelligence feature
  */
 add_action( 'admin_notices', 'cpd_intelligence_admin_notices' );
 
@@ -237,7 +266,7 @@ function cpd_intelligence_admin_notices() {
 }
 
 /**
- * NEW: Load plugin text domain for internationalization
+ * Load plugin text domain for internationalization
  */
 add_action( 'plugins_loaded', 'cpd_dashboard_load_textdomain' );
 
@@ -246,7 +275,7 @@ function cpd_dashboard_load_textdomain() {
 }
 
 /**
- * NEW: Enqueue intelligence-related scripts and styles
+ * Enqueue intelligence-related scripts and styles
  */
 add_action( 'admin_enqueue_scripts', 'cpd_enqueue_intelligence_assets' );
 

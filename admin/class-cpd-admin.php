@@ -23,6 +23,9 @@ class CPD_Admin {
     private static $page_content_rendered = false;
 
     public function __construct( $plugin_name, $version ) {
+        // Static flag to prevent duplicate hook registration
+        static $hooks_registered = false;
+        
         global $wpdb;
         $this->wpdb = $wpdb;
         $this->plugin_name = $plugin_name;
@@ -32,59 +35,71 @@ class CPD_Admin {
         $this->user_client_table = $this->wpdb->prefix . 'cpd_client_users';
 
         // Initialize the data provider
-        require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-data-provider.php'; // Ensure it's loaded
+        require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-data-provider.php';
         $this->data_provider = new CPD_Data_Provider();
 
-        // Add hooks for form processing (AJAX and non-AJAX)
-        add_action( 'admin_post_cpd_add_client', array( $this, 'handle_add_client_submission' ) );
-        add_action( 'admin_post_cpd_delete_client', array( $this, 'handle_delete_client_submission' ) );
-        add_action( 'admin_post_cpd_add_user', array( $this, 'handle_add_user_submission' ) );
-        add_action( 'admin_post_cpd_delete_user', array( $this, 'handle_delete_user_submission' ) );
+        // Only register hooks once
+        if (!$hooks_registered) {
+            $hooks_registered = true;
+            
+            // Add hooks for form processing (AJAX and non-AJAX)
+            add_action( 'admin_post_cpd_add_client', array( $this, 'handle_add_client_submission' ) );
+            add_action( 'admin_post_cpd_delete_client', array( $this, 'handle_delete_client_submission' ) );
+            add_action( 'admin_post_cpd_add_user', array( $this, 'handle_add_user_submission' ) );
+            add_action( 'admin_post_cpd_delete_user', array( $this, 'handle_delete_user_submission' ) );
+            
+            // Hook for manual settings submission
+            add_action( 'admin_post_cpd_save_general_settings', array( $this, 'handle_save_general_settings' ) );
+            add_action( 'admin_post_nopriv_cpd_save_general_settings', array( $this, 'handle_save_general_settings' ) );
+            add_action( 'wp_ajax_cpd_save_intelligence_settings', array( $this, 'ajax_save_intelligence_settings' ) );
+            add_action( 'wp_ajax_cpd_save_intelligence_defaults', array( $this, 'ajax_save_intelligence_defaults' ) );
+            add_action( 'wp_ajax_cpd_test_intelligence_webhook', array( $this, 'ajax_test_intelligence_webhook' ) );
+
+            // AJAX hooks for Admin dashboard interactivity
+            add_action( 'wp_ajax_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
+            add_action( 'wp_ajax_cpd_ajax_add_client', array( $this, 'ajax_handle_add_client' ) );
+            add_action( 'wp_ajax_nopriv_cpd_ajax_add_client', array( $this, 'ajax_handle_add_client' ) ); 
+            add_action( 'wp_ajax_cpd_ajax_edit_client', array( $this, 'ajax_handle_edit_client' ) );
+            add_action( 'wp_ajax_cpd_ajax_delete_client', array( $this, 'ajax_handle_delete_client' ) );
+            add_action( 'wp_ajax_cpd_get_clients', array( $this, 'ajax_get_clients' ) );
+            add_action( 'wp_ajax_cpd_ajax_add_user', array( $this, 'ajax_handle_add_user' ) );
+            add_action( 'wp_ajax_nopriv_cpd_ajax_add_user', array( $this, 'ajax_handle_add_user' ) ); 
+            add_action( 'wp_ajax_cpd_ajax_edit_user', array( $this, 'ajax_handle_edit_user' ) );
+            add_action( 'wp_ajax_cpd_ajax_delete_user', array( $this, 'ajax_handle_delete_user' ) );
+            add_action( 'wp_ajax_cpd_get_users', array( $this, 'ajax_get_users' ) );
+            add_action( 'wp_ajax_cpd_get_client_list', array( $this, 'ajax_get_client_list' ) );
+
+            // AJAX for API token generation
+            add_action( 'wp_ajax_cpd_generate_api_token', array( $this, 'ajax_generate_api_token' ) );
+
+            // CRM Email AJAX actions
+            add_action( 'wp_ajax_cpd_get_eligible_visitors', array( 'CPD_Email_Handler', 'ajax_get_eligible_visitors' ) );
+            add_action( 'wp_ajax_cpd_trigger_on_demand_send', array( 'CPD_Email_Handler', 'ajax_trigger_on_demand_send_webhook' ) );
+
+            // Enqueue styles/scripts - Hook to BOTH admin and frontend to cover all scenarios
+            add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
+            add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
+
+            // ALSO hook to frontend enqueue for admin users on public dashboard
+            add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_styles' ), 5 ); // High priority
+            add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ), 5 ); // High priority
+            
+            // Force admin styles for all our pages
+            add_action( 'admin_head', array( $this, 'force_admin_styles' ) );
+
+            // Add admin menus
+            add_action( 'admin_menu', array( $this, 'add_plugin_admin_menu' ) );
         
-        // NEW: Hook for manual settings submission
-        add_action( 'admin_post_cpd_save_general_settings', array( $this, 'handle_save_general_settings' ) );
-        add_action( 'admin_post_nopriv_cpd_save_general_settings', array( $this, 'handle_save_general_settings' ) ); // For logged out users, though settings are admin only
-        add_action( 'wp_ajax_cpd_save_intelligence_settings', array( $this, 'ajax_save_intelligence_settings' ) );
-        add_action( 'wp_ajax_cpd_save_intelligence_defaults', array( $this, 'ajax_save_intelligence_defaults' ) );
-        add_action( 'wp_ajax_cpd_test_intelligence_webhook', array( $this, 'ajax_test_intelligence_webhook' ) );
-
-        // AJAX hooks for Admin dashboard interactivity
-        add_action( 'wp_ajax_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
-        add_action( 'wp_ajax_cpd_ajax_add_client', array( $this, 'ajax_handle_add_client' ) );
-        add_action( 'wp_ajax_nopriv_cpd_ajax_add_client', array( $this, 'ajax_handle_add_client' ) ); 
-        add_action( 'wp_ajax_cpd_ajax_edit_client', array( $this, 'ajax_handle_edit_client' ) );
-        add_action( 'wp_ajax_cpd_ajax_delete_client', array( $this, 'ajax_handle_delete_client' ) );
-        add_action( 'wp_ajax_cpd_get_clients', array( $this, 'ajax_get_clients' ) );
-        add_action( 'wp_ajax_cpd_ajax_add_user', array( $this, 'ajax_handle_add_user' ) );
-        add_action( 'wp_ajax_nopriv_cpd_ajax_add_user', array( $this, 'ajax_handle_add_user' ) ); 
-        add_action( 'wp_ajax_cpd_ajax_edit_user', array( $this, 'ajax_handle_edit_user' ) );
-        add_action( 'wp_ajax_cpd_ajax_delete_user', array( $this, 'ajax_handle_delete_user' ) );
-        add_action( 'wp_ajax_cpd_get_users', array( $this, 'ajax_get_users' ) );
-        add_action( 'wp_ajax_cpd_get_client_list', array( $this, 'ajax_get_client_list' ) );
-
-        // NEW: AJAX for API token generation
-        add_action( 'wp_ajax_cpd_generate_api_token', array( $this, 'ajax_generate_api_token' ) );
-
-        // NEW: CRM Email AJAX actions
-        add_action( 'wp_ajax_cpd_get_eligible_visitors', array( 'CPD_Email_Handler', 'ajax_get_eligible_visitors' ) );
-        add_action( 'wp_ajax_cpd_trigger_on_demand_send', array( 'CPD_Email_Handler', 'ajax_trigger_on_demand_send_webhook' ) );
-
-        // Enqueue styles/scripts - FIXED: Use global hooks for all admin pages
-        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
-        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
-        
-        // Force admin styles for all our pages
-        add_action( 'admin_head', array( $this, 'force_admin_styles' ) );
-
-        // Add admin menus
-        add_action( 'admin_menu', array( $this, 'add_plugin_admin_menu' ) );
-       
-        // Handle dashboard redirect
-        add_action( 'admin_init', array( $this, 'handle_dashboard_redirect' ) );
-        
-        // Hook for scheduling daily CRM emails
-        add_action( 'cpd_daily_crm_email_event', array( 'CPD_Email_Handler', 'daily_crm_email_cron_callback' ) );
-
+            // Handle dashboard redirect
+            add_action( 'admin_init', array( $this, 'handle_dashboard_redirect' ) );
+            
+            // Hook for scheduling daily CRM emails
+            add_action( 'cpd_daily_crm_email_event', array( 'CPD_Email_Handler', 'daily_crm_email_cron_callback' ) );
+            
+            error_log('CPD_Admin: Hooks registered successfully');
+        } else {
+            error_log('CPD_Admin: Hooks already registered, skipping');
+        }
     }
 
     /**
@@ -177,11 +192,26 @@ class CPD_Admin {
     }
 
     /**
-     * Enqueue the admin stylesheets for the admin area.
+     * Enqueue the admin stylesheets for admin area AND public dashboard (for admins).
      */
     public function enqueue_styles() {
-        // Check if we're on one of our admin pages
-        if ( ! $this->is_our_admin_page() ) {
+        // Check if we should load admin styles
+        $should_load_admin_styles = false;
+        
+        // Load on admin pages
+        if ( $this->is_our_admin_page() ) {
+            $should_load_admin_styles = true;
+        }
+        
+        // Also load on public dashboard pages if user is admin
+        global $post;
+        if ( current_user_can( 'manage_options' ) && 
+            is_a( $post, 'WP_Post' ) && 
+            has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
+            $should_load_admin_styles = true;
+        }
+        
+        if ( ! $should_load_admin_styles ) {
             return;
         }
 
@@ -232,13 +262,45 @@ class CPD_Admin {
     }
 
     /**
-     * Enqueue the admin JavaScript files for the admin area.
+     * Enqueue the admin JavaScript files for admin area AND public dashboard (for admins).
      */
     public function enqueue_scripts() {
-        // Check if we're on one of our admin pages
-        if ( ! $this->is_our_admin_page() ) {
+        // STATIC FLAG to prevent duplicate enqueuing (similar to AJAX handlers in CPD_Public)
+        static $admin_scripts_enqueued = false;
+        
+        // Determine if we should load admin scripts
+        $should_load = false;
+        
+        // Load on our admin pages
+        if ( $this->is_our_admin_page() ) {
+            $should_load = true;
+            error_log('CPD_Admin::enqueue_scripts() - Loading on admin page');
+        }
+        
+        // Also load on public dashboard pages if user is admin
+        global $post;
+        if ( current_user_can( 'manage_options' ) && 
+            is_a( $post, 'WP_Post' ) && 
+            has_shortcode( $post->post_content, 'campaign_dashboard' ) ) {
+            $should_load = true;
+            error_log('CPD_Admin::enqueue_scripts() - Loading on public dashboard for admin');
+        }
+        
+        if ( ! $should_load ) {
+            error_log('CPD_Admin::enqueue_scripts() - Skipping, conditions not met');
             return;
         }
+
+        // CRITICAL: Check static flag first
+        if ( $admin_scripts_enqueued ) {
+            error_log('CPD_Admin::enqueue_scripts() - Admin scripts already enqueued (static flag), skipping');
+            return;
+        }
+
+        // Set the flag immediately to prevent race conditions
+        $admin_scripts_enqueued = true;
+
+        error_log('CPD_Admin::enqueue_scripts() - Proceeding to enqueue admin script');
 
         wp_enqueue_script( 'jquery' );
         wp_enqueue_script( 'chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js', array(), '4.4.1', true );
@@ -247,27 +309,28 @@ class CPD_Admin {
         $script_path = CPD_DASHBOARD_PLUGIN_DIR . 'assets/js/cpd-dashboard.js';
         $script_version = file_exists( $script_path ) ? filemtime( $script_path ) : $this->version;
 
-        wp_enqueue_script( $this->plugin_name . '-admin', CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-dashboard.js', array( 'jquery', 'chart-js' ), $script_version, true );
+        $admin_script_handle = $this->plugin_name . '-admin';
+        wp_enqueue_script( $admin_script_handle, CPD_DASHBOARD_PLUGIN_URL . 'assets/js/cpd-dashboard.js', array( 'jquery', 'chart-js' ), $script_version, true );
         
+        error_log('CPD_Admin::enqueue_scripts() - Admin script enqueued successfully');
         
         // Localize script to pass data to JS
         wp_localize_script(
-            $this->plugin_name . '-admin',
+            $admin_script_handle,
             'cpd_admin_ajax',
             array(
                 'ajax_url' => admin_url( 'admin-ajax.php' ),
                 'nonce' => wp_create_nonce( 'cpd_admin_nonce' ),
-                'dashboard_url' => get_option( 'cpd_client_dashboard_url', '' ), // Pass the dashboard URL to JS
+                'dashboard_url' => get_option( 'cpd_client_dashboard_url', '' ),
             )
         );
 
-
         // Add a separate nonce for dashboard data fetching
         wp_localize_script(
-            $this->plugin_name . '-admin',
-            'cpd_dashboard_ajax_nonce', // New object for dashboard data specific nonce
+            $admin_script_handle,
+            'cpd_dashboard_ajax_nonce',
             array(
-                'nonce' => wp_create_nonce( 'cpd_get_dashboard_data_nonce' ), // Specific nonce for dashboard data
+                'nonce' => wp_create_nonce( 'cpd_get_dashboard_data_nonce' ),
             )
         );
     }
@@ -354,7 +417,7 @@ class CPD_Admin {
         // Add a unique identifier each time this function is called
         static $call_count = 0;
         $call_count++;
-        error_log("render_admin_management_page called. Count: " . $call_count); 
+        // error_log("render_admin_management_page called. Count: " . $call_count); 
         
         // Ensure user has capability to view this page
         if ( ! current_user_can( 'manage_options' ) ) {
@@ -364,7 +427,7 @@ class CPD_Admin {
         static $template_included = false;
 
         if ( $template_included ) {
-            error_log("render_admin_management_page: Template already included in this request. Skipping.");
+            // error_log("render_admin_management_page: Template already included in this request. Skipping.");
             return; // Already included, prevent re-inclusion
         }
 
@@ -543,7 +606,7 @@ class CPD_Admin {
         $webpage_url = esc_url_raw( $_POST['webpage_url'] );
         $crm_feed_email = sanitize_text_field( $_POST['crm_feed_email'] );
         
-        // NEW: AI Intelligence fields
+        // AI Intelligence fields
         $ai_intelligence_enabled = isset( $_POST['ai_intelligence_enabled'] ) ? 1 : 0;
         // Properly handle WordPress slashing for JSON content
         $client_context_info = isset( $_POST['client_context_info'] ) ? stripslashes( wp_unslash( $_POST['client_context_info'] ) ) : '';
@@ -564,7 +627,7 @@ class CPD_Admin {
                 'logo_url' => $logo_url,
                 'webpage_url' => $webpage_url,
                 'crm_feed_email' => $crm_feed_email,
-                // NEW: AI Intelligence fields
+                // AI Intelligence fields
                 'ai_intelligence_enabled' => $ai_intelligence_enabled,
                 'client_context_info' => $client_context_info,
                 'ai_settings_updated_at' => current_time( 'mysql' ),
@@ -639,7 +702,7 @@ class CPD_Admin {
         $webpage_url = esc_url_raw( $_POST['webpage_url'] );
         $crm_feed_email = sanitize_text_field( $_POST['crm_feed_email'] );
         
-        // NEW: AI Intelligence fields
+        // AI Intelligence fields
         $ai_intelligence_enabled = isset( $_POST['ai_intelligence_enabled'] ) ? 1 : 0;
         // Properly handle WordPress slashing for JSON content
         $client_context_info = isset( $_POST['client_context_info'] ) ? stripslashes( wp_unslash( $_POST['client_context_info'] ) ) : '';
@@ -659,7 +722,7 @@ class CPD_Admin {
                 'logo_url' => $logo_url,
                 'webpage_url' => $webpage_url,
                 'crm_feed_email' => $crm_feed_email,
-                // NEW: AI Intelligence fields
+                // AI Intelligence fields
                 'ai_intelligence_enabled' => $ai_intelligence_enabled,
                 'client_context_info' => $client_context_info,
                 'ai_settings_updated_at' => current_time( 'mysql' ),
@@ -791,7 +854,7 @@ class CPD_Admin {
         $duration = isset( $_POST['duration'] ) ? sanitize_text_field( $_POST['duration'] ) : 'campaign'; // Default to 'campaign'
         
         // Add debug logging
-        error_log('ADMIN AJAX: Duration received: ' . $duration . ' (type: ' . gettype($duration) . ')');
+        // error_log('ADMIN AJAX: Duration received: ' . $duration . ' (type: ' . gettype($duration) . ')');
         
         // Determine start and end dates based on duration
         $start_date = null;
@@ -802,28 +865,28 @@ class CPD_Admin {
             $campaign_date_range = $this->data_provider->get_campaign_date_range( $client_id );
             $start_date = $campaign_date_range->min_date ?? '2025-01-01';
             $end_date = $campaign_date_range->max_date ?? date('Y-m-d');
-            error_log('ADMIN AJAX: Campaign duration - Start: ' . $start_date . ', End: ' . $end_date);
+            // error_log('ADMIN AJAX: Campaign duration - Start: ' . $start_date . ', End: ' . $end_date);
         } elseif ( $duration === '30' || $duration == 30 ) {
             $start_date = date('Y-m-d', strtotime('-30 days'));
             $end_date = date('Y-m-d');
-            error_log('ADMIN AJAX: 30 days - Start: ' . $start_date . ', End: ' . $end_date);
+            // error_log('ADMIN AJAX: 30 days - Start: ' . $start_date . ', End: ' . $end_date);
         } elseif ( $duration === '7' || $duration == 7 ) {
             $start_date = date('Y-m-d', strtotime('-7 days'));
             $end_date = date('Y-m-d');
-            error_log('ADMIN AJAX: 7 days - Start: ' . $start_date . ', End: ' . $end_date);
+            // error_log('ADMIN AJAX: 7 days - Start: ' . $start_date . ', End: ' . $end_date);
         } elseif ( $duration === '1' || $duration == 1 ) {
             $start_date = date('Y-m-d', strtotime('yesterday'));
             $end_date = date('Y-m-d', strtotime('yesterday'));
-            error_log('ADMIN AJAX: YESTERDAY - Start: ' . $start_date . ', End: ' . $end_date);
+            // error_log('ADMIN AJAX: YESTERDAY - Start: ' . $start_date . ', End: ' . $end_date);
         } else {
             // Default fallback
-            error_log('ADMIN AJAX: Unknown duration, falling back to campaign dates');
+            // error_log('ADMIN AJAX: Unknown duration, falling back to campaign dates');
             $campaign_date_range = $this->data_provider->get_campaign_date_range( $client_id );
             $start_date = $campaign_date_range->min_date ?? '2025-01-01';
             $end_date = $campaign_date_range->max_date ?? date('Y-m-d');
         }
 
-        error_log('ADMIN AJAX: Final dates - Start: ' . $start_date . ', End: ' . $end_date);
+        // error_log('ADMIN AJAX: Final dates - Start: ' . $start_date . ', End: ' . $end_date);
 
         if (!empty($visitor_data)) {
             foreach ($visitor_data as $visitor) {
@@ -903,9 +966,6 @@ class CPD_Admin {
             wp_send_json_error( array( 'message' => 'Security check failed.' ) );
         }
         
-        // Debug logging to see what's being received
-        error_log( 'Intelligence Settings - Raw POST data: ' . print_r( $_POST, true ) );
-        
         // Validate and sanitize input
         $webhook_url = esc_url_raw( $_POST['intelligence_webhook_url'] ?? '' );
         $api_key = sanitize_text_field( $_POST['makecom_api_key'] ?? '' );
@@ -970,7 +1030,7 @@ class CPD_Admin {
         // Check results
         $failed_options = array();
         foreach ( $results as $key => $result ) {
-            error_log( "Option {$key}: " . ( $result ? 'SUCCESS' : 'FAILED' ) );
+            // error_log( "Option {$key}: " . ( $result ? 'SUCCESS' : 'FAILED' ) );
             if ( ! $result ) {
                 $failed_options[] = $key;
                 $all_success = false;

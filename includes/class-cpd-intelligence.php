@@ -32,7 +32,7 @@ class CPD_Intelligence {
      */
     public function request_visitor_intelligence( $visitor_id, $user_id ) {
         try {
-            error_log("CPD_Intelligence: Starting request for visitor_id: $visitor_id, user_id: $user_id");
+            // error_log("CPD_Intelligence: Starting request for visitor_id: $visitor_id, user_id: $user_id");
             
             // Get visitor data
             $visitor = $this->get_visitor_data( $visitor_id );
@@ -40,7 +40,7 @@ class CPD_Intelligence {
                 error_log("CPD_Intelligence: Visitor $visitor_id not found");
                 throw new Exception( 'Visitor not found' );
             }
-            error_log("CPD_Intelligence: Visitor found - account_id: " . $visitor->account_id);
+            // error_log("CPD_Intelligence: Visitor found - account_id: " . $visitor->account_id);
 
             // Get client data and check AI enablement
             $client = $this->get_client_data( $visitor->account_id );
@@ -48,7 +48,7 @@ class CPD_Intelligence {
                 error_log("CPD_Intelligence: Client not found for account_id: " . $visitor->account_id);
                 throw new Exception( 'Client not found' );
             }
-            error_log("CPD_Intelligence: Client found - AI enabled: " . ($client->ai_intelligence_enabled ? 'YES' : 'NO'));
+            // error_log("CPD_Intelligence: Client found - AI enabled: " . ($client->ai_intelligence_enabled ? 'YES' : 'NO'));
 
             // Check if AI intelligence is enabled for this client
             if ( ! $client->ai_intelligence_enabled ) {
@@ -74,7 +74,7 @@ class CPD_Intelligence {
             // Check if intelligence already exists
             $existing_intelligence = $this->get_existing_intelligence( $visitor_id, $client->id );
             if ( $existing_intelligence ) {
-                error_log("CPD_Intelligence: Existing intelligence found - status: " . $existing_intelligence->status);
+                // error_log("CPD_Intelligence: Existing intelligence found - status: " . $existing_intelligence->status);
                 return array(
                     'success' => true,
                     'status' => $existing_intelligence->status,
@@ -91,7 +91,7 @@ class CPD_Intelligence {
                 throw new Exception( 'Failed to create intelligence record' );
             }
             
-            error_log("CPD_Intelligence: Intelligence record created with ID: $intelligence_id");
+            // error_log("CPD_Intelligence: Intelligence record created with ID: $intelligence_id");
 
             // NEW: Make actual API call to Make.com
             $api_result = $this->make_intelligence_api_call( $visitor, $client, $intelligence_id, $api_key, $webhook_url );
@@ -126,7 +126,7 @@ class CPD_Intelligence {
      */
     private function make_intelligence_api_call( $visitor, $client, $intelligence_id, $api_key, $webhook_url ) {
         try {
-            error_log("CPD_Intelligence: Preparing API call for intelligence ID: $intelligence_id");
+            // error_log("CPD_Intelligence: Preparing API call for intelligence ID: $intelligence_id");
             
             // Prepare client context
             $client_context = $this->prepare_client_context( $client );
@@ -150,7 +150,7 @@ class CPD_Intelligence {
                 )
             );
             
-            error_log("CPD_Intelligence: Sending API request to: $webhook_url");
+            // error_log("CPD_Intelligence: Sending API request to: $webhook_url");
             
             // Get timeout setting
             $timeout = get_option( 'cpd_intelligence_timeout', 30 );
@@ -177,7 +177,7 @@ class CPD_Intelligence {
             $response_code = wp_remote_retrieve_response_code( $response );
             $response_body = wp_remote_retrieve_body( $response );
             
-            error_log("CPD_Intelligence: API response code: $response_code");
+            // error_log("CPD_Intelligence: API response code: $response_code");
             
             if ( $response_code >= 200 && $response_code < 300 ) {
                 // Clean and validate the JSON response
@@ -212,7 +212,7 @@ class CPD_Intelligence {
                     );
                 }
             } else {
-                error_log("CPD_Intelligence: API request failed with HTTP $response_code: $response_body");
+                // error_log("CPD_Intelligence: API request failed with HTTP $response_code: $response_body");
                 
                 // Update intelligence record with failure
                 $error_message = "API request failed (HTTP $response_code)";

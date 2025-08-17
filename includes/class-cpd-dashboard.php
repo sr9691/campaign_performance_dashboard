@@ -39,7 +39,12 @@ class CPD_Dashboard {
         $this->load_dependencies();
         $this->define_admin_hooks();
         $this->define_public_hooks();
-        $this->define_api_hooks(); // NEW: Define API hooks separately
+        $this->define_api_hooks(); // Define API hooks separately
+
+        // Add hot list rewrite rules
+        add_action( 'init', array( $this, 'add_hot_list_rewrite_rules' ) );
+        add_filter( 'query_vars', array( $this, 'add_hot_list_query_vars' ) );
+        add_action( 'template_redirect', array( $this, 'handle_hot_list_settings_template' ) );
     }
 
     /**
@@ -106,7 +111,7 @@ class CPD_Dashboard {
     }
 
     /**
-     * NEW: Register all of the hooks related to the REST API functionality.
+     * Register all of the hooks related to the REST API functionality.
      */
     private function define_api_hooks() {
         // Instantiate CPD_API
@@ -123,6 +128,49 @@ class CPD_Dashboard {
         add_action( 'rest_api_init', array( $cpd_api, 'register_routes' ) );
     }
 
+
+    /**
+     * Add rewrite rules for hot list settings page
+     */
+    public function add_hot_list_rewrite_rules() {
+        // Get the dashboard URL base from settings
+        $dashboard_url = get_option( 'cpd_client_dashboard_url', '' );
+        
+        if ( $dashboard_url ) {
+            // Extract the path from the full URL
+            $parsed_url = parse_url( $dashboard_url );
+            $path = trim( $parsed_url['path'], '/' );
+            
+            if ( $path ) {
+                // Add rewrite rule for hot-list-settings
+                add_rewrite_rule(
+                    '^' . $path . '/hot-list-settings/?$',
+                    'index.php?cpd_hot_list_settings=1',
+                    'top'
+                );
+            }
+        }
+    }
+
+    /**
+     * Add query vars for hot list settings
+     */
+    public function add_hot_list_query_vars( $vars ) {
+        $vars[] = 'cpd_hot_list_settings';
+        return $vars;
+    }
+
+    /**
+     * Handle hot list settings page template
+     */
+    public function handle_hot_list_settings_template() {
+        if ( get_query_var( 'cpd_hot_list_settings' ) ) {
+            // Load the hot list settings page
+            include CPD_DASHBOARD_PLUGIN_DIR . 'public/hot-list-settings.php';
+            exit;
+        }
+    }
+
     /**
      * Run the loader to execute all of the hooks with WordPress.
      */
@@ -131,4 +179,7 @@ class CPD_Dashboard {
         // already instantiate their respective classes and register all necessary hooks.
         // No additional code is needed here for running the hooks.
     }
+
+
+
 }

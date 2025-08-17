@@ -151,154 +151,41 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
     </div>
 
     <div class="visitor-panel">
-        <div class="header">All Visitors</div>
-        <div class="visitor-list">
-            <?php // The JavaScript will dynamically load content here ?>
-            <div class="no-data">Loading visitor data...</div>
-            <?php
-            // Initial render: If $visitor_data is not empty, display it.
-            // This is primarily for the first page load before AJAX updates.
-            if ( ! empty( $visitor_data ) ) :
-                foreach ( $visitor_data as $visitor ) :
-                    // Check if client has AI intelligence enabled
-                    $client_ai_enabled = isset($visitor->ai_intelligence_enabled) && ($visitor->ai_intelligence_enabled === true || $visitor->ai_intelligence_enabled === 1);
-                    // Get intelligence status
-                    $intelligence_status = isset($visitor->intelligence_status) ? $visitor->intelligence_status : 'none';
-                    
-                    // Generate AI Intelligence icon HTML if enabled
-                    $ai_intelligence_icon_html = '';
-                    if ($client_ai_enabled) {
-                        $intelligence_title = '';
-                        switch ($intelligence_status) {
-                            case 'none':
-                                $intelligence_title = 'Generate AI Intelligence';
-                                break;
-                            case 'pending':
-                                $intelligence_title = 'AI Intelligence Processing...';
-                                break;
-                            case 'completed':
-                                $intelligence_title = 'AI Intelligence Available (click for details)';
-                                break;
-                            case 'failed':
-                                $intelligence_title = 'AI Intelligence Failed (click to retry)';
-                                break;
-                            default:
-                                $intelligence_title = 'AI Intelligence';
-                                break;
-                        }
-                        
-                        $ai_intelligence_icon_html = sprintf(
-                            '<span class="icon ai-intelligence-icon status-%s" title="%s" data-intelligence-status="%s">
-                                <i class="fas fa-brain"></i>
-                            </span>',
-                            esc_attr($intelligence_status),
-                            esc_attr($intelligence_title),
-                            esc_attr($intelligence_status)
-                        );
-                    }
-                    ?>
-
-                    <div class="visitor-card"
-                        data-visitor-id="<?php echo esc_attr( $visitor->id ); ?>"
-                        data-last-seen-at="<?php echo esc_attr( $visitor->last_seen_at ?? 'N/A' ); ?>"
-                        data-recent-page-count="<?php echo esc_attr( $visitor->recent_page_count ?? '0' ); ?>"
-                        data-client-ai-enabled="<?php echo $client_ai_enabled ? 'true' : 'false'; ?>"
-                        data-recent-page-urls="<?php
-                            $recent_urls = [];
-                            if (!empty($visitor->recent_page_urls)) {
-                                // If it's already an array (e.g., from json_decode by data provider), use it directly.
-                                if (is_array($visitor->recent_page_urls)) {
-                                    $recent_urls = $visitor->recent_page_urls;
-                                } elseif (is_string($visitor->recent_page_urls)) {
-                                    // Attempt to decode as JSON first, in case it's a JSON string from the database
-                                    $decoded = json_decode($visitor->recent_page_urls, true);
-                                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-                                        $recent_urls = $decoded;
-                                    } else {
-                                        // Fallback: If not valid JSON, treat as comma-separated string
-                                        $recent_urls = array_map('trim', explode(',', $visitor->recent_page_urls));
-                                        $recent_urls = array_filter($recent_urls); // Remove any empty string elements
-                                    }
-                                }
-                            }
-                            // Ensure all elements are strings and re-index the array numerically (important for JSON arrays)
-                            $recent_urls = array_map('strval', array_values($recent_urls));
-                            // Finally, JSON encode the array and then escape it for the HTML attribute
-                            echo esc_attr( json_encode( $recent_urls ) );
-                        ?>"
-                    >
-                    <div class="visitor-top-row">
-                        <div class="visitor-logo">
-                            <img src="<?php echo esc_url( CPD_Referrer_Logo::get_logo_for_visitor( $visitor ) ); ?>" 
-                                alt="<?php echo esc_attr( CPD_Referrer_Logo::get_alt_text_for_visitor( $visitor ) ); ?>"
-                                title="<?php echo esc_attr( CPD_Referrer_Logo::get_referrer_url_for_visitor( $visitor ) ); ?>">
-                        </div>
-                        <div class="visitor-actions">
-                            <span class="icon add-crm-icon" title="Add to CRM">
-                                <i class="fas fa-plus-square"></i>
-                            </span>
-                            <?php if (!empty($visitor->linkedin_url)) : // Only show LinkedIn icon if URL exists ?>
-                                <a href="<?php echo esc_url( $visitor->linkedin_url ); ?>" target="_blank" class="icon linkedin-icon" title="View LinkedIn Profile">
-                                    <i class="fab fa-linkedin"></i>
-                                </a>
-                            <?php endif; ?>
-                            <?php echo $ai_intelligence_icon_html; // Include AI intelligence icon ?>
-                            <span class="icon info-icon" title="More Info">
-                                <i class="fas fa-info-circle"></i>
-                            </span>
-                            <span class="icon delete-icon" title="Archive">
-                                <i class="fas fa-trash-alt"></i>
-                            </span>
-                        </div>
+        <div class="visitor-header">
+            <div class="visitor-tabs">
+                <div class="visitor-tab hot-list-tab active" data-tab="hot-list">
+                    <div class="tab-content-wrapper">
+                        <span class="tab-icon">ðŸ”¥</span>
+                        <span class="tab-label">Hot List</span>
+                        <span class="tab-count">(0)</span>
                     </div>
-
-                    <p class="visitor-name">
-                        <?php
-                        $full_name = '';
-                        if ( ! empty( $visitor->first_name ) ) {
-                            $full_name .= $visitor->first_name;
-                        }
-                        if ( ! empty( $visitor->last_name ) ) {
-                            if ( ! empty( $full_name ) ) {
-                                $full_name .= ' ';
-                            }
-                            $full_name .= $visitor->last_name;
-                        }
-                        echo esc_html( ! empty( $full_name ) ? $full_name : 'Company Visit' );
-                        ?>
-                    </p>
-                    <p class="visitor-company-main"><?php echo esc_html( $visitor->company_name ?? 'Unknown Company' ); ?></p>
-
-
-                    <div class="visitor-details-body">
-                        <p><i class="fas fa-briefcase"></i> <?php echo esc_html( $visitor->job_title ?? 'Unknown Title' ); ?></p>
-                        <?php if ( !empty($visitor->company_name) ) : // Assuming full company name or specific detail needed here ?>
-                            <p><i class="fas fa-building"></i> <?php echo esc_html( $visitor->company_name ); ?></p>
-                        <?php endif; ?>
-                        <p>
-                            <i class="fas fa-map-marker-alt"></i>
-                            <?php
-                            $location_parts = [];
-                            if ( ! empty( $visitor->city ) ) {
-                                $location_parts[] = $visitor->city;
-                            }
-                            if ( ! empty( $visitor->state ) ) {
-                                $location_parts[] = $visitor->state;
-                            }
-                            if ( ! empty( $visitor->zipcode ) ) {
-                                $location_parts[] = $visitor->zipcode;
-                            }
-                            echo esc_html( ! empty( $location_parts ) ? implode(', ', $location_parts) : 'Unknown Location' );
-                            ?>
-                        </p>
-                        <p><i class="fas fa-envelope"></i> <?php echo esc_html( $visitor->email ?? 'Unknown Email' ); ?></p>
+                    <div class="tab-settings-icon" title="Hot List Settings">
+                        <i class="fas fa-cog"></i>
                     </div>
                 </div>
-                <?php endforeach;
-            else : // Add this else block for initial "no data" message
-                ?>
-                <div class="no-data">No visitor data found for initial display.</div>
-            <?php endif; ?>
+                <div class="visitor-tab all-visitors-tab" data-tab="all-visitors">
+                    <div class="tab-content-wrapper">
+                        <span class="tab-icon"><i class="fas fa-users"></i></span>
+                        <span class="tab-label">All Visitors</span>
+                        <span class="tab-count">(0)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="visitor-list">
+
+            <!-- Hot List Tab Content -->
+            <div class="tab-content active" id="hot-list-content">
+                <div class="no-data">Loading hot list...</div>
+            </div>
+
+            <!-- All Visitors Tab Content -->
+            <div class="tab-content" id="all-visitors-content">
+                <div class="no-data">Loading visitors...</div>
+            </div>
+            
+<!-- REMOVED FROM HERE -->
         </div>
     </div>
 </div>

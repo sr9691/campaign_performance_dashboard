@@ -16,6 +16,10 @@ class CPD_Public {
     private $version;
     private $data_provider;
     private $intelligence;
+
+    // ADD: Static flag to prevent duplicate AJAX registrations
+    private static $ajax_handlers_registered = false;
+
     
     public function __construct( $plugin_name, $version ) {
         
@@ -30,23 +34,32 @@ class CPD_Public {
         $this->data_provider = new CPD_Data_Provider();
         $this->intelligence = new CPD_Intelligence();
 
-        // Add AJAX handlers for front-end.
-        add_action( 'wp_ajax_cpd_update_visitor_status', array( $this, 'update_visitor_status_callback' ) );
-        add_action( 'wp_ajax_nopriv_cpd_update_visitor_status', array( $this, 'update_visitor_status_callback' ) );
+        if (!self::$ajax_handlers_registered) {
+            self::$ajax_handlers_registered = true;        
+            // Add AJAX handlers for front-end.
+            add_action( 'wp_ajax_cpd_update_visitor_status', array( $this, 'update_visitor_status_callback' ) );
+            add_action( 'wp_ajax_nopriv_cpd_update_visitor_status', array( $this, 'update_visitor_status_callback' ) );
 
-        // Add new AJAX handler for fetching dashboard data
-        add_action( 'wp_ajax_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
-        add_action( 'wp_ajax_nopriv_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
+            // Add new AJAX handler for fetching dashboard data
+            add_action( 'wp_ajax_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
+            add_action( 'wp_ajax_nopriv_cpd_get_dashboard_data', array( $this, 'ajax_get_dashboard_data' ) );
 
-        // Add AJAX handlers for AI Intelligence
-        add_action( 'wp_ajax_cpd_request_visitor_intelligence', array( $this, 'ajax_request_visitor_intelligence' ) );
-        add_action( 'wp_ajax_nopriv_cpd_request_visitor_intelligence', array( $this, 'ajax_request_visitor_intelligence' ) );
-        
-        add_action( 'wp_ajax_cpd_get_visitor_intelligence_status', array( $this, 'ajax_get_visitor_intelligence_status' ) );
-        add_action( 'wp_ajax_nopriv_cpd_get_visitor_intelligence_status', array( $this, 'ajax_get_visitor_intelligence_status' ) );
-        
-        add_action( 'wp_ajax_cpd_get_visitor_intelligence_data', array( $this, 'ajax_get_visitor_intelligence_data' ) );
-        add_action( 'wp_ajax_nopriv_cpd_get_visitor_intelligence_data', array( $this, 'ajax_get_visitor_intelligence_data' ) );
+            // Add AJAX handlers for AI Intelligence
+            add_action( 'wp_ajax_cpd_request_visitor_intelligence', array( $this, 'ajax_request_visitor_intelligence' ) );
+            add_action( 'wp_ajax_nopriv_cpd_request_visitor_intelligence', array( $this, 'ajax_request_visitor_intelligence' ) );
+            
+            add_action( 'wp_ajax_cpd_get_visitor_intelligence_status', array( $this, 'ajax_get_visitor_intelligence_status' ) );
+            add_action( 'wp_ajax_nopriv_cpd_get_visitor_intelligence_status', array( $this, 'ajax_get_visitor_intelligence_status' ) );
+            
+            add_action( 'wp_ajax_cpd_get_visitor_intelligence_data', array( $this, 'ajax_get_visitor_intelligence_data' ) );
+            add_action( 'wp_ajax_nopriv_cpd_get_visitor_intelligence_data', array( $this, 'ajax_get_visitor_intelligence_data' ) );
+
+            // Hot List data
+            add_action( 'wp_ajax_cpd_get_hot_list_data', array( $this, 'ajax_get_hot_list_data' ) );
+            add_action( 'wp_ajax_nopriv_cpd_get_hot_list_data', array( $this, 'ajax_get_hot_list_data' ) );        
+            
+            error_log('CPD_Public: AJAX handlers registered successfully');
+        }
 
         // Add scripts and styles with a high priority to load after the theme's.
         add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_styles' ), 99 );
@@ -142,7 +155,7 @@ class CPD_Public {
         $nonce_key = isset( $_POST['nonce'] ) ? $_POST['nonce'] : '';
         
         if ( ! current_user_can( 'read' ) || 
-             ( ! wp_verify_nonce( $nonce_key, 'cpd_intelligence_nonce' )) {
+             ( ! wp_verify_nonce( $nonce_key, 'cpd_intelligence_nonce' ))) {
             wp_send_json_error( 'Security check failed.', 403 );
         }
 
@@ -380,7 +393,7 @@ class CPD_Public {
      * AJAX handler for getting dashboard data.
      */
     public function ajax_get_dashboard_data() {
-        error_log('=== AJAX ajax_get_dashboard_data() method called ===');
+        // error_log('=== AJAX ajax_get_dashboard_data() method called ===');
         // Change the nonce check here to match the new specific nonce
         if ( ! current_user_can( 'read' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_get_dashboard_data_nonce' ) ) { // ALL users (read cap) can get dashboard data
             wp_send_json_error( 'Security check failed.' );
@@ -403,22 +416,22 @@ class CPD_Public {
             $campaign_date_range = $this->data_provider->get_campaign_date_range( $client_id );
             $start_date = $campaign_date_range->min_date ?? '2025-01-01';
             $end_date = $campaign_date_range->max_date ?? date('Y-m-d');
-            error_log('PUBLIC AJAX: Campaign duration - Start: ' . $start_date . ', End: ' . $end_date);
+            // error_log('PUBLIC AJAX: Campaign duration - Start: ' . $start_date . ', End: ' . $end_date);
         } elseif ( $duration === '30' || $duration == 30 ) {
             $start_date = date('Y-m-d', strtotime('-30 days'));
             $end_date = date('Y-m-d');
-            error_log('PUBLIC AJAX: 30 days - Start: ' . $start_date . ', End: ' . $end_date);
+            // error_log('PUBLIC AJAX: 30 days - Start: ' . $start_date . ', End: ' . $end_date);
         } elseif ( $duration === '7' || $duration == 7 ) {
             $start_date = date('Y-m-d', strtotime('-7 days'));
             $end_date = date('Y-m-d');
-            error_log('PUBLIC AJAX: 7 days - Start: ' . $start_date . ', End: ' . $end_date);
+            // error_log('PUBLIC AJAX: 7 days - Start: ' . $start_date . ', End: ' . $end_date);
         } elseif ( $duration === '1' || $duration == 1 ) {
             $start_date = date('Y-m-d', strtotime('yesterday'));
             $end_date = date('Y-m-d', strtotime('yesterday'));
-            error_log('PUBLIC AJAX: YESTERDAY - Start: ' . $start_date . ', End: ' . $end_date);
+            // error_log('PUBLIC AJAX: YESTERDAY - Start: ' . $start_date . ', End: ' . $end_date);
         } else {
             // Default fallback
-            error_log('PUBLIC AJAX: Unknown duration, falling back to campaign dates');
+            // error_log('PUBLIC AJAX: Unknown duration, falling back to campaign dates');
             $campaign_date_range = $this->data_provider->get_campaign_date_range( $client_id );
             $start_date = $campaign_date_range->min_date ?? '2025-01-01';
             $end_date = $campaign_date_range->max_date ?? date('Y-m-d');
@@ -669,7 +682,7 @@ class CPD_Public {
                 array( '%d' )  // Format for WHERE value (id is integer)
             );
         } else {
-            error_log('update_visitor_status_callback: Visitor ' . $visitor_internal_id . ' already has ' . $current_status_column . ' set to 1. No update performed.');
+            // error_log('update_visitor_status_callback: Visitor ' . $visitor_internal_id . ' already has ' . $current_status_column . ' set to 1. No update performed.');
         }
 
         // error_log('update_visitor_status_callback: $wpdb->update returned ' . print_r($updated_rows, true) . ' rows affected. Last DB Error: ' . $wpdb->last_error);
@@ -689,6 +702,145 @@ class CPD_Public {
             wp_send_json_success( 'Status updated successfully.', 200 );
         }
     }
+
+    /**
+     * AJAX handler for getting hot list data.
+     */
+    public function ajax_get_hot_list_data() {
+        // Log that the handler was called
+        // error_log('=== CPD Hot List AJAX Handler Called ===');
+        
+        // Enable error reporting for debugging
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            ini_set('display_errors', 1);
+            error_reporting(E_ALL);
+        }
+        
+        try {
+            // Check nonce and permissions
+            if ( ! current_user_can( 'read' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_get_dashboard_data_nonce' ) ) {
+                error_log('CPD Hot List AJAX: Security check failed');
+                wp_send_json_error( 'Security check failed.' );
+                return;
+            }
+
+            $client_id = isset( $_POST['client_id'] ) ? sanitize_text_field( $_POST['client_id'] ) : null;
+            
+            // Convert empty string or 'null' to actual null
+            if ( empty( $client_id ) || $client_id === 'null' || $client_id === 'all' ) {
+                $client_id = null;
+            }
+            
+            // error_log('CPD Hot List AJAX: Client ID: ' . ($client_id ?? 'NULL'));
+
+            // Check if hot list table exists first
+            if ( ! class_exists( 'CPD_Hot_List_Database' ) ) {
+                require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-hot-list-database.php';
+            }
+            
+            $hot_list_db = new CPD_Hot_List_Database();
+            if ( ! $hot_list_db->table_exists() ) {
+                error_log('CPD Hot List AJAX: Hot list table does not exist');
+                wp_send_json_success( array(
+                    'has_settings' => false,
+                    'hot_visitors' => array(),
+                    'criteria_summary' => null,
+                    'debug_message' => 'Hot list table not found'
+                ) );
+                return;
+            }
+
+            // Initialize hot list classes
+            if ( ! class_exists( 'CPD_Hot_List' ) ) {
+                require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-hot-list.php';
+            }
+
+            $hot_list = new CPD_Hot_List();
+
+            // Check if client has hot list configured
+            $has_settings = $hot_list->has_hot_list_configured( $client_id );
+            // error_log('CPD Hot List AJAX: Has settings: ' . ($has_settings ? 'true' : 'false'));
+            
+            if ( ! $has_settings ) {
+                // No settings configured
+                wp_send_json_success( array(
+                    'has_settings' => false,
+                    'hot_visitors' => array(),
+                    'criteria_summary' => null
+                ) );
+                return;
+            }
+
+            // Get hot leads
+            // error_log('CPD Hot List AJAX: Getting hot leads...');
+            $hot_visitors = $hot_list->get_hot_leads( $client_id );
+            // error_log('CPD Hot List AJAX: Found ' . count($hot_visitors) . ' hot visitors');
+            
+            // Add logo URLs to hot visitors
+            if ( ! empty( $hot_visitors ) ) {
+                foreach ( $hot_visitors as $visitor ) {
+                    // Add referrer logo information
+                    if ( class_exists( 'CPD_Referrer_Logo' ) ) {
+                        $visitor->referrer_logo_url = CPD_Referrer_Logo::get_logo_for_visitor( $visitor );
+                        $visitor->referrer_alt_text = CPD_Referrer_Logo::get_alt_text_for_visitor( $visitor );
+                        $visitor->referrer_tooltip = CPD_Referrer_Logo::get_referrer_url_for_visitor( $visitor );
+                    }
+                    
+                    // FIXED: Add the same AI intelligence processing as ajax_get_dashboard_data
+                    $visitor_client_ai_enabled = false;
+                    if ( $visitor->account_id ) {
+                        $visitor_client_ai_enabled = $this->data_provider->is_client_ai_enabled( $visitor->account_id );
+                    }
+                    
+                    $visitor->ai_intelligence_enabled = $visitor_client_ai_enabled;
+                    
+                    // FIXED: Get intelligence status from database
+                    if ( $visitor_client_ai_enabled ) {
+                        global $wpdb;
+                        $intelligence_table = $wpdb->prefix . 'cpd_visitor_intelligence';
+                        
+                        // Check if intelligence table exists
+                        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$intelligence_table'") == $intelligence_table;
+                        
+                        if ( $table_exists ) {
+                            $intelligence_status = $wpdb->get_var( 
+                                $wpdb->prepare( 
+                                    "SELECT status FROM $intelligence_table WHERE visitor_id = %d ORDER BY created_at DESC LIMIT 1", 
+                                    $visitor->id 
+                                )
+                            );
+                            $visitor->intelligence_status = $intelligence_status ?: 'none';
+                        } else {
+                            $visitor->intelligence_status = 'none';
+                        }
+                    } else {
+                        $visitor->intelligence_status = 'disabled';
+                    }
+                    
+                }
+            }
+
+            // Get criteria summary
+            $criteria_summary = $hot_list->get_criteria_summary( $client_id );
+            // error_log('CPD Hot List AJAX: Criteria summary: ' . print_r($criteria_summary, true));
+
+            wp_send_json_success( array(
+                'has_settings' => true,
+                'hot_visitors' => $hot_visitors,
+                'criteria_summary' => $criteria_summary
+            ) );
+
+        } catch ( Exception $e ) {
+            error_log( 'CPD Hot List AJAX Error: ' . $e->getMessage() );
+            error_log( 'CPD Hot List AJAX Stack Trace: ' . $e->getTraceAsString() );
+            wp_send_json_error( 'Failed to load hot list data: ' . $e->getMessage() );
+        } catch ( Error $e ) {
+            error_log( 'CPD Hot List AJAX Fatal Error: ' . $e->getMessage() );
+            error_log( 'CPD Hot List AJAX Stack Trace: ' . $e->getTraceAsString() );
+            wp_send_json_error( 'Fatal error in hot list handler: ' . $e->getMessage() );
+        }
+    }
+
 
     /**
      * Hides the WordPress admin bar for logged-in users on the front end.

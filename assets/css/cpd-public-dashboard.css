@@ -1,8 +1,12 @@
- /*
+/*
  * Public-specific CSS for Campaign Performance Dashboard Plugin
  * This file contains styles for the public-facing client dashboard.
+ * Cleaned up and organized version with Hot List functionality
  */
 
+/* ==========================================================================
+   CSS VARIABLES
+   ========================================================================== */
 :root {
     --primary-color: #2c435d;
     --secondary-color: #4294cc;
@@ -17,10 +21,12 @@
     --ai-pending-color: #f39c12;
     --ai-success-color: #27ae60;
     --ai-failed-color: #e74c3c;
+    --wp--style--block-gap: 0 !important;
 }
 
-/* --- Universal Overrides for Full Screen Dashboard Page --- */
-/* Target HTML and Body for absolute full width/height and no scrollbars */
+/* ==========================================================================
+   UNIVERSAL OVERRIDES FOR FULL SCREEN DASHBOARD
+   ========================================================================== */
 html,
 body {
     margin: 0 !important;
@@ -33,7 +39,7 @@ body {
     min-height: 100vh !important;
 }
 
-/* Hide WordPress admin bar and any theme headers/footers/drawers */
+/* Hide WordPress admin bar and theme elements */
 #wpadminbar,
 .site-header,
 .site-footer,
@@ -45,7 +51,7 @@ body {
     display: none !important;
 }
 
-/* Force main WordPress content wrappers to full width and remove all their spacing */
+/* Force main WordPress content wrappers to full width */
 #page,
 #content,
 .site-content,
@@ -74,10 +80,6 @@ article,
 }
 
 /* Reset Gutenberg/Blocksy block gaps */
-:root {
-    --wp--style--block-gap: 0 !important;
-}
-
 .is-layout-flow > :where(:not(.alignleft):not(.alignright):not(.alignfull)),
 .is-layout-constrained > :where(:not(.alignleft):not(.alignright):not(.alignfull)) {
     margin-block-start: 0 !important;
@@ -89,8 +91,9 @@ article,
     gap: 0 !important;
 }
 
-/* --- FIXED: Main Dashboard Container Styles --- */
-/* REMOVED position: fixed and high z-index that was blocking clicks */
+/* ==========================================================================
+   MAIN DASHBOARD CONTAINER
+   ========================================================================== */
 .dashboard-container {
     display: flex;
     height: 100vh;
@@ -104,11 +107,12 @@ article,
     font-family: var(--font-family);
     box-sizing: border-box;
     flex-wrap: nowrap;
-    /* CRITICAL FIX: Normal z-index instead of 99999 */
     z-index: 1;
 }
 
-/* --- Left Account List Panel (Admin View) --- */
+/* ==========================================================================
+   LEFT ACCOUNT PANEL (ADMIN VIEW)
+   ========================================================================== */
 .account-panel {
     width: 250px;
     height: 100%;
@@ -144,7 +148,6 @@ article,
     margin: 0;
     flex: 1;
     overflow-y: auto;
-    /* CRITICAL: Ensure pointer events work */
     pointer-events: auto;
 }
 
@@ -157,7 +160,6 @@ article,
     transition: background-color 0.2s ease;
     color: rgba(255, 255, 255, 0.8);
     position: relative;
-    /* CRITICAL: Ensure pointer events work */
     pointer-events: auto;
 }
 
@@ -263,7 +265,9 @@ article,
     margin-bottom: 15px;
 }
 
-/* --- Main Content Area --- */
+/* ==========================================================================
+   MAIN CONTENT AREA
+   ========================================================================== */
 .main-content {
     flex-grow: 1;
     display: flex;
@@ -355,7 +359,6 @@ article,
     color: var(--text-color-light);
     cursor: pointer;
     margin-left: 10px;
-    /* CRITICAL: Ensure pointer events work */
     pointer-events: auto;
 }
 
@@ -379,9 +382,10 @@ article,
     font-family: var(--font-family);
 }
 
+/* Summary Cards */
 .summary-cards {
     display: grid;
-    grid-template-columns: auto auto auto auto auto; /* auto for content-based sizing */
+    grid-template-columns: auto auto auto auto auto;
     gap: 20px;
     margin-bottom: 20px;
 }
@@ -397,13 +401,13 @@ article,
 }
 
 .summary-card .value {
-    font-size: clamp(0.2em, 2vw, 2.5em); /* Adjusted min value to allow more shrinking */
+    font-size: clamp(0.2em, 2vw, 2.5em);
     font-weight: 700;
     margin: 0;
     color: var(--primary-color);
     font-family: var(--font-family);
-    white-space: nowrap; /* Prevent text from wrapping */
-    min-width: 0; /* Allow the flex item to shrink below its content size */
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .summary-card .label {
@@ -493,7 +497,9 @@ article,
     cursor: pointer;
 }
 
-/* Right Visitor Panel */
+/* ==========================================================================
+   VISITOR PANEL WITH HOT LIST TABS
+   ========================================================================== */
 .visitor-panel {
     width: 350px;
     height: 100%;
@@ -502,10 +508,249 @@ article,
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
-    overflow-y: auto;
+    overflow: hidden;
     box-sizing: border-box;
 }
 
+/* Visitor Panel Header with Tabs */
+.visitor-panel .visitor-header {
+    padding: 0;
+    border-bottom: none;
+    background-color: transparent;
+    flex-shrink: 0;
+}
+
+.visitor-tabs {
+    display: flex;
+    background-color: var(--card-bg);
+    border-bottom: 1px solid var(--line-color);
+}
+
+.visitor-tab {
+    flex: 1;
+    padding: 15px 12px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-color-light);
+    background-color: #f8f9fa;
+    border-right: 1px solid var(--line-color);
+    transition: all 0.2s ease;
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 60px;
+    box-sizing: border-box;
+}
+
+.visitor-tab:last-child {
+    border-right: none;
+}
+
+.visitor-tab.active {
+    background-color: var(--card-bg);
+    color: var(--primary-color);
+    border-bottom: 3px solid var(--secondary-color);
+}
+
+.visitor-tab:hover:not(.active) {
+    background-color: #e9ecef;
+    color: var(--text-color-dark);
+}
+
+/* Tab Content Wrapper */
+.tab-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+}
+
+.visitor-tab .tab-icon {
+    font-size: 1rem;
+    margin-bottom: 2px;
+}
+
+.visitor-tab .tab-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.visitor-tab .tab-count {
+    color: var(--secondary-color);
+    font-weight: 700;
+    font-size: 0.75rem;
+}
+
+.visitor-tab.active .tab-count {
+    color: var(--primary-color);
+}
+
+/* Settings Icon in Hot List Tab */
+.tab-settings-icon {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--text-color-light);
+    transition: all 0.2s ease;
+    cursor: pointer;
+    font-size: 0.7rem;
+    background-color: transparent;
+}
+
+.tab-settings-icon:hover {
+    background-color: var(--secondary-color);
+    color: white;
+    transform: scale(1.1);
+}
+
+.visitor-tab.active .tab-settings-icon {
+    color: var(--primary-color);
+}
+
+.visitor-tab.active .tab-settings-icon:hover {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+/* Tab Content Areas */
+.visitor-list {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.tab-content {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+}
+
+.tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Loading/No Data States */
+.tab-content .no-data {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: var(--text-color-light);
+    font-size: 0.9rem;
+    flex: 1;
+    text-align: center;
+}
+
+/* Hot List Criteria Display */
+.hot-list-criteria {
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 5px;
+    padding: 12px;
+    margin: 10px;
+    font-size: 0.8rem;
+    margin-top: 0;
+    flex-shrink: 0;
+}
+
+.hot-list-criteria .criteria-title {
+    font-weight: 600;
+    color: var(--text-color-dark);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+}
+
+.criteria-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.criteria-tag {
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    color: var(--text-color-light);
+}
+
+/* Hot List Empty State */
+.hot-list-empty {
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--text-color-light);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    max-height: 400px;
+}
+
+.hot-list-empty .empty-icon {
+    font-size: 2.5rem;
+    color: #ddd;
+    margin-bottom: 15px;
+}
+
+.hot-list-empty h3 {
+    margin: 0 0 10px 0;
+    font-size: 1rem;
+    color: var(--text-color-dark);
+    font-weight: 600;
+}
+
+.hot-list-empty p {
+    margin: 0 0 20px 0;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    max-width: 250px;
+}
+
+.hot-list-empty .setup-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--secondary-color);
+    text-decoration: none;
+    font-weight: 600;
+    padding: 8px 16px;
+    border: 1px solid var(--secondary-color);
+    border-radius: 5px;
+    transition: all 0.2s ease;
+    font-size: 0.8rem;
+}
+
+.hot-list-empty .setup-link:hover {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+/* Visitor Cards Container */
+.visitors-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+/* Legacy visitor panel styles for backward compatibility */
 .visitor-panel .header {
     padding: 25px;
     font-size: 1.2rem;
@@ -514,11 +759,7 @@ article,
     text-align: center;
 }
 
-.visitor-panel .visitor-list {
-    flex: 1;
-    padding: 10px;
-}
-
+/* Visitor Cards */
 .visitor-panel .visitor-card {
     display: flex;
     flex-direction: column;
@@ -530,7 +771,24 @@ article,
     align-items: flex-start;
 }
 
-/* Visitor Card Top Row - Logo and Action Icons */
+/* Hot Visitor Card Styling */
+.visitor-card.hot-visitor {
+    border-left: 4px solid #ff6b35;
+    background: linear-gradient(135deg, #fff 0%, #fff8f5 100%);
+    position: relative;
+}
+
+.visitor-card.hot-visitor::before {
+    content: "🔥";
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 1rem;
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* Visitor Card Components */
 .visitor-top-row {
     display: flex;
     justify-content: space-between;
@@ -559,7 +817,6 @@ article,
     object-fit: contain;
 }
 
-/* Visitor actions moved to top-row, right-aligned */
 .visitor-actions {
     display: flex;
     flex-direction: row;
@@ -578,7 +835,6 @@ article,
     justify-content: center;
     text-decoration: none;
     border-radius: 4px;
-    /* CRITICAL: Ensure pointer events work */
     pointer-events: auto;
 }
 
@@ -587,7 +843,7 @@ article,
     color: var(--secondary-color);
 }
 
-/* Specific styles for visitor action icons */
+/* Specific visitor action icon styles */
 .visitor-actions .linkedin-icon i {
     color: #0077B5;
 }
@@ -620,20 +876,17 @@ article,
     color: #6c757d;
 }
 
-
-/* AI Intelligence Icon Styles - Updated for Emoji Lightbulb */
+/* AI Intelligence Icon Styles */
 .visitor-actions .ai-intelligence-icon {
     position: relative;
 }
 
-/* Base emoji lightbulb styling */
 .visitor-actions .ai-intelligence-icon i {
     font-style: normal;
     font-size: 1.2rem;
     transition: all 0.3s ease;
 }
 
-/* Replace the content with emoji lightbulb */
 .visitor-actions .ai-intelligence-icon i::before {
     content: "💡";
     font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI Symbol", "Android Emoji", "EmojiSymbols";
@@ -643,7 +896,6 @@ article,
     transform: scale(1.05);
 }
 
-/* AI Intelligence Icon States */
 .visitor-actions .ai-intelligence-icon.status-none i {
     filter: grayscale(100%) opacity(0.7);
 }
@@ -661,7 +913,6 @@ article,
     filter: grayscale(0%) hue-rotate(0deg) brightness(0.8) sepia(100%) saturate(200%) hue-rotate(320deg);
 }
 
-/* AI Intelligence Icon Animation - Enhanced for emoji */
 @keyframes ai-pulse {
     0% {
         filter: grayscale(0%) brightness(1.2) scale(1);
@@ -676,7 +927,6 @@ article,
         transform: scale(1);
     }
 }
-
 
 /* Visitor Name and Company */
 .visitor-name {
@@ -722,99 +972,9 @@ article,
     color: var(--secondary-color);
 }
 
-/* MODAL Styles */
-.modal {
-    display: none;
-    position: fixed;
-    z-index: 100001;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background-color: rgba(0,0,0,0.5);
-    justify-content: center;
-    align-items: center;
-    font-family: var(--font-family);
-}
-
-.modal-content {
-    background-color: var(--card-bg);
-    margin: auto;
-    padding: 30px;
-    border: 1px solid #888;
-    width: 90%;
-    max-width: 500px;
-    border-radius: var(--border-radius);
-    position: relative;
-    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2),0 6px 20px 0 rgba(0,0,0,0.19);
-}
-
-.modal-content h2 {
-    margin-top: 0;
-    margin-bottom: 20px;
-    color: var(--primary-color);
-    font-size: 1.5rem;
-    font-weight: 600;
-}
-
-.modal-content .close {
-    color: #aaa;
-    position: absolute;
-    right: 15px;
-    top: 10px;
-    font-size: 28px;
-    font-weight: bold;
-    cursor: pointer;
-}
-
-.modal-content .close:hover,
-.modal-content .close:focus {
-    color: #333;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-.modal-body p {
-    margin-bottom: 10px;
-    font-size: 0.95rem;
-    color: var(--text-color-dark);
-}
-
-.modal-body strong {
-    color: var(--primary-color);
-}
-
-#modal-recent-page-urls-container {
-    margin-top: 20px;
-}
-
-#modal-recent-page-urls {
-    list-style-type: disc;
-    margin-left: 20px;
-    padding-left: 0;
-    margin-top: 10px;
-    max-height: 200px;
-    overflow-y: auto;
-}
-
-#modal-recent-page-urls li {
-    margin-bottom: 5px;
-    font-size: 0.9rem;
-    color: var(--text-color-light);
-    word-wrap: break-word;
-}
-
-#modal-recent-page-urls li a {
-    color: var(--secondary-color);
-    text-decoration: none;
-}
-
-#modal-recent-page-urls li a:hover {
-    text-decoration: underline;
-}
-
-/* UPDATED MODAL Styles - Fixed Card-like Design */
+/* ==========================================================================
+   MODAL STYLES
+   ========================================================================== */
 .modal {
     display: none;
     position: fixed;
@@ -836,7 +996,7 @@ article,
     padding: 0;
     border: none;
     width: 90%;
-    max-width: 380px; /* Matching visitor card width */
+    max-width: 380px;
     border-radius: var(--border-radius);
     position: relative;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
@@ -844,7 +1004,7 @@ article,
     overflow-y: auto;
 }
 
-/* Header - Simple clean header with just name/company info */
+/* Modal Header */
 .modal-header {
     background-color: var(--primary-color);
     color: white;
@@ -861,7 +1021,7 @@ article,
 .modal-visitor-info {
     flex: 1;
     color: white;
-    max-width: calc(100% - 60px); /* Account for close button */
+    max-width: calc(100% - 60px);
 }
 
 .modal-visitor-name {
@@ -907,17 +1067,17 @@ article,
     text-decoration: none;
 }
 
-/* Modal Body - Matching visitor card details exactly */
+/* Modal Body */
 .modal-body {
     padding: 0;
     background-color: #fafafa;
 }
 
-/* Info sections styled exactly like visitor card details */
 .visitor-modal-section {
     padding: 15px 20px;
     border-bottom: 1px solid var(--line-color);
     background-color: #fafafa;
+    text-align: left;
 }
 
 .visitor-modal-section:last-child {
@@ -934,6 +1094,8 @@ article,
     gap: 8px;
     text-transform: none;
     letter-spacing: normal;
+    text-align: left;
+    justify-content: flex-start;
 }
 
 .visitor-modal-section h3 i {
@@ -941,12 +1103,12 @@ article,
     color: var(--secondary-color);
 }
 
-/* Detail rows - exactly matching visitor card detail items */
 .visitor-detail-row {
     display: flex;
     align-items: flex-start;
     margin-bottom: 8px;
     font-size: 0.85rem;
+    text-align: left;
 }
 
 .visitor-detail-row:last-child {
@@ -969,6 +1131,7 @@ article,
     flex: 1;
     line-height: 1.3;
     font-size: 0.85rem;
+    text-align: left;
 }
 
 .visitor-detail-content strong {
@@ -987,10 +1150,11 @@ article,
     text-decoration: underline;
 }
 
-/* NEW: AI Intelligence Modal Section Styles */
+/* AI Intelligence Modal Section */
 .visitor-modal-section.intelligence-section {
     background-color: #f8f9fa;
     border-left: 4px solid var(--ai-color);
+    text-align: left;
 }
 
 .visitor-modal-section.intelligence-section h3 i {
@@ -999,6 +1163,7 @@ article,
 
 .intelligence-data {
     margin-top: 10px;
+    text-align: left;
 }
 
 .intelligence-item {
@@ -1007,6 +1172,7 @@ article,
     background-color: white;
     border-radius: 6px;
     border: 1px solid #e9ecef;
+    text-align: left;
 }
 
 .intelligence-item:last-child {
@@ -1021,6 +1187,8 @@ article,
     display: flex;
     align-items: center;
     gap: 6px;
+    text-align: left;
+    justify-content: flex-start;
 }
 
 .intelligence-item h4 i {
@@ -1033,6 +1201,7 @@ article,
     font-size: 0.8rem;
     line-height: 1.4;
     color: var(--text-color-light);
+    text-align: left;
 }
 
 .intelligence-item ul {
@@ -1040,11 +1209,13 @@ article,
     padding-left: 20px;
     font-size: 0.8rem;
     color: var(--text-color-light);
+    text-align: left;
 }
 
 .intelligence-item li {
     margin-bottom: 4px;
     line-height: 1.3;
+    text-align: left;
 }
 
 /* AI Intelligence Score Bar */
@@ -1076,13 +1247,13 @@ article,
     text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
 }
 
-/* AI Intelligence Loading/Pending/Error States */
+/* AI Intelligence States */
 .intelligence-loading,
 .intelligence-pending,
 .intelligence-failed,
 .intelligence-prompt {
     padding: 15px;
-    text-align: center;
+    text-align: left;
     font-size: 0.85rem;
 }
 
@@ -1113,71 +1284,13 @@ article,
     margin-top: 15px;
     padding-top: 10px;
     border-top: 1px solid #e9ecef;
-    text-align: center;
+    text-align: left;
 }
 
 .intelligence-meta small {
     color: var(--text-color-light);
     font-size: 0.75rem;
     font-style: italic;
-}
-
-
-/* Left-align all intelligence content */
-.intelligence-section,
-.intelligence-section * {
-    text-align: left !important;
-}
-
-.intelligence-data {
-    text-align: left;
-}
-
-.intelligence-item {
-    text-align: left;
-}
-
-.intelligence-item h4 {
-    text-align: left;
-    justify-content: flex-start;
-}
-
-.intelligence-item p {
-    text-align: left;
-}
-
-.intelligence-item ul {
-    text-align: left;
-}
-
-.intelligence-item li {
-    text-align: left;
-}
-
-/* Override the existing center alignment for intelligence meta */
-.intelligence-meta {
-    text-align: left !important;
-}
-
-.intelligence-meta small {
-    text-align: left !important;
-}
-
-/* Ensure the modal sections are left-aligned */
-.visitor-modal-section {
-    text-align: left;
-}
-
-.visitor-modal-section h3 {
-    text-align: left;
-    justify-content: flex-start;
-}
-
-.visitor-detail-row {
-    text-align: left;
-}
-
-.visitor-detail-content {
     text-align: left;
 }
 
@@ -1266,99 +1379,11 @@ article,
     font-size: 0.8rem;
 }
 
-/* Hide personal info section when not applicable */
 .visitor-modal-section.hidden {
     display: none;
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .modal-content {
-        width: 95%;
-        margin: 10px auto;
-        max-height: 90vh;
-        max-width: 350px;
-    }
-    
-    .modal-header {
-        padding: 12px 15px;
-    }
-    
-    .modal-visitor-logo {
-        width: 45px;
-        height: 45px;
-    }
-    
-    .modal-visitor-name {
-        font-size: 0.95rem;
-    }
-    
-    .modal-visitor-company {
-        font-size: 0.85rem;
-    }
-    
-    .visitor-modal-section {
-        padding: 12px 15px;
-    }
-}
-
-/* Very small screens */
-@media (max-width: 480px) {
-    .modal-content {
-        width: 98%;
-        margin: 5px auto;
-        max-height: 95vh;
-        max-width: 320px;
-    }
-    
-    .modal-header {
-        padding: 10px 12px;
-    }
-    
-    .modal-visitor-name {
-        font-size: 0.9rem;
-    }
-    
-    .visitor-modal-section {
-        padding: 10px 12px;
-    }
-    
-    .visitor-detail-content,
-    .visitor-detail-content strong {
-        font-size: 0.8rem;
-    }
-
-
-/* Email subject row styling */
-.email-subject-row {
-    margin-bottom: 8px;
-    padding: 8px 0;
-    border-bottom: 1px solid #f0f0f0;
-    font-size: 0.85rem;
-}
-
-.email-subject-row:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-}
-
-.email-contact {
-    font-weight: 600;
-    color: var(--text-color-dark);
-}
-
-.email-popup-link {
-    color: var(--secondary-color);
-    text-decoration: none;
-    font-weight: 500;
-    cursor: pointer;
-}
-
-.email-popup-link:hover {
-    text-decoration: underline;
-}
-
-/* Email popup modal styles */
+/* Email Popup Modal */
 .email-popup-overlay {
     position: fixed;
     top: 0;
@@ -1463,8 +1488,108 @@ article,
     font-family: 'Courier New', monospace;
 }
 
-/* Responsive email popup */
+.email-subject-row {
+    margin-bottom: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.85rem;
+}
+
+.email-subject-row:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.email-contact {
+    font-weight: 600;
+    color: var(--text-color-dark);
+}
+
+.email-popup-link {
+    color: var(--secondary-color);
+    text-decoration: none;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.email-popup-link:hover {
+    text-decoration: underline;
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN
+   ========================================================================== */
+
+/* Tablet Styles */
 @media (max-width: 768px) {
+    /* Visitor Tabs */
+    .visitor-tab {
+        padding: 12px 8px;
+        min-height: 55px;
+    }
+    
+    .tab-content-wrapper {
+        gap: 2px;
+    }
+    
+    .visitor-tab .tab-label {
+        font-size: 0.75rem;
+    }
+    
+    .visitor-tab .tab-count {
+        font-size: 0.7rem;
+    }
+    
+    .tab-settings-icon {
+        top: 6px;
+        right: 6px;
+        width: 18px;
+        height: 18px;
+        font-size: 0.65rem;
+    }
+    
+    /* Hot List Empty State */
+    .hot-list-empty {
+        padding: 20px 15px;
+    }
+    
+    .hot-list-empty .empty-icon {
+        font-size: 2rem;
+    }
+    
+    .hot-list-empty h3 {
+        font-size: 0.9rem;
+    }
+    
+    .hot-list-empty p {
+        font-size: 0.8rem;
+    }
+    
+    /* Modal Styles */
+    .modal-content {
+        width: 95%;
+        margin: 10px auto;
+        max-height: 90vh;
+        max-width: 350px;
+    }
+    
+    .modal-header {
+        padding: 12px 15px;
+    }
+    
+    .modal-visitor-name {
+        font-size: 0.95rem;
+    }
+    
+    .modal-visitor-company {
+        font-size: 0.85rem;
+    }
+    
+    .visitor-modal-section {
+        padding: 12px 15px;
+    }
+    
+    /* Email Popup */
     .email-popup-content {
         width: 95%;
         margin: 10px;
@@ -1483,4 +1608,50 @@ article,
     }
 }
 
+/* Mobile Styles */
+@media (max-width: 480px) {
+    /* Visitor Tabs */
+    .visitor-tab {
+        padding: 10px 6px;
+        min-height: 50px;
+    }
+    
+    .visitor-tab .tab-label {
+        font-size: 0.7rem;
+    }
+    
+    .visitor-tab .tab-count {
+        font-size: 0.65rem;
+    }
+    
+    .hot-list-criteria {
+        margin: 5px;
+        padding: 8px;
+        font-size: 0.75rem;
+    }
+    
+    /* Modal Styles */
+    .modal-content {
+        width: 98%;
+        margin: 5px auto;
+        max-height: 95vh;
+        max-width: 320px;
+    }
+    
+    .modal-header {
+        padding: 10px 12px;
+    }
+    
+    .modal-visitor-name {
+        font-size: 0.9rem;
+    }
+    
+    .visitor-modal-section {
+        padding: 10px 12px;
+    }
+    
+    .visitor-detail-content,
+    .visitor-detail-content strong {
+        font-size: 0.8rem;
+    }
 }

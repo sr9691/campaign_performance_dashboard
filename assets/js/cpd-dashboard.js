@@ -1,14 +1,77 @@
 /**
  * Admin-specific JavaScript for the Campaign Performance Dashboard plugin.
- * Consolidates all logic into a single jQuery(document).ready block.
+ * OPTIMIZED VERSION with performance improvements and duplicate call prevention
  */
+
+// Global state management for performance optimization - prevent redeclaration
+(function() {
+    const timestamp = Date.now();
+    const globalKey = 'CPD_Dashboard_' + timestamp;
+    
+    if (typeof window.CPD_Dashboard_INITIALIZED === "undefined") {
+        window.CPD_Dashboard_INITIALIZED = true;
+        
+        window.CPD_Dashboard = {
+            initialized: false,
+            loadingStates: new Set(),
+            requestQueue: new Map(),
+            debounceTimers: {},
+            lastLoadParams: null,
+            timestamp: timestamp,
+            
+            // Debounce utility
+            debounce: function(key, func, delay) {
+                if (this.debounceTimers[key]) {
+                    clearTimeout(this.debounceTimers[key]);
+                }
+                this.debounceTimers[key] = setTimeout(func, delay);
+            },
+
+            // Check if request is already in progress
+            isLoading: function(key) {
+                return this.loadingStates.has(key);
+            },
+
+            // Mark request as loading
+            setLoading: function(key, isLoading) {
+                if (isLoading) {
+                    this.loadingStates.add(key);
+                } else {
+                    this.loadingStates.delete(key);
+                }
+            },
+
+            // Generate request key for deduplication
+            getRequestKey: function(clientId, duration, action) {
+                return `${action}_${clientId || 'all'}_${duration || 'default'}`;
+            },
+
+            // Check if this is a duplicate request
+            isDuplicateRequest: function(clientId, duration) {
+                const currentParams = `${clientId || 'all'}_${duration || 'default'}`;
+                if (this.lastLoadParams === currentParams) {
+                    return true;
+                }
+                this.lastLoadParams = currentParams;
+                return false;
+            }
+        };
+        
+        console.log('CPD_Dashboard initialized with timestamp:', timestamp);
+    } else {
+        console.log('CPD_Dashboard already initialized, reusing existing instance');
+    }
+})();
+
+// Use the global reference
+const CPD_Dashboard = window.CPD_Dashboard;
 
 if (typeof window.cpdAdminInitialized === "undefined") {
   window.cpdAdminInitialized = true;
 
   jQuery(document).ready(function ($) {
-    console.log("cpd-dashboard.js: Script started. jQuery document ready.");
-    console.log("jQuery is working, $ is:", typeof $);
+    // console.log("cpd-dashboard.js: Script started. jQuery document ready.");
+    // console.log("jQuery is working, $ is:", typeof $);
 
     // Access localized data from cpd_dashboard_data (public-facing) for nonces needed on public page
     const localizedPublicData =
@@ -118,7 +181,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
             return { valid: false, error: errorMessage };
         }
     }
-
 
     // NEW: Function to refresh client table
     function refreshClientTable() {
@@ -266,38 +328,61 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       });
     }
 
-    // Function to load dashboard data via AJAX (should only run on dashboard pages, not admin)
+    // OPTIMIZED: Function to load dashboard data via AJAX with deduplication
     function loadDashboardData(clientId, duration) {
-      console.log(
-        "ADMIN loadDashboardData: Called with Client ID:",
-        clientId,
-        "Duration:",
-        duration
-      );
+      // Prevent duplicate calls
+      if (CPD_Dashboard.isDuplicateRequest(clientId, duration)) {
+        return;
+      }
+
+      const requestKey = CPD_Dashboard.getRequestKey(clientId, duration, 'dashboard');
+      
+      // Check if already loading
+      if (CPD_Dashboard.isLoading(requestKey)) {
+        // console.log('CPD Dashboard: Request already in progress, ignoring');
+        return;
+      }
+
       if (dashboardContent.length === 0) {
-        // Defensive check
         console.warn(
           "Dashboard content container (#clients-section) not found. Cannot load dashboard data."
         );
         return;
       }
+
+      // Mark as loading
+      CPD_Dashboard.setLoading(requestKey, true);
       dashboardContent.css("opacity", 0.5);
+
+      const ajaxData = {
+        action: "cpd_get_dashboard_data",
+        nonce: cpd_admin_ajax.nonce,
+        client_id: clientId === "all" ? null : clientId,
+        duration: duration,
+      };
 
       $.ajax({
         url: cpd_admin_ajax.ajax_url,
         type: "POST",
-        data: {
-          action: "cpd_get_dashboard_data",
-          nonce: cpd_admin_ajax.nonce,
-          client_id: clientId === "all" ? null : clientId,
-          duration: duration,
-        },
+        data: ajaxData,
+        timeout: 30000, // 30 second timeout
         success: function (response) {
-          console.log(
-            "ADMIN loadDashboardData: AJAX Success. Response:",
-            response
-          );
-          // Dashboard update logic here (but won't run on admin page)
+          
+          if (response.success && response.data) {
+            // Update dashboard sections if needed
+            // Dashboard update logic here (but won't run on admin page)
+            
+            // Only load hot list if main dashboard load was successful
+            // and we're not already loading hot list data
+            const hotListKey = CPD_Dashboard.getRequestKey(clientId, duration, 'hotlist');
+            if (!CPD_Dashboard.isLoading(hotListKey)) {
+              CPD_Dashboard.debounce('hotListLoad', () => {
+                loadHotListData(clientId, duration);
+              }, 100);
+            }
+          } else {
+            console.error('CPD Dashboard: Invalid response format:', response);
+          }
         },
         error: function (jqXHR, textStatus, errorThrown) {
           console.error(
@@ -310,10 +395,121 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           );
         },
         complete: function () {
+          CPD_Dashboard.setLoading(requestKey, false);
           dashboardContent.css("opacity", 1);
-          console.log("loadDashboardData: AJAX request complete.");
+          // console.log("loadDashboardData: AJAX request complete.");
         },
       });
+    }
+
+    // NEW: Separate hot list loading function
+    function loadHotListData(clientId, duration) {
+      const requestKey = CPD_Dashboard.getRequestKey(clientId, duration, 'hotlist');
+      
+      // Check if already loading
+      if (CPD_Dashboard.isLoading(requestKey)) {
+        // console.log('CPD Hot List: Request already in progress, ignoring');
+        return;
+      }
+
+      // console.log('CPD Hot List: Loading hot list data for client:', clientId);
+      
+      // Mark as loading
+      CPD_Dashboard.setLoading(requestKey, true);
+
+      const ajaxData = {
+        action: 'cpd_get_hot_list_data',
+        client_id: clientId || '',
+        nonce: cpd_admin_ajax.nonce || localizedPublicData.visitor_nonce
+      };
+
+      $.ajax({
+        url: cpd_admin_ajax.ajax_url || localizedPublicData.ajax_url,
+        type: 'POST',
+        data: ajaxData,
+        timeout: 30000,
+        success: function(response) {
+          // console.log('CPD Hot List: Data loaded successfully');
+          
+          if (response.success && response.data) {
+            updateHotListSection(response.data);
+          } else {
+            console.error('CPD Hot List: Invalid response format:', response);
+          }
+        },
+        error: function(xhr, status, error) {
+          console.error('CPD Hot List: AJAX error:', error);
+          // Don't show error for hot list failures to avoid user confusion
+          updateHotListSection({ has_settings: false, hot_visitors: [] });
+        },
+        complete: function() {
+          CPD_Dashboard.setLoading(requestKey, false);
+        }
+      });
+    }
+
+    // Update hot list section
+    function updateHotListSection(data) {
+      const $hotListPanel = $('.hot-list-panel');
+      
+      if (!$hotListPanel.length) {
+        // console.log('CPD Hot List: No hot list panel found');
+        return;
+      }
+
+      if (data.has_settings && data.hot_visitors && data.hot_visitors.length > 0) {
+        // Update hot list with visitors
+        renderHotListVisitors(data.hot_visitors, data.criteria_summary);
+        $hotListPanel.show();
+      } else {
+        // Hide hot list panel or show empty state
+        $hotListPanel.hide();
+      }
+
+      // console.log('CPD Hot List: Panel updated');
+    }
+
+    // Render hot list visitors
+    function renderHotListVisitors(visitors, criteria) {
+      const $hotListContent = $('.hot-list-content');
+      
+      if (!$hotListContent.length) {
+        // console.log('CPD Hot List: No content container found');
+        return;
+      }
+
+      // Clear existing content
+      $hotListContent.empty();
+
+      // Add criteria summary
+      if (criteria) {
+        const criteriaHtml = `
+          <div class="hot-list-criteria">
+            <h4>Hot List Criteria</h4>
+            <p>Requires ${criteria.required_matches} of ${criteria.active_filters} active filters</p>
+            <ul>
+              ${criteria.criteria.map(c => `<li>${c}</li>`).join('')}
+            </ul>
+          </div>
+        `;
+        $hotListContent.append(criteriaHtml);
+      }
+
+      // Add visitors
+      visitors.forEach(visitor => {
+        // You'll need to implement this based on your visitor card structure
+        const visitorHtml = renderVisitorCard(visitor, true); // true indicates hot list
+        $hotListContent.append(visitorHtml);
+      });
+    }
+
+    // Helper function to render visitor cards (implement based on your structure)
+    function renderVisitorCard(visitor, isHotList = false) {
+      // Implement this based on your existing visitor card rendering logic
+      return `<div class="visitor-card" data-visitor-id="${visitor.id}">
+        <!-- Your visitor card HTML here -->
+        <div class="visitor-info">${visitor.company_name || 'Unknown Company'}</div>
+      </div>`;
     }
 
     // ========================================
@@ -323,29 +519,11 @@ if (typeof window.cpdAdminInitialized === "undefined") {
     const isAdminPage = document.body.classList.contains(
       "campaign-dashboard_page_cpd-dashboard-management"
     );
-    // console.log("isAdminPage: ", isAdminPage, " document.body.classList: ", document.body.classList);
 
     if (isAdminPage) {
-      // console.log('cpd-dashboard.js: Admin-specific UI listeners attaching.');
-
-      // Count elements for debugging
-      const navLinks = document.querySelectorAll(
-        ".admin-sidebar nav a[data-target]"
-      );
-      const editButtons = document.querySelectorAll(
-        ".action-button.edit-client"
-      );
-      const clientTable = document.querySelectorAll(
-        "#clients-section .data-table"
-      );
-
       // Admin page initialization
       window.addEventListener("load", function () {
-        // console.log('cpd-dashboard.js: window.load event fired. Delaying navigation initialization for full DOM readiness.');
-
         setTimeout(function () {
-          // console.log('cpd-dashboard.js: Navigation initialization (delayed) starting.');
-
           const navLinks = document.querySelectorAll(
             ".admin-sidebar nav a[data-target]"
           );
@@ -371,25 +549,22 @@ if (typeof window.cpdAdminInitialized === "undefined") {
             const navLinks = document.querySelectorAll(
               ".admin-sidebar nav a[data-target]"
             );
-            const defaultSectionId = "clients-section"; // default section ID
+            const defaultSectionId = "clients-section";
 
             let targetHashId = window.location.hash.substring(1);
             if (!targetHashId) {
-              targetHashId = defaultSectionId.replace("-section", ""); // Fallback to default if no hash
+              targetHashId = defaultSectionId.replace("-section", "");
             }
 
-            // First, hide all sections and remove active class from all nav links
             sections.forEach((s) => {
               if (s) {
                 s.classList.remove("active");
-                s.style.display = "none"; // Explicitly hide the section
-                // console.log('Removed active and set display: none for section:', s.id);
+                s.style.display = "none";
               }
             });
 
             navLinks.forEach((link) => {
               link.classList.remove("active");
-              // console.log('Removed active from:', link);
             });
 
             const targetSection = document.getElementById(
@@ -401,35 +576,21 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
             if (targetSection && targetLink) {
               targetSection.classList.add("active");
-              targetSection.style.display = "block"; // Explicitly show the target section
-
-              console.log(
-                `DEBUG: Target section ${targetSection.id} display set to: ${targetSection.style.display}`
-              );
-
+              targetSection.style.display = "block";
               targetLink.classList.add("active");
-              console.log(
-                "setActiveSection: Added active classes and set display: block successfully to:",
-                targetSection.id,
-                "and",
-                targetLink
-              );
+
             } else {
               console.warn(
                 "setActiveSection: Fallback to default, targetSection or targetLink not found for:",
                 targetHashId
               );
-              // Fallback to default client section if target not found
               const fallbackSection = document.getElementById(defaultSectionId);
               const fallbackLink = document.querySelector(
                 `.admin-sidebar nav a[data-target="${defaultSectionId}"]`
               );
               if (fallbackSection) {
                 fallbackSection.classList.add("active");
-                fallbackSection.style.display = "block"; // Show fallback section
-                console.log(
-                  `DEBUG: Fallback section ${fallbackSection.id} display set to: ${fallbackSection.style.display}`
-                );
+                fallbackSection.style.display = "block";
               }
               if (fallbackLink) {
                 fallbackLink.classList.add("active");
@@ -437,11 +598,11 @@ if (typeof window.cpdAdminInitialized === "undefined") {
               window.location.hash = defaultSectionId.replace("-section", "");
             }
           }
-          // Call it once after delay
+
           setActiveSection();
 
           navLinks.forEach((link) => {
-            console.log("Adding click listener to nav link:", link);
+            // console.log("Adding click listener to nav link:", link);
             link.addEventListener("click", (event) => {
               if (link.getAttribute("target") === "_blank") {
                 return;
@@ -458,12 +619,11 @@ if (typeof window.cpdAdminInitialized === "undefined") {
                 window.location.hash = "#" + cleanedTargetId;
               }
 
-              // IMPORTANT CHANGE HERE: Call setActiveSection to handle display and classes
               setActiveSection();
 
               if (cleanedTargetId === "crm-emails") {
                 if (typeof loadEligibleVisitors === "function") {
-                  console.log("Calling loadEligibleVisitors...");
+                  // console.log("Calling loadEligibleVisitors...");
                   loadEligibleVisitors();
                 } else {
                   console.warn("loadEligibleVisitors function not available");
@@ -523,38 +683,31 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           }
       });
 
-
       // JSON Template Help Popup Functionality
       let currentContextTarget = null;
 
-      // Open popup when help icon is clicked
       $(document).on('click', '.context-help-icon', function() {
           currentContextTarget = $(this).data('target');
           $('#json-template-popup').fadeIn();
       });
 
-      // Copy template to clipboard
       $('#copy-template-btn').on('click', function() {
           const templateText = $('#json-template-text').text();
           
           if (navigator.clipboard && window.isSecureContext) {
-              // Modern clipboard API
               navigator.clipboard.writeText(templateText).then(function() {
                   showCopySuccess();
               }).catch(function() {
                   fallbackCopyToClipboard(templateText);
               });
           } else {
-              // Fallback for older browsers
               fallbackCopyToClipboard(templateText);
           }
       });
 
-      // Use template button - copies and fills the textarea
       $('#use-template-btn').on('click', function() {
           const templateText = $('#json-template-text').text();
           
-          // Determine which textarea to fill based on currentContextTarget
           let targetTextarea;
           if (currentContextTarget === 'add-context') {
               targetTextarea = $('#new_client_context_info');
@@ -567,21 +720,16 @@ if (typeof window.cpdAdminInitialized === "undefined") {
               targetTextarea.focus();
           }
           
-          // Copy to clipboard as well
           if (navigator.clipboard && window.isSecureContext) {
               navigator.clipboard.writeText(templateText).then(function() {
-                  console.log('Template copied to clipboard');
+                  // console.log('Template copied to clipboard');
               });
           }
           
-          // Close popup
           $('#json-template-popup').fadeOut();
-          
-          // Show success message
           alert('Template added to the context field! You can now customize the values for your client.');
       });
 
-      // Fallback copy function for older browsers
       function fallbackCopyToClipboard(text) {
           const textArea = document.createElement('textarea');
           textArea.value = text;
@@ -603,7 +751,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           document.body.removeChild(textArea);
       }
 
-      // Show copy success feedback
       function showCopySuccess() {
           const copyBtn = $('#copy-template-btn');
           const originalText = copyBtn.text();
@@ -616,7 +763,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           }, 2000);
       }
 
-      // Close popup when clicking outside or close button
       $('#json-template-popup .close').on('click', function() {
           $('#json-template-popup').fadeOut();
       });
@@ -627,11 +773,10 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           }
       });
 
-
       // --- AJAX for Management Forms ---
       $("#add-client-form").on("submit", function (event) {
         event.preventDefault();
-        console.log("cpd-dashboard.js: Add Client form submitted!");
+        // console.log("cpd-dashboard.js: Add Client form submitted!");
 
       // Validate client context JSON if AI is enabled
       const aiEnabled = $("#new_ai_intelligence_enabled").is(":checked");
@@ -678,7 +823,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
       $("#add-user-form").on("submit", function (event) {
         event.preventDefault();
-        console.log("cpd-dashboard.js: Add User form submitted!");
+        // console.log("cpd-dashboard.js: Add User form submitted!");
         const form = $(this);
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop("disabled", true).text("Adding...");
@@ -715,7 +860,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         ".action-button.delete-client",
         function (event) {
           event.preventDefault();
-          console.log("cpd-dashboard.js: Delete Client button clicked!");
+          // console.log("cpd-dashboard.js: Delete Client button clicked!");
           const row = $(this).closest("tr");
           const clientId = row.data("client-id");
 
@@ -753,7 +898,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         ".action-button.delete-user",
         function (event) {
           event.preventDefault();
-          console.log("cpd-dashboard.js: Delete User button clicked!");
+          // console.log("cpd-dashboard.js: Delete User button clicked!");
           const row = $(this).closest("tr");
           const userId = row.data("user-id");
 
@@ -797,12 +942,12 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       $(document).on("click", ".action-button.edit-client", function (e) {
         e.preventDefault();
         e.stopPropagation();
-        console.log("cpd-dashboard.js: Edit Client button clicked!");
-        console.log("Edit button element:", this);
+        // console.log("cpd-dashboard.js: Edit Client button clicked!");
+        // console.log("Edit button element:", this);
 
         const row = $(this).closest("tr");
         const clientId = row.data("client-id");
-        console.log("cpd-dashboard.js: Edit Client ID:", clientId);
+        // console.log("cpd-dashboard.js: Edit Client ID:", clientId);
         const clientName = row.data("client-name");
         const accountId = row.data("account-id");
         const logoUrl = row.data("logo-url");
@@ -832,14 +977,12 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         $("#edit_crm_feed_email").val(crmEmail);
         $("#edit_ai_intelligence_enabled").prop("checked", aiEnabled == "1");
 
-        // toggleEditContextSection();
-
         editClientModal.fadeIn();
       });
 
       editClientForm.on("submit", function (event) {
         event.preventDefault();
-        console.log("cpd-dashboard.js: Edit Client form submitted!");
+        // console.log("cpd-dashboard.js: Edit Client form submitted!");
 
         // Validate client context JSON if AI is enabled
         const aiEnabled = $("#edit_ai_intelligence_enabled").is(":checked");
@@ -885,13 +1028,13 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       });
 
       $(".modal .close").on("click", function () {
-        console.log("cpd-dashboard.js: Modal close button clicked!");
+        // console.log("cpd-dashboard.js: Modal close button clicked!");
         $(this).closest(".modal").fadeOut();
       });
 
       $(".modal").on("click", function (event) {
         if ($(event.target).hasClass("modal")) {
-          console.log("cpd-dashboard.js: Modal background clicked!");
+          // console.log("cpd-dashboard.js: Modal background clicked!");
           $(this).fadeOut();
         }
       });
@@ -900,7 +1043,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       const editUserForm = $("#edit-user-form");
 
       $(document).on("click", ".action-button.edit-user", function () {
-        console.log("cpd-dashboard.js: Edit User button clicked!");
+        // console.log("cpd-dashboard.js: Edit User button clicked!");
         const row = $(this).closest("tr");
         const userId = row.data("user-id");
         const username = row.data("username");
@@ -919,7 +1062,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
       editUserForm.on("submit", function (event) {
         event.preventDefault();
-        console.log("cpd-dashboard.js: Edit User form submitted!");
+        // console.log("cpd-dashboard.js: Edit User form submitted!");
         const form = $(this);
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop("disabled", true).text("Saving...");
@@ -955,9 +1098,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       // ========================================
 
       if ($.fn.select2) {
-        console.log(
-          "cpd-dashboard.js: Select2 found, initializing searchable selects."
-        );
+        // console.log("cpd-dashboard.js: Select2 found, initializing searchable selects.");
         $(".searchable-select").each(function () {
           let dropdownParent = $(this).closest(".modal").length
             ? $(this).closest(".modal")
@@ -1112,10 +1253,12 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         }
       }
 
-      // Event handlers
+      // Event handlers with debouncing
       crmClientFilter.on("change", function () {
-        loadEligibleVisitors();
-        updateButtonState();
+        CPD_Dashboard.debounce('crmClientChange', () => {
+          loadEligibleVisitors();
+          updateButtonState();
+        }, 300);
       });
 
       // Initialize button state
@@ -1174,7 +1317,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       // ========================================
 
       $("#add-referrer-mapping").on("click", function () {
-        console.log("cpd-dashboard.js: Add referrer mapping clicked");
+        // console.log("cpd-dashboard.js: Add referrer mapping clicked");
         const newRow = `
                     <div class="referrer-mapping-row">
                         <div class="form-group">
@@ -1200,7 +1343,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
       // Remove referrer mapping row
       $(document).on("click", ".remove-mapping", function () {
-        console.log("cpd-dashboard.js: Remove referrer mapping clicked");
+        // console.log("cpd-dashboard.js: Remove referrer mapping clicked");
         const $row = $(this).closest(".referrer-mapping-row");
 
         if (
@@ -1274,7 +1417,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       // INTELLIGENCE SETTINGS FUNCTIONALITY
       // ========================================
 
-      console.log("CPD Intelligence Settings: JavaScript loaded");
+      // console.log("CPD Intelligence Settings: JavaScript loaded");
 
       const ajaxUrl =
         typeof cpd_admin_ajax !== "undefined"
@@ -1374,7 +1517,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
             intelligence_crm_timeout: $("#intelligence_crm_timeout").val(),
           };
 
-          console.log("Sending intelligence settings data:", formData);
+          // console.log("Sending intelligence settings data:", formData);
 
           $.ajax({
             url: cpd_admin_ajax.ajax_url,
@@ -1474,12 +1617,8 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         });
       }
 
-      // console.log('CPD Intelligence Settings: All event listeners attached');
-      // console.log('cpd-dashboard.js: Admin page initialization complete.');
     } else {
-      console.log(
-        "cpd-dashboard.js: Not on admin management page. Checking if this is client dashboard page."
-      );
+      // console.log("cpd-dashboard.js: Not on admin management page. Checking if this is client dashboard page.");
 
       // Only run dashboard data loading logic if we're on the actual dashboard page
       const isDashboardPage =
@@ -1488,11 +1627,9 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         document.body.classList.contains("client-dashboard-page");
 
       if (isDashboardPage) {
-        console.log(
-          "cpd-dashboard.js: Client dashboard page detected. Initializing dashboard data."
-        );
+        // console.log("cpd-dashboard.js: Client dashboard page detected. Initializing dashboard data.");
 
-        // Dashboard initialization for client pages only
+        // Dashboard initialization for client pages only with optimization
         setTimeout(function () {
           const initialClientIdElement = $(
             ".admin-sidebar .account-list li.active"
@@ -1512,9 +1649,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           }
 
           const initialDuration = dateRangeSelect.val();
-          console.log(
-            "cpd-dashboard.js: Initializing dashboard data load for client dashboard."
-          );
+          // console.log("cpd-dashboard.js: Initializing dashboard data load for client dashboard.");
 
           if (
             dashboardContent.length > 0 &&
@@ -1577,9 +1712,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         const data = await response.json();
 
         if (data.success) {
-          console.log(
-            `sendAjaxRequestForVisitorStatus: Visitor ${visitorId} status updated successfully.`
-          );
+          // console.log(`sendAjaxRequestForVisitorStatus: Visitor ${visitorId} status updated successfully.`);
           return true;
         } else {
           console.error(
@@ -1594,29 +1727,28 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       }
     };
 
-    // Visitor panel functionality (for dashboard pages that have visitor panels)
+    // OPTIMIZED: Visitor panel functionality with debouncing
     const visitorPanel = $(".visitor-panel");
-    console.log(
-      "cpd-dashboard.js: Visitor Panel element found (jQuery):",
-      visitorPanel.length > 0 ? "Yes" : "No",
-      visitorPanel
-    );
 
     if (visitorPanel.length > 0) {
-      console.log(
-        "cpd-dashboard.js: Attaching click listener to Visitor Panel buttons."
-      );
-      visitorPanel.on(
-        "click",
+      // Use namespaced events to prevent duplicate bindings
+      visitorPanel.off('click.visitorActions').on(
+        "click.visitorActions",
         ".add-crm-icon, .delete-icon",
         async function (event) {
           event.preventDefault();
-          console.log("cpd-dashboard.js: Visitor button clicked!");
+          // console.log("cpd-dashboard.js: Visitor button clicked!");
 
           const button = $(this);
           const visitorCard = button.closest(".visitor-card");
           const visitorId = visitorCard.data("visitor-id");
-          console.log("cpd-dashboard.js: Visitor ID:", visitorId);
+          
+          // Prevent rapid clicking
+          if (button.prop('disabled')) {
+            return;
+          }
+          
+          // console.log("cpd-dashboard.js: Visitor ID:", visitorId);
 
           let updateAction = "";
           if (button.hasClass("add-crm-icon")) {
@@ -1626,7 +1758,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
                 "Are you sure you want to flag this visitor for CRM addition?"
               )
             ) {
-              console.log("cpd-dashboard.js: CRM Add confirmation cancelled.");
+              // console.log("cpd-dashboard.js: CRM Add confirmation cancelled.");
               return;
             }
           } else if (button.hasClass("delete-icon")) {
@@ -1636,24 +1768,21 @@ if (typeof window.cpdAdminInitialized === "undefined") {
                 "Are you sure you want to archive this visitor? They will no longer appear in the list."
               )
             ) {
-              console.log("cpd-dashboard.js: Archive confirmation cancelled.");
+              // console.log("cpd-dashboard.js: Archive confirmation cancelled.");
               return;
             }
           }
-          console.log("cpd-dashboard.js: Update action:", updateAction);
+          // console.log("cpd-dashboard.js: Update action:", updateAction);
 
           button.prop("disabled", true).css("opacity", 0.6);
-          console.log("cpd-dashboard.js: Button disabled.");
+          // console.log("cpd-dashboard.js: Button disabled.");
 
           try {
             const success = await sendAjaxRequestForVisitor(
               updateAction,
               visitorId
             );
-            console.log(
-              "cpd-dashboard.js: sendAjaxRequestForVisitor success status:",
-              success
-            );
+            // console.log("cpd-dashboard.js: sendAjaxRequestForVisitor success status:",success);
 
             if (success) {
               // Check if clientList exists and has an active item before trying to access its data
@@ -1665,40 +1794,37 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
               // Only reload dashboard data if we're on a dashboard page (not admin page)
               if (typeof loadDashboardData === "function" && !isAdminPage) {
-                loadDashboardData(currentClientId, currentDuration);
+                // Use debounced reload to prevent multiple rapid calls
+                CPD_Dashboard.debounce('dashboardReload', () => {
+                  loadDashboardData(currentClientId, currentDuration);
+                }, 300);
               }
-              console.log(
-                `cpd-dashboard.js: Visitor ${visitorId} action "${updateAction}" processed. Dashboard reloaded.`
-              );
             } else {
               alert(
                 "Failed to update visitor status. Please check console for details."
               );
-              console.error(
-                "cpd-dashboard.js: Failed to update visitor status."
-              );
             }
           } catch (error) {
-            console.error(
-              "cpd-dashboard.js: Error during visitor action AJAX:",
-              error
-            );
             alert("An unexpected error occurred. Please check console.");
           } finally {
             button.prop("disabled", false).css("opacity", 1);
-            console.log("cpd-dashboard.js: Button re-enabled.");
           }
         }
       );
     }
 
-    // Client list functionality (for pages that have client lists)
+    // OPTIMIZED: Client list functionality with debouncing
     if (clientList.length > 0) {
-      clientList.on("click", "li", function () {
-        console.log("cpd-dashboard.js: Client list item clicked!");
+      // Use namespaced events to prevent duplicate bindings
+      clientList.off('click.clientSelection').on("click.clientSelection", "li", function () {
         const listItem = $(this);
         const clientId = listItem.data("client-id");
-        console.log("cpd-dashboard.js: Clicked Client ID:", clientId);
+        
+        // Prevent duplicate selections
+        if (listItem.hasClass('active')) {
+          return;
+        }
+        
         clientList.find("li").removeClass("active");
         listItem.addClass("active");
 
@@ -1712,15 +1838,18 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
         // Only call loadDashboardData if we're not on admin page
         if (typeof loadDashboardData === "function" && !isAdminPage) {
-          loadDashboardData(clientId, dateRangeSelect.val());
+          // Use debounced loading to prevent rapid calls
+          CPD_Dashboard.debounce('clientChange', () => {
+            loadDashboardData(clientId, dateRangeSelect.val());
+          }, 300);
         }
       });
     }
 
-    // Date range selector functionality (for pages that have date selectors)
+    // OPTIMIZED: Date range selector functionality with debouncing
     if (dateRangeSelect.length > 0) {
-      dateRangeSelect.on("change", function () {
-        console.log("cpd-dashboard.js: Date range dropdown changed!");
+      dateRangeSelect.off('change.durationChange').on("change.durationChange", function () {
+        // console.log("cpd-dashboard.js: Date range dropdown changed!");
         const activeClientListItem = clientList.find("li.active");
         const clientId =
           activeClientListItem.length > 0
@@ -1729,11 +1858,31 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
         // Only call loadDashboardData if we're not on admin page
         if (typeof loadDashboardData === "function" && !isAdminPage) {
-          loadDashboardData(clientId, $(this).val());
+          // Use debounced loading to prevent rapid calls
+          CPD_Dashboard.debounce('durationChange', () => {
+            loadDashboardData(clientId, $(this).val());
+          }, 300);
         }
       });
     }
 
-    console.log("cpd-dashboard.js: Initialization complete.");
+    // Cleanup on page unload
+    $(window).on('beforeunload', function() {
+      // Clear all debounce timers
+      Object.values(CPD_Dashboard.debounceTimers).forEach(timer => {
+        if (timer) clearTimeout(timer);
+      });
+      
+      // Clear loading states
+      CPD_Dashboard.loadingStates.clear();
+      CPD_Dashboard.requestQueue.clear();
+      
+      // console.log("cpd-dashboard.js: Cleanup completed");
+    });
+
+    // Make CPD_Dashboard available globally for debugging
+    // window.CPD_Dashboard = CPD_Dashboard;
+
+    console.log("cpd-dashboard.js: Initialization complete with performance optimizations.");
   });
 }

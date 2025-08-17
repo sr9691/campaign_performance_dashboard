@@ -182,7 +182,7 @@ class CPD_Data_Provider {
      * @param string $account_id The account ID.
      * @return array An array of visitor data rows.
      */
-    public function get_visitor_data( $account_id ) {
+    public function get_visitor_data( $account_id, $hot_list_only = false ) {
         $account_id = $this->normalize_account_id( $account_id ); // Normalize input
         $visitor_table = $this->wpdb->prefix . 'cpd_visitors';
         $intelligence_table = $this->wpdb->prefix . 'cpd_visitor_intelligence';
@@ -262,6 +262,10 @@ class CPD_Data_Provider {
             // error_log("Visitor {$visitor->id}: AI enabled = " . ($visitor->ai_intelligence_enabled ? 'true' : 'false') . ", Status = {$visitor->intelligence_status}");
         }
 
+        if ( $hot_list_only && $account_id !== null ) {
+            $results = $this->filter_hot_list_visitors( $results, $account_id );
+        }
+
         return $results;
     }
     
@@ -322,7 +326,7 @@ class CPD_Data_Provider {
         }
 
         $query = $this->wpdb->prepare( $sql, ...$prepare_args );
-        error_log('CPD_Data_Provider::get_campaign_date_range - Account ID: ' . ($account_id ?? 'NULL') . ' | Query: ' . $query);
+        // error_log('CPD_Data_Provider::get_campaign_date_range - Account ID: ' . ($account_id ?? 'NULL') . ' | Query: ' . $query);
 
         $result = $this->wpdb->get_row( $query );
 
@@ -547,5 +551,230 @@ class CPD_Data_Provider {
         return $stats;
     }
 
+    /**
+     * NEW: Filter visitors based on hot list criteria
+     *
+     * @param array $visitors Array of visitor objects.
+     * @param string $account_id The account ID.
+     * @return array Filtered array of hot visitors.
+     */
+    private function filter_hot_list_visitors( $visitors, $account_id ) {
+        // Load hot list database class
+        if (!class_exists('CPD_Hot_List_Database')) {
+            require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-hot-list-database.php';
+        }
+        
+        $hot_list_db = new CPD_Hot_List_Database();
+        $settings = $hot_list_db->get_settings( $account_id );
+        
+        if ( !$settings ) {
+            return array(); // No settings = no hot visitors
+        }
+        
+        $hot_visitors = array();
+        
+        foreach ( $visitors as $visitor ) {
+            if ( $this->visitor_matches_hot_criteria( $visitor, $settings ) ) {
+                $visitor->is_hot_lead = true;
+                $hot_visitors[] = $visitor;
+            }
+        }
+        
+        return $hot_visitors;
+    }
+
+    /**
+     * NEW: Check if a visitor matches hot list criteria
+     *
+     * @param object $visitor The visitor object.
+     * @param object $settings The hot list settings.
+     * @return bool True if visitor matches criteria.
+     */
+    private function visitor_matches_hot_criteria( $visitor, $settings ) {
+        $matches = 0;
+        $active_filters = 0;
+        
+        // Check revenue filter
+        if ( !empty($settings->revenue_filters) && !in_array('any', $settings->revenue_filters) ) {
+            $active_filters++;
+            if ( $this->visitor_matches_revenue( $visitor, $settings->revenue_filters ) ) {
+                $matches++;
+            }
+        }
+        
+        // Check company size filter
+        if ( !empty($settings->company_size_filters) && !in_array('any', $settings->company_size_filters) ) {
+            $active_filters++;
+            if ( $this->visitor_matches_company_size( $visitor, $settings->company_size_filters ) ) {
+                $matches++;
+            }
+        }
+        
+        // Check industry filter
+        if ( !empty($settings->industry_filters) && !in_array('any', $settings->industry_filters) ) {
+            $active_filters++;
+            if ( in_array( $visitor->industry, $settings->industry_filters ) ) {
+                $matches++;
+            }
+        }
+        
+        // Check state filter
+        if ( !empty($settings->state_filters) && !in_array('any', $settings->state_filters) ) {
+            $active_filters++;
+            if ( in_array( $visitor->state, $settings->state_filters ) ) {
+                $matches++;
+            }
+        }
+        
+        // Apply required matches logic
+        $required_matches = max( 1, min( $settings->required_matches, $active_filters ) );
+        
+        return $matches >= $required_matches;
+    }
+
+    /**
+     * NEW: Check if visitor matches revenue criteria
+     */
+    private function visitor_matches_revenue( $visitor, $revenue_filters ) {
+        // Parse revenue from string like "$1,000,000" to numeric value
+        $revenue_str = str_replace( array('$', ','), '', $visitor->estimated_revenue );
+        $revenue = is_numeric($revenue_str) ? intval($revenue_str) : 0;
+        
+        foreach ( $revenue_filters as $range ) {
+            switch ( $range ) {
+                case 'below-500k':
+                    if ( $revenue < 500000 ) return true;
+                    break;
+                case '500k-1m':
+                    if ( $revenue >= 500000 && $revenue < 1000000 ) return true;
+                    break;
+                case '1m-5m':
+                    if ( $revenue >= 1000000 && $revenue < 5000000 ) return true;
+                    break;
+                case '5m-10m':
+                    if ( $revenue >= 5000000 && $revenue < 10000000 ) return true;
+                    break;
+                case '10m-20m':
+                    if ( $revenue >= 10000000 && $revenue < 20000000 ) return true;
+                    break;
+                case '20m-50m':
+                    if ( $revenue >= 20000000 && $revenue < 50000000 ) return true;
+                    break;
+                case 'above-50m':
+                    if ( $revenue >= 50000000 ) return true;
+                    break;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * NEW: Check if visitor matches company size criteria
+     */
+    private function visitor_matches_company_size( $visitor, $size_filters ) {
+        // Parse company size from string to numeric value
+        $size_str = str_replace( array(',', '+'), '', $visitor->estimated_employee_count );
+        $size = is_numeric($size_str) ? intval($size_str) : 0;
+        
+        foreach ( $size_filters as $range ) {
+            switch ( $range ) {
+                case '1-10':
+                    if ( $size >= 1 && $size <= 10 ) return true;
+                    break;
+                case '11-20':
+                    if ( $size >= 11 && $size <= 20 ) return true;
+                    break;
+                case '21-50':
+                    if ( $size >= 21 && $size <= 50 ) return true;
+                    break;
+                case '51-200':
+                    if ( $size >= 51 && $size <= 200 ) return true;
+                    break;
+                case '200-500':
+                    if ( $size >= 200 && $size <= 500 ) return true;
+                    break;
+                case '500-1000':
+                    if ( $size >= 500 && $size <= 1000 ) return true;
+                    break;
+                case '1000-5000':
+                    if ( $size >= 1000 && $size <= 5000 ) return true;
+                    break;
+                case 'above-5000':
+                    if ( $size > 5000 ) return true;
+                    break;
+            }
+        }
+        
+        return false;
+    }
+
+    /**
+     * NEW: Simple wrapper methods for convenience
+     */
+    public function get_hot_visitor_data( $account_id ) {
+        return $this->get_visitor_data( $account_id, true );
+    }
+
+    public function get_hot_visitor_count( $account_id, $start_date = null, $end_date = null ) {
+        $hot_visitors = $this->get_hot_visitor_data( $account_id );
+        
+        // Apply date filtering if provided
+        if ( $start_date && $end_date ) {
+            $hot_visitors = array_filter( $hot_visitors, function( $visitor ) use ( $start_date, $end_date ) {
+                return $visitor->last_seen_at >= $start_date && $visitor->last_seen_at <= $end_date;
+            });
+        }
+        
+        return count( $hot_visitors );
+    }
+
+    public function has_hot_list_configured( $account_id ) {
+        if (!class_exists('CPD_Hot_List_Database')) {
+            require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-hot-list-database.php';
+        }
+        
+        $hot_list_db = new CPD_Hot_List_Database();
+        $settings = $hot_list_db->get_settings( $account_id );
+        
+        return !empty( $settings );
+    }
+
+    public function get_hot_list_criteria_summary( $account_id ) {
+        if (!class_exists('CPD_Hot_List_Database')) {
+            require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-hot-list-database.php';
+        }
+        
+        $hot_list_db = new CPD_Hot_List_Database();
+        $settings = $hot_list_db->get_settings( $account_id );
+        
+        if ( !$settings ) {
+            return null;
+        }
+        
+        $summary = array();
+        
+        if ( !empty($settings->revenue_filters) && !in_array('any', $settings->revenue_filters) ) {
+            $summary[] = 'Revenue: ' . count($settings->revenue_filters) . ' selected';
+        }
+        
+        if ( !empty($settings->company_size_filters) && !in_array('any', $settings->company_size_filters) ) {
+            $summary[] = 'Size: ' . count($settings->company_size_filters) . ' selected';
+        }
+        
+        if ( !empty($settings->industry_filters) && !in_array('any', $settings->industry_filters) ) {
+            $summary[] = 'Industry: ' . count($settings->industry_filters) . ' selected';
+        }
+        
+        if ( !empty($settings->state_filters) && !in_array('any', $settings->state_filters) ) {
+            $summary[] = 'States: ' . count($settings->state_filters) . ' selected';
+        }
+        
+        return array(
+            'criteria' => $summary,
+            'required_matches' => $settings->required_matches,
+            'active_filters' => count( $summary )
+        );
+    }
 
 }    
