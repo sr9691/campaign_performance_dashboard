@@ -58,6 +58,7 @@ function cpd_dashboard_activate() {
     CPD_Email_Handler::schedule_daily_crm_email();
     
     // Flush rewrite rules for hot list settings
+    cpd_add_hot_list_rewrite_rules();
     flush_rewrite_rules();
 }
 
@@ -178,15 +179,29 @@ function cpd_dashboard_run() {
 }
 
 add_action( 'plugins_loaded', 'cpd_dashboard_run' );
-/**
- * Add URL rewrite rules for Hot List Settings
- */
+
+// Add URL rewrite rules for Hot List Settings
 add_action( 'init', 'cpd_add_hot_list_rewrite_rules' );
 add_filter( 'query_vars', 'cpd_add_hot_list_query_vars' );
+add_action( 'parse_request', 'cpd_parse_hot_list_request' );
 add_action( 'template_redirect', 'cpd_handle_hot_list_settings_template' );
 
 function cpd_add_hot_list_rewrite_rules() {
-    // Add rewrite rule for hot-list-settings
+    // Production URL structure
+    add_rewrite_rule(
+        '^directreach/reports/hot-list-settings/?$',
+        'index.php?cpd_hot_list_settings=1',
+        'top'
+    );
+    
+    // Dev URL structure
+    add_rewrite_rule(
+        '^dashboarddev/campaign-dashboard/hot-list-settings/?$',
+        'index.php?cpd_hot_list_settings=1',
+        'top'
+    );
+    
+    // Generic fallback
     add_rewrite_rule(
         '^campaign-dashboard/hot-list-settings/?$',
         'index.php?cpd_hot_list_settings=1',
@@ -199,10 +214,32 @@ function cpd_add_hot_list_query_vars( $vars ) {
     return $vars;
 }
 
+function cpd_parse_hot_list_request($wp) {
+    // Check if this is our hot list settings URL
+    if (strpos($_SERVER['REQUEST_URI'], '/directreach/reports/hot-list-settings') !== false ||
+        strpos($_SERVER['REQUEST_URI'], '/dashboarddev/campaign-dashboard/hot-list-settings') !== false ||
+        strpos($_SERVER['REQUEST_URI'], '/campaign-dashboard/hot-list-settings') !== false) {
+        
+        // Manually set the query var
+        $wp->query_vars['cpd_hot_list_settings'] = '1';
+        
+        // Prevent WordPress from trying to find a page/post
+        $wp->query_vars['pagename'] = '';
+        $wp->query_vars['name'] = '';
+    }
+}
+
 function cpd_handle_hot_list_settings_template() {
-    if ( get_query_var( 'cpd_hot_list_settings' ) ) {
-        // Load the hot list settings page
-        include CPD_DASHBOARD_PLUGIN_DIR . 'public/hot-list-settings.php';
+    $hot_list_settings = get_query_var( 'cpd_hot_list_settings', false );
+    
+    if ( $hot_list_settings === '1' || $hot_list_settings === 1 || $hot_list_settings === true ) {
+        $file_path = CPD_DASHBOARD_PLUGIN_DIR . 'public/hot-list-settings.php';
+        
+        if ( ! file_exists( $file_path ) ) {
+            wp_die( 'Hot List Settings page not found.' );
+        }
+        
+        include $file_path;
         exit;
     }
 }

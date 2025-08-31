@@ -154,14 +154,34 @@ class CPD_Admin {
     }
 
     /**
-     * Check if we're on one of our admin pages
-     */
+    * Check if we're on one of our admin pages
+    */
     private function is_our_admin_page() {
+        // FIXED: Check if get_current_screen function exists and we're in admin context
+        if ( ! function_exists( 'get_current_screen' ) || ! is_admin() ) {
+            return false;
+        }
+        
+        // Additional safety check - ensure we're not too early in the admin load process
+        if ( ! did_action( 'current_screen' ) && ! doing_action( 'current_screen' ) ) {
+            // Fall back to checking $_GET['page'] parameter if screen isn't ready yet
+            if ( isset( $_GET['page'] ) ) {
+                $page = sanitize_text_field( $_GET['page'] );
+                $our_pages = array(
+                    $this->plugin_name,
+                    $this->plugin_name . '-management',
+                    $this->plugin_name . '-settings'
+                );
+                return in_array( $page, $our_pages );
+            }
+            return false;
+        }
+        
         $screen = get_current_screen();
         
         // Check by page parameter first (most reliable)
         if ( isset( $_GET['page'] ) ) {
-            $page = $_GET['page'];
+            $page = sanitize_text_field( $_GET['page'] );
             $our_pages = array(
                 $this->plugin_name,
                 $this->plugin_name . '-management',
@@ -173,7 +193,7 @@ class CPD_Admin {
             }
         }
         
-        // Fallback: Check by screen ID
+        // Fallback: Check by screen ID (only if screen exists)
         if ( $screen ) {
             $our_screen_patterns = array(
                 'cpd-dashboard',

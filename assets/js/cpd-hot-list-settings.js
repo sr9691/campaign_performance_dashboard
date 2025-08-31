@@ -57,7 +57,10 @@
             // Client selection (admin only) - with debouncing
             $(document).on('click' + eventNamespace, '.client-list-item', (e) => {
                 this.debounce('clientSelection', () => {
-                    this.handleClientSelection.call(e.target, e);
+                    const listItem = $(e.target).closest('.client-list-item')[0];
+                    if (listItem) {
+                        this.handleClientSelection.call(listItem, e);
+                    }
                 }, 100);
             });
             
@@ -91,7 +94,7 @@
          */
         addVisualEnhancements: function() {
             // Add summary sections
-            this.addSummarySections();
+            // this.addSummarySections();
             
             // Convert filter groups to collapsible
             this.makeFilterGroupsCollapsible();
@@ -106,31 +109,40 @@
          */
         addSummarySections: function() {
             // Check if summary already exists
-            if ($('.quick-summary').length > 0) {
+            if ($('.current-config-summary').length > 0) {
                 return;
             }
             
-            const quickSummaryHtml = `
-                <div class="quick-summary">
-                    <h3><i class="fas fa-fire"></i> Current Hot List Configuration</h3>
-                    <div class="quick-stats">
-                        <div class="quick-stat">
-                            <span class="quick-stat-number" id="total-filters">0</span>
-                            <span class="quick-stat-label">Active Filters</span>
+            const currentConfigHtml = `
+                <div class="settings-summary current-config-summary">
+                    <div class="summary-title">
+                        <i class="fas fa-fire"></i> Current Hot List Configuration
+                    </div>
+                    <div class="summary-grid">
+                        <div class="summary-group">
+                            <div class="summary-group-title">Active Filters</div>
+                            <div class="summary-values">
+                                <span id="total-filters">0</span>
+                            </div>
                         </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-number" id="required-matches-display">1</span>
-                            <span class="quick-stat-label">Required Matches</span>
+                        <div class="summary-group">
+                            <div class="summary-group-title">Required Matches</div>
+                            <div class="summary-values">
+                                <span id="required-matches-display">1</span>
+                            </div>
                         </div>
-                        <div class="quick-stat">
-                            <span class="quick-stat-number" id="total-selected">0</span>
-                            <span class="quick-stat-label">Total Selections</span>
+                        <div class="summary-group">
+                            <div class="summary-group-title">Total Selections</div>
+                            <div class="summary-values">
+                                <span id="total-selected">0</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             `;
             
-            const settingsSummaryHtml = `
+            // The second summary section remains unchanged
+            const selectedValuesSummaryHtml = `
                 <div class="settings-summary">
                     <div class="summary-title">
                         <i class="fas fa-list-check"></i> Selected Filter Values
@@ -164,8 +176,7 @@
                 </div>
             `;
             
-            // Insert before the form
-            $('.settings-form').before(quickSummaryHtml + settingsSummaryHtml);
+            $('.settings-form').before(currentConfigHtml + selectedValuesSummaryHtml);
         },
 
         /**
@@ -494,6 +505,30 @@
             // Update quick stats
             this.updateQuickStats();
         },
+        
+        updateQuickStats: function() {
+            const activeFilters = parseInt($('#active-filters-count').text()) || 0;
+            const requiredMatches = parseInt($('#required-matches').val()) || 1;
+            
+            // Calculate total selected values across all filter groups
+            let totalSelected = 0;
+            $('.filter-group').each(function() {
+                const $group = $(this);
+                const checkedBoxes = $group.find('input[type="checkbox"]:checked');
+                const hasAnySelected = $group.find('input[value="any"]:checked, input[value="Any"]:checked').length > 0;
+                
+                if (hasAnySelected) {
+                    totalSelected += 1; // "Any" counts as 1 selection
+                } else {
+                    totalSelected += checkedBoxes.length;
+                }
+            });
+            
+            // Update the display elements
+            $('#total-filters').text(activeFilters);
+            $('#required-matches-display').text(requiredMatches);
+            $('#total-selected').text(totalSelected);
+        },        
 
         /**
          * Validate required matches against active filters

@@ -155,7 +155,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
             <div class="visitor-tabs">
                 <div class="visitor-tab hot-list-tab active" data-tab="hot-list">
                     <div class="tab-content-wrapper">
-                        <span class="tab-icon">ðŸ”¥</span>
+                        <span class="tab-icon">🔥</span>
                         <span class="tab-label">Hot List</span>
                         <span class="tab-count">(0)</span>
                     </div>

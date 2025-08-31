@@ -46,7 +46,21 @@ body.admin-bar {
 /* ==========================================================================
    SETTINGS SUMMARY SECTION - NEW
    ========================================================================== */
-.settings-summary {
+
+    /* Style numbers in config summary only */
+    .current-config-summary .summary-values span {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #2c435d;
+        display: block;
+        text-align: center;
+    }
+
+    .current-config-summary .summary-group-title {
+        text-align: center;
+    }
+    
+   .settings-summary {
     background: #f8f9fa;
     border: 1px solid #e9ecef;
     border-radius: var(--border-radius);
@@ -376,6 +390,7 @@ body.admin-bar {
     line-height: 1.5;
     max-width: 400px;
 }
+
 
 /* ==========================================================================
    SETTINGS FORM
