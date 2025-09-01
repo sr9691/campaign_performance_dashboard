@@ -56,7 +56,11 @@ class CPD_Public {
 
             // Hot List data
             add_action( 'wp_ajax_cpd_get_hot_list_data', array( $this, 'ajax_get_hot_list_data' ) );
-            add_action( 'wp_ajax_nopriv_cpd_get_hot_list_data', array( $this, 'ajax_get_hot_list_data' ) );        
+            add_action( 'wp_ajax_nopriv_cpd_get_hot_list_data', array( $this, 'ajax_get_hot_list_data' ) );      
+            
+            // Bulk add to CRM
+            add_action( 'wp_ajax_cpd_bulk_add_to_crm', array( $this, 'ajax_bulk_add_to_crm' ) );
+            add_action( 'wp_ajax_nopriv_cpd_bulk_add_to_crm', array( $this, 'ajax_bulk_add_to_crm' ) );
             
             error_log('CPD_Public: AJAX handlers registered successfully');
         }
@@ -838,6 +842,114 @@ class CPD_Public {
             error_log( 'CPD Hot List AJAX Fatal Error: ' . $e->getMessage() );
             error_log( 'CPD Hot List AJAX Stack Trace: ' . $e->getTraceAsString() );
             wp_send_json_error( 'Fatal error in hot list handler: ' . $e->getMessage() );
+        }
+    }
+
+    /**
+     * AJAX handler for bulk adding hot list visitors to CRM
+     */
+    public function ajax_bulk_add_to_crm() {
+        if ( ! current_user_can( 'read' ) || ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'cpd_get_dashboard_data_nonce' ) ) {
+            wp_send_json_error( 'Security check failed.' );
+        }
+
+        $client_id = isset( $_POST['client_id'] ) ? sanitize_text_field( $_POST['client_id'] ) : null;
+        
+        // Convert empty string or 'null' to actual null
+        if ( empty( $client_id ) || $client_id === 'null' || $client_id === 'all' ) {
+            $client_id = null;
+        }
+
+        try {
+            // Get hot list visitors using existing Hot List class
+            if ( ! class_exists( 'CPD_Hot_List' ) ) {
+                require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-hot-list.php';
+            }
+            
+            $hot_list = CPD_Hot_List::get_instance();
+            $hot_visitors = $hot_list->get_hot_leads( $client_id );
+            
+            if ( empty( $hot_visitors ) ) {
+                wp_send_json_error( 'No hot list visitors found to process.' );
+            }
+
+            global $wpdb;
+            $visitor_table = $wpdb->prefix . 'cpd_visitors';
+            $log_table = $wpdb->prefix . 'cpd_action_logs';
+            
+            $success_count = 0;
+            $failed_count = 0;
+            $user_id = get_current_user_id();
+            
+            // Process visitors in batches to avoid memory/timeout issues
+            $batch_size = 50;
+            $visitor_chunks = array_chunk( $hot_visitors, $batch_size );
+            
+            foreach ( $visitor_chunks as $chunk ) {
+                // Begin transaction for this chunk
+                $wpdb->query( 'START TRANSACTION' );
+                
+                try {
+                    foreach ( $chunk as $visitor ) {
+                        // Skip if already marked for CRM
+                        if ( $visitor->is_crm_added == 1 ) {
+                            continue;
+                        }
+                        
+                        $updated = $wpdb->update(
+                            $visitor_table,
+                            array( 'is_crm_added' => 1 ),
+                            array( 'id' => $visitor->id ),
+                            array( '%d' ),
+                            array( '%d' )
+                        );
+                        
+                        if ( $updated !== false ) {
+                            $success_count++;
+                        } else {
+                            $failed_count++;
+                        }
+                    }
+                    
+                    // Commit the transaction
+                    $wpdb->query( 'COMMIT' );
+                    
+                } catch ( Exception $e ) {
+                    // Rollback on error
+                    $wpdb->query( 'ROLLBACK' );
+                    $failed_count += count( $chunk );
+                }
+            }
+
+            // Log the bulk action
+            $log_description = "Bulk CRM add: {$success_count} successful, {$failed_count} failed" . 
+                            ( $client_id ? " (Client: {$client_id})" : " (All clients)" );
+            
+            $wpdb->insert( 
+                $log_table, 
+                array( 
+                    'user_id' => $user_id, 
+                    'action_type' => 'BULK_CRM_ADD', 
+                    'description' => $log_description 
+                ) 
+            );
+
+            // Prepare response message
+            $message = "{$success_count} visitors successfully marked for CRM.";
+            if ( $failed_count > 0 ) {
+                $message .= " {$failed_count} visitors could not be processed - they may still appear in your hot list. Please try adding them individually.";
+            }
+
+            wp_send_json_success( array(
+                'message' => $message,
+                'success_count' => $success_count,
+                'failed_count' => $failed_count,
+                'total_processed' => count( $hot_visitors )
+            ) );
+
+        } catch ( Exception $e ) {
+            error_log( 'Bulk CRM add error: ' . $e->getMessage() );
+            wp_send_json_error( 'Failed to process bulk CRM addition. Please try again.' );
         }
     }
 

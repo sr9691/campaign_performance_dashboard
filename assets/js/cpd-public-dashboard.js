@@ -507,6 +507,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+ 
+
     // Event listener for the "Add CRM" and "Delete" buttons on Visitor Panel.
     const visitorPanel = document.querySelector('.visitor-panel');
     const visitorInfoModal = document.getElementById('visitor-info-modal');
@@ -515,10 +517,85 @@ document.addEventListener('DOMContentLoaded', () => {
     if (visitorPanel) {
         visitorPanel.addEventListener('click', async (event) => {
 
-                const button = event.target.closest('.add-crm-icon, .delete-icon, .info-icon, .linkedin-icon, .ai-intelligence-icon');
+                const button = event.target.closest('.add-crm-icon, .delete-icon, .info-icon, .linkedin-icon, .ai-intelligence-icon, .bulk-crm-btn');
 
                 if (button) {
+
+                    // Handle Bulk CRM button click
+                    if (button.classList.contains('bulk-crm-btn')) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        
+                        if (button.classList.contains('loading')) return;
+                        
+                        const hotListCount = document.querySelector('.tab-count')?.textContent?.replace(/[()]/g, '') || '0';
+                        if (!confirm(`Send all ${hotListCount} hot leads to CRM? This will mark them for inclusion in the next CRM email.`)) {
+                            return;
+                        }
+                        
+                        // Show loading state
+                        button.classList.add('loading');
+                        button.disabled = true;
+                        
+                        // Get current client ID
+                        const urlParams = new URLSearchParams(window.location.search);
+                        let currentClientId = urlParams.get('client_id');
+                        
+                        if (!currentClientId && !isAdminUser) {
+                            currentClientId = localizedData.current_client_account_id;
+                        }
+                        
+                        const clientIdForAjax = (currentClientId === 'all') ? null : currentClientId;
+                        
+                        try {
+                            const response = await fetch(localizedData.ajax_url, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/x-www-form-urlencoded',
+                                },
+                                body: new URLSearchParams({
+                                    action: 'cpd_bulk_add_to_crm',
+                                    nonce: localizedData.dashboard_nonce,
+                                    client_id: clientIdForAjax
+                                }).toString()
+                            });
+                            
+                            if (!response.ok) {
+                                throw new Error('Network response was not ok.');
+                            }
+                            
+                            const data = await response.json();
+                            
+                            if (data.success) {
+                                alert(data.data.message);
+                                loadHotListData();
+                                
+                                const activeTab = document.querySelector('.visitor-tab.active');
+                                if (activeTab && activeTab.dataset.tab === 'all-visitors') {
+                                    await loadClientDashboardData();
+                                }
+                            } else {
+                                alert('Error: ' + (data.data || 'Unknown error occurred'));
+                            }
+                            
+                        } catch (error) {
+                            console.error('Bulk CRM add error:', error);
+                            alert('Failed to send visitors to CRM. Please try again.');
+                        } finally {
+                            button.classList.remove('loading');
+                            button.disabled = false;
+                        }
+                        
+                        return; // Exit to prevent further processing
+                    }
+
                     const visitorCard = button.closest('.visitor-card');
+                    // If no visitor card found, exit (this prevents the null error)
+                    if (!visitorCard) {
+                        console.warn('Button clicked but no visitor card found:', button.className);
+                        return;
+                    }
+
                     const visitorId = visitorCard.dataset.visitorId;
 
                     // Handle LinkedIn icon click
@@ -1194,6 +1271,8 @@ function initializeHotListTabs() {
         visitorTabs.addEventListener('click', handleTabClick);
     }
 
+    // initializeBulkCrmHandler();
+    
     // Initialize with Hot List tab active
     switchVisitorTab('hot-list');
 }
@@ -1328,6 +1407,7 @@ function renderHotListNoMatches(criteriaSummary) {
         </div>
     ` : '';
 
+    updateHotListActionBar([]); // Hide action bar
     return `
         ${criteriaHtml}
         <div class="hot-list-empty">
@@ -1342,6 +1422,31 @@ function renderHotListNoMatches(criteriaSummary) {
             </a>
         </div>
     `;
+}
+
+
+function updateHotListActionBar(visitors) {
+    const actionBar = document.getElementById('hot-list-action-bar');
+    const countSpan = document.getElementById('hot-list-count');
+    const bulkBtn = document.getElementById('bulk-crm-btn');
+    
+    if (!actionBar || !countSpan || !bulkBtn) return;
+    
+    const visitorCount = visitors ? visitors.length : 0;
+    
+    if (visitorCount > 0) {
+        actionBar.classList.add('visible');
+        countSpan.textContent = visitorCount;
+        bulkBtn.disabled = false;
+    } else {
+        actionBar.classList.remove('visible');
+        bulkBtn.disabled = true;
+    }
+}
+
+// Add bulk CRM handler
+function initializeBulkCrmHandler() {
+    console.log('Bulk CRM handler initialized via visitor panel click handler');
 }
 
 function loadAllVisitorsData() {
@@ -1370,6 +1475,9 @@ function loadAllVisitorsData() {
 }
 
 function renderHotListEmpty() {
+    
+    updateHotListActionBar([]); // Hide action bar
+
     return `
             <div class="hot-list-empty">
                 <div class="empty-icon">
@@ -1400,6 +1508,13 @@ function renderHotVisitors(visitors, criteriaSummary) {
                     `<span class="criteria-tag">${criterion}</span>`
                 ).join('')}
             </div>
+            <div class="hot-list-action-bar" id="hot-list-action-bar">
+                <button class="bulk-crm-btn" id="bulk-crm-btn">
+                    <i class="fas fa-plus-square"></i>
+                    <span class="btn-text">Send All to CRM</span>
+                    <i class="fas fa-spinner loading-spinner"></i>
+                </button>
+            </div>            
         </div>
     ` : '';
 
@@ -1410,6 +1525,8 @@ function renderHotVisitors(visitors, criteriaSummary) {
     `;
 
     hotListContent.innerHTML = criteriaHtml + visitorsHtml;
+
+    updateHotListActionBar(visitors);
 }
 
 function renderAllVisitors(visitors) {

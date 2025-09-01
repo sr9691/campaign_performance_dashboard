@@ -184,8 +184,7 @@ $admin_management_url = admin_url( 'admin.php?page=' . $plugin_name . '-manageme
             <div class="tab-content" id="all-visitors-content">
                 <div class="no-data">Loading visitors...</div>
             </div>
-            
-<!-- REMOVED FROM HERE -->
+
         </div>
     </div>
 </div>

@@ -779,7 +779,7 @@ article,
 }
 
 .visitor-card.hot-visitor::before {
-    content: "🔥";
+    content: "ðŸ”¥";
     position: absolute;
     top: 8px;
     right: 8px;
@@ -888,7 +888,7 @@ article,
 }
 
 .visitor-actions .ai-intelligence-icon i::before {
-    content: "💡";
+    content: "ðŸ’¡";
     font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI Symbol", "Android Emoji", "EmojiSymbols";
 }
 
@@ -970,6 +970,83 @@ article,
     text-align: center;
     margin-right: 5px;
     color: var(--secondary-color);
+}
+
+
+/* Hot List Action Bar */
+.hot-list-criteria .hot-list-action-bar,
+#hot-list-action-bar {
+    background-color: transparent;
+    border: none;
+    padding: 12px 0;
+    display: flex !important; /* Always visible when created */
+    justify-content: center; /* Center the button */
+    align-items: center;
+    flex-shrink: 0;
+    margin-top: 8px;
+    width: 100%;
+}
+
+.bulk-crm-btn,
+#bulk-crm-btn {
+    background-color: #28a745 !important; /* Green color - force override */
+    color: white !important;
+    border: none !important;
+    padding: 10px 20px !important;
+    border-radius: 5px !important;
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    font-family: var(--font-family) !important;
+    min-width: 140px !important;
+}
+
+.bulk-crm-btn:hover,
+#bulk-crm-btn:hover {
+    background-color: #218838 !important; /* Darker green on hover */
+    transform: translateY(-1px) !important;
+}
+
+/* Override disabled styling to keep green color */
+.bulk-crm-btn:disabled,
+#bulk-crm-btn:disabled {
+    background-color: #28a745 !important; /* Keep green even when disabled */
+    color: white !important;
+    cursor: pointer !important; /* Keep pointer cursor */
+    transform: none !important;
+    opacity: 1 !important; /* Full opacity */
+}
+
+.bulk-crm-btn:disabled:hover,
+#bulk-crm-btn:disabled:hover {
+    background-color: #218838 !important; /* Still allow hover effect */
+    transform: translateY(-1px) !important;
+}
+
+.bulk-crm-btn .loading-spinner,
+#bulk-crm-btn .loading-spinner {
+    display: none !important;
+    animation: spin 1s linear infinite !important;
+}
+
+.bulk-crm-btn.loading .loading-spinner,
+#bulk-crm-btn.loading .loading-spinner {
+    display: inline-block !important;
+}
+
+.bulk-crm-btn.loading .btn-text,
+#bulk-crm-btn.loading .btn-text {
+    display: none !important;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 /* ==========================================================================
