@@ -334,9 +334,27 @@ class CPD_Data_Provider {
             error_log('CPD_Data_Provider: Database error for campaign date range: ' . $this->wpdb->last_error);
         }
 
+        // Set default dates if the result is empty or dates are null/blank
+        if ( !$result || empty($result->min_date) || empty($result->max_date) ) {
+            // Create a new result object if none exists
+            if ( !$result ) {
+                $result = new stdClass();
+            }
+            
+            // Set default start date to start of current month if min_date is empty/null
+            if ( empty($result->min_date) ) {
+                $result->min_date = date('Y-m-01'); // First day of current month
+            }
+            
+            // Set default end date to 3 years from start of current month if max_date is empty/null
+            if ( empty($result->max_date) ) {
+                $start_of_month = date('Y-m-01'); // First day of current month
+                $result->max_date = date('Y-m-01', strtotime($start_of_month . ' +1 month')); // 1 month from start of month
+            }
+        }
+
         return $result;
     }
-
 
     /**
      * Get summary metrics for a specific account and date range.

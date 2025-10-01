@@ -130,6 +130,7 @@ class CPD_Email_Handler {
      * Now triggers webhook calls instead of emails.
      */
     public static function daily_crm_email_cron_callback() {
+        return;
         self::initialize();
         
         // CHECK EMAIL NOTIFICATIONS SETTING FOR CRON ONLY
@@ -281,6 +282,7 @@ class CPD_Email_Handler {
      * @return bool True if at least one webhook was sent successfully, false otherwise.
      */
     public static function send_crm_webhook_data( $account_id_filter = null, $user_id = 0 ) {
+        
         self::initialize();
 
         $webhook_url = get_option( 'cpd_webhook_url', '' );

@@ -134,9 +134,40 @@ class CPD_API {
                     'description'       => 'URL of the CSV file to download and import',
                 ),
             ),
-        ) );           
+        ) );
+        
+        register_rest_route( $this->plugin_name . '/v1', '/trigger-email/', array(
+            'methods'             => 'GET', // Or 'POST' for more security
+            'callback'            => array( $this, 'handle_email_trigger' ),
+            // Use a secure permission callback to protect this endpoint
+            'permission_callback' => array( $this, 'verify_api_key' ) 
+        ) );        
 
     }
+
+    /**
+     * Handles the API request to trigger the daily CRM email webhook.
+     *
+     * @param WP_REST_Request $request Full data about the request.
+     * @return WP_REST_Response The API response.
+     */
+    public function handle_email_trigger( WP_REST_Request $request ) {
+        // You should use the log_action_callback here
+        if ( is_callable( $this->log_action_callback ) ) {
+            call_user_func( $this->log_action_callback, 0, 'API_TRIGGERED', 'Daily CRM webhook send triggered via API.' );
+        }
+    
+        // Include the CPD_Email_Handler class if it's not already loaded
+        if ( ! class_exists( 'CPD_Email_Handler' ) ) {
+            require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-email-handler.php';
+        }
+    
+        // Call the static method from the email handler class
+        CPD_Email_Handler::send_crm_webhook_data( null, 0 );
+    
+        return new WP_REST_Response( array( 'success' => true, 'message' => 'Email webhook triggered successfully.' ), 200 );
+    }
+
 
     /**
      * Verifies the custom API key sent in the request header.
@@ -149,6 +180,8 @@ class CPD_API {
         $api_key_stored = get_option( 'cpd_api_key', '' );
         $api_key_header = $request->get_header( 'X-API-Key' );
 
+        error_log('CPD_API: Verifying API Key. Provided: ' . ($api_key_header ?? 'N/A') . ', Stored: ' . ($api_key_stored ? $api_key_stored : 'NOT SET'));
+        
         if ( empty( $api_key_stored ) ) {
             $this->log_api_action( 0, 'API_KEY_CHECK', 'API Key not set in plugin settings. Request from IP: ' . ( $_SERVER['REMOTE_ADDR'] ?? 'N/A' ) . ' Path: ' . $request->get_route() );
             return new WP_Error( 'rest_forbidden', 'API key not configured.', array( 'status' => 401 ) );

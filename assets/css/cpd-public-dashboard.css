@@ -779,7 +779,7 @@ article,
 }
 
 .visitor-card.hot-visitor::before {
-    content: "ðŸ”¥";
+    content: "🔥";
     position: absolute;
     top: 8px;
     right: 8px;
@@ -888,7 +888,7 @@ article,
 }
 
 .visitor-actions .ai-intelligence-icon i::before {
-    content: "ðŸ’¡";
+    content: "💡";
     font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI Symbol", "Android Emoji", "EmojiSymbols";
 }
 
