@@ -191,31 +191,46 @@ class CPD_Database {
         $hot_list_db->create_table();
 
         // Set plugin version for migration tracking
-        update_option( 'cpd_database_version', '1.2.0' ); // Update version for Hot List
-        
-        // Set plugin version for migration tracking
-        update_option( 'cpd_database_version', '1.1.0' );
+        update_option( 'cpd_database_version', '1.2.0' );
         
         error_log( 'CPD Database: Tables created successfully with AI Intelligence support' );
     }
 
     /**
      * Handle database migrations for existing installations
+     * Supports migrations from v1.0.0 through v2.0.0
      */
     public function migrate_database() {
-        $current_version = get_option( 'cpd_database_version', '1.0.0' );
+        $current_version = get_option('cpd_database_version', '1.0.0');
         
         // Migration for AI Intelligence features (1.0.0 -> 1.1.0)
-        if ( version_compare( $current_version, '1.1.0', '<' ) ) {
+        if (version_compare($current_version, '1.1.0', '<')) {
             $this->migrate_to_1_1_0();
-            update_option( 'cpd_database_version', '1.1.0' );
+            update_option('cpd_database_version', '1.1.0');
+            $current_version = '1.1.0';
         }
 
         // Migration for Hot List features (1.1.0 -> 1.2.0)
-        if ( version_compare( $current_version, '1.2.0', '<' ) ) {
+        if (version_compare($current_version, '1.2.0', '<')) {
             $this->migrate_to_1_2_0();
-            update_option( 'cpd_database_version', '1.2.0' );
+            update_option('cpd_database_version', '1.2.0');
+            $current_version = '1.2.0';
         }
+        
+        // Migration to v2.0.0 (Premium features)
+        if (version_compare($current_version, '2.0.0', '<')) {
+            error_log('CPD: Starting migration to v2.0.0');
+            
+            if ($this->migrate_to_2_0_0()) {
+                update_option('cpd_database_version', '2.0.0');
+                error_log('CPD: Successfully migrated to v2.0.0');
+            } else {
+                error_log('CPD: Migration to v2.0.0 FAILED');
+                return false;
+            }
+        }
+        
+        return true;
     }
     
     /**
@@ -250,8 +265,6 @@ class CPD_Database {
 
         // Create the visitor intelligence table if it doesn't exist
         $table_name_intelligence = $this->wpdb->prefix . 'cpd_visitor_intelligence';
-        $table_name_visitors = $this->wpdb->prefix . 'cpd_visitors';
-        $table_name_clients = $this->wpdb->prefix . 'cpd_clients';
         
         if ( $this->wpdb->get_var( "SHOW TABLES LIKE '$table_name_intelligence'" ) != $table_name_intelligence ) {
             $sql_intelligence = "CREATE TABLE $table_name_intelligence (
@@ -298,10 +311,346 @@ class CPD_Database {
         
         if (!$hot_list_db->table_exists()) {
             $hot_list_db->create_table();
-            // error_log( 'CPD Database: Created Hot List Settings table during migration' );
         }
     }
 
+    /**
+     * V2: Add premium fields to wp_cpd_clients and create all v2 tables
+     */
+    private function migrate_to_2_0_0() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cpd_clients';
+        
+        try {
+            // Check if columns already exist
+            $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_name}");
+            $existing_columns = array_column($columns, 'Field');
+            
+            // Add subscription_tier column
+            if (!in_array('subscription_tier', $existing_columns)) {
+                $wpdb->query(
+                    "ALTER TABLE {$table_name} 
+                    ADD COLUMN subscription_tier ENUM('basic', 'premium') DEFAULT 'basic' 
+                    AFTER ai_settings_updated_by"
+                );
+                error_log('CPD: Added subscription_tier column');
+            }
+            
+            // Add rtr_enabled column
+            if (!in_array('rtr_enabled', $existing_columns)) {
+                $wpdb->query(
+                    "ALTER TABLE {$table_name} 
+                    ADD COLUMN rtr_enabled TINYINT(1) DEFAULT 0 
+                    AFTER subscription_tier"
+                );
+                error_log('CPD: Added rtr_enabled column');
+            }
+            
+            // Add rtr_activated_at column
+            if (!in_array('rtr_activated_at', $existing_columns)) {
+                $wpdb->query(
+                    "ALTER TABLE {$table_name} 
+                    ADD COLUMN rtr_activated_at DATETIME NULL 
+                    AFTER rtr_enabled"
+                );
+                error_log('CPD: Added rtr_activated_at column');
+            }
+            
+            // Add subscription_expires_at column
+            if (!in_array('subscription_expires_at', $existing_columns)) {
+                $wpdb->query(
+                    "ALTER TABLE {$table_name} 
+                    ADD COLUMN subscription_expires_at DATETIME NULL 
+                    AFTER rtr_activated_at"
+                );
+                error_log('CPD: Added subscription_expires_at column');
+            }
+            
+            // Add indexes
+            $this->add_premium_indexes($table_name);
+            
+            // Create all v2 tables
+            $this->create_all_v2_tables();
+            
+            return true;
+            
+        } catch (Exception $e) {
+            error_log('CPD Migration Error: ' . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * V2: Add indexes for premium fields
+     */
+    private function add_premium_indexes($table_name) {
+        global $wpdb;
+        
+        // Check if indexes exist
+        $indexes = $wpdb->get_results("SHOW INDEX FROM {$table_name}");
+        $existing_indexes = array_column($indexes, 'Key_name');
+        
+        // Add subscription_tier index
+        if (!in_array('idx_subscription_tier', $existing_indexes)) {
+            $wpdb->query(
+                "CREATE INDEX idx_subscription_tier 
+                ON {$table_name}(subscription_tier, rtr_enabled)"
+            );
+            error_log('CPD: Added idx_subscription_tier index');
+        }
+        
+        // Add subscription_expires index
+        if (!in_array('idx_subscription_expires', $existing_indexes)) {
+            $wpdb->query(
+                "CREATE INDEX idx_subscription_expires 
+                ON {$table_name}(subscription_expires_at)"
+            );
+            error_log('CPD: Added idx_subscription_expires index');
+        }
+    }
+    
+    /**
+     * V2: Create wp_cpd_visitor_campaigns table
+     */
+    public function create_visitor_campaigns_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cpd_visitor_campaigns';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            visitor_id mediumint(9) NOT NULL,
+            campaign_id VARCHAR(255) NOT NULL,
+            account_id VARCHAR(255) NOT NULL,
+            
+            -- Engagement Tracking
+            first_visit_at DATETIME NOT NULL,
+            last_visit_at DATETIME NOT NULL,
+            total_page_views INT DEFAULT 0,
+            unique_pages_count INT DEFAULT 0,
+            page_urls TEXT,
+            entry_page VARCHAR(2048),
+            most_recent_page VARCHAR(2048),
+            
+            -- UTM Tracking
+            utm_source VARCHAR(255),
+            utm_medium VARCHAR(255),
+            utm_campaign VARCHAR(255),
+            utm_content VARCHAR(255),
+            utm_term VARCHAR(255),
+            
+            -- RTR Prospect Fields
+            is_prospect TINYINT(1) DEFAULT 0,
+            current_room ENUM('none', 'problem', 'solution', 'offer') DEFAULT 'none',
+            room_entered_at DATETIME NULL,
+            days_in_room INT DEFAULT 0,
+            lead_score INT DEFAULT 0,
+            email_sequence_position INT DEFAULT 0,
+            last_email_sent DATETIME NULL,
+            next_email_due DATE NULL,
+            
+            -- Timestamps
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            
+            -- Constraints
+            UNIQUE KEY unique_visitor_campaign (visitor_id, campaign_id),
+            INDEX idx_visitor (visitor_id),
+            INDEX idx_campaign (campaign_id),
+            INDEX idx_account (account_id),
+            INDEX idx_prospect (is_prospect, current_room),
+            INDEX idx_email_due (next_email_due),
+            INDEX idx_last_visit (last_visit_at),
+            INDEX idx_lead_score (lead_score),
+            
+            FOREIGN KEY (visitor_id) 
+                REFERENCES {$wpdb->prefix}cpd_visitors(id) 
+                ON DELETE CASCADE
+        ) {$charset_collate};";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            error_log('CPD: Successfully created wp_cpd_visitor_campaigns table');
+            return true;
+        } else {
+            error_log('CPD: FAILED to create wp_cpd_visitor_campaigns table');
+            return false;
+        }
+    }
+    
+    /**
+     * V2: Create wp_rtr_email_tracking table
+     */
+    public function create_email_tracking_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_email_tracking';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            visitor_id mediumint(9) NOT NULL,
+            campaign_id VARCHAR(255) NOT NULL,
+            email_number INT NOT NULL,
+            room_type ENUM('problem', 'solution', 'offer') NOT NULL,
+            subject VARCHAR(500),
+            sent_at DATETIME,
+            status ENUM('pending', 'sent', 'noted') DEFAULT 'pending',
+            notes TEXT,
+            
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            
+            INDEX idx_visitor_campaign (visitor_id, campaign_id),
+            INDEX idx_status (status),
+            
+            FOREIGN KEY (visitor_id) 
+                REFERENCES {$wpdb->prefix}cpd_visitors(id) 
+                ON DELETE CASCADE
+        ) {$charset_collate};";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        error_log('CPD: Created wp_rtr_email_tracking table');
+        return true;
+    }
+    
+    /**
+     * V2: Create wp_rtr_room_progression table
+     */
+    public function create_room_progression_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_room_progression';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            visitor_id mediumint(9) NOT NULL,
+            campaign_id VARCHAR(255) NOT NULL,
+            from_room ENUM('none', 'problem', 'solution', 'offer'),
+            to_room ENUM('problem', 'solution', 'offer') NOT NULL,
+            score_at_transition INT,
+            reason VARCHAR(255),
+            transitioned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            
+            INDEX idx_visitor_campaign (visitor_id, campaign_id),
+            INDEX idx_transition_date (transitioned_at),
+            
+            FOREIGN KEY (visitor_id) 
+                REFERENCES {$wpdb->prefix}cpd_visitors(id) 
+                ON DELETE CASCADE
+        ) {$charset_collate};";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        error_log('CPD: Created wp_rtr_room_progression table');
+        return true;
+    }
+    
+    /**
+     * V2: Create wp_dr_campaign_settings table
+     */
+    public function create_campaign_settings_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'dr_campaign_settings';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            campaign_id VARCHAR(255) NOT NULL,
+            client_id mediumint(9) NOT NULL,
+            utm_campaign VARCHAR(255) NOT NULL,
+            campaign_name VARCHAR(255) NOT NULL,
+            campaign_description TEXT NULL,
+            start_date DATE NULL,
+            end_date DATE NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            
+            UNIQUE KEY unique_campaign (campaign_id),
+            UNIQUE KEY unique_utm_per_client (client_id, utm_campaign),
+            INDEX idx_utm (utm_campaign),
+            INDEX idx_client (client_id),
+            
+            FOREIGN KEY (client_id) 
+                REFERENCES {$wpdb->prefix}cpd_clients(id) 
+                ON DELETE CASCADE
+        ) {$charset_collate};";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        error_log('CPD: Created wp_dr_campaign_settings table');
+        return true;
+    }
+    
+    /**
+     * V2.0: Create wp_rtr_email_templates table
+     * Prompt-based template system for AI email generation
+     */
+    public function create_email_templates_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_email_templates';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            campaign_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            room_type ENUM('problem', 'solution', 'offer') NOT NULL,
+            template_name VARCHAR(255) NOT NULL,
+            prompt_template LONGTEXT NOT NULL COMMENT 'JSON: 7-component prompt structure for AI generation',
+            template_order INT DEFAULT 0,
+            is_global TINYINT(1) DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            
+            INDEX idx_campaign (campaign_id),
+            INDEX idx_room_type (room_type),
+            INDEX idx_campaign_room (campaign_id, room_type),
+            INDEX idx_template_order (template_order),
+            INDEX idx_is_global (is_global),
+            INDEX idx_global_room (is_global, room_type),
+            
+            FOREIGN KEY (campaign_id) 
+                REFERENCES {$wpdb->prefix}dr_campaign_settings(id) 
+                ON DELETE CASCADE
+        ) {$charset_collate};";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            error_log('CPD: Successfully created wp_rtr_email_templates table (prompt-based AI system)');
+            return true;
+        } else {
+            error_log('CPD: FAILED to create wp_rtr_email_templates table');
+            return false;
+        }
+    }
+    
+    /**
+     * V2: Create all v2 tables
+     */
+    public function create_all_v2_tables() {
+        $success = true;
+        
+        $success = $success && $this->create_campaign_settings_table();
+        $success = $success && $this->create_visitor_campaigns_table();
+        $success = $success && $this->create_email_tracking_table();
+        $success = $success && $this->create_room_progression_table();
+        $success = $success && $this->create_email_templates_table();
+        
+        if ($success) {
+            error_log('CPD: All v2 tables created successfully');
+        } else {
+            error_log('CPD: Some v2 tables failed to create');
+        }
+        
+        return $success;
+    }
 
     /**
      * Check if a column exists in a table
@@ -387,5 +736,44 @@ class CPD_Database {
         }
 
         return $result !== false;
+    }
+
+    /**
+     * V2: Get current database version
+     */
+    public function get_current_version() {
+        return get_option('cpd_database_version', '1.2.0');
+    }
+    
+    /**
+     * V2: Rollback migration (for testing)
+     */
+    public function rollback_to_1_0_0() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cpd_clients';
+        
+        error_log('CPD: Starting rollback from v2.0.0 to v1.2.0');
+        
+        try {
+            // Drop indexes
+            $wpdb->query("DROP INDEX IF EXISTS idx_subscription_tier ON {$table_name}");
+            $wpdb->query("DROP INDEX IF EXISTS idx_subscription_expires ON {$table_name}");
+            
+            // Drop columns
+            $wpdb->query("ALTER TABLE {$table_name} DROP COLUMN IF EXISTS subscription_expires_at");
+            $wpdb->query("ALTER TABLE {$table_name} DROP COLUMN IF EXISTS rtr_activated_at");
+            $wpdb->query("ALTER TABLE {$table_name} DROP COLUMN IF EXISTS rtr_enabled");
+            $wpdb->query("ALTER TABLE {$table_name} DROP COLUMN IF EXISTS subscription_tier");
+            
+            // Reset version
+            update_option('cpd_database_version', '1.2.0');
+            
+            error_log('CPD: Rollback completed successfully');
+            return true;
+            
+        } catch (Exception $e) {
+            error_log('CPD Rollback Error: ' . $e->getMessage());
+            return false;
+        }
     }
 }

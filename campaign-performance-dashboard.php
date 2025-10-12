@@ -3,11 +3,11 @@
  * Plugin Name:       DirectReach Reports
  * Plugin URI:        https://memomarketing.com/directreach/reports
  * Description:       A custom dashboard for clients to view their campaign performance and visitor data.
- * Version:           1.1.0
+ * Version:           2.0.0
  * Author:            ANSA Solutions
  * Author URI:        https://ansa.solutions/
  * License:           GPL-2.0+
- * License URI:       http://www.gnu.gnu.org/licenses/gpl-2.0.txt
+ * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
  * Text Domain:       reports
  * Domain Path:       /languages
  */
@@ -18,9 +18,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Define plugin constants.
-define( 'CPD_DASHBOARD_VERSION', '1.1.0' ); // UPDATED VERSION
+define( 'CPD_DASHBOARD_VERSION', '2.0.0' );
 define( 'CPD_DASHBOARD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CPD_DASHBOARD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+
+/**
+ * V2 Premium Feature Constants
+ */
+define( 'CPD_MIN_PREMIUM_VERSION', '2.0.0' );
+define( 'CPD_PREMIUM_CAPABILITY', 'cpd_access_premium' );
+define( 'CPD_RTR_CAPABILITY', 'cpd_access_rtr' );
+define( 'CPD_CAMPAIGN_BUILDER_CAPABILITY', 'cpd_access_campaign_builder' );
 
 /**
  * The core plugin class that is used to define internationalization,
@@ -34,6 +42,9 @@ require_once CPD_DASHBOARD_PLUGIN_DIR . 'admin/class-cpd-admin.php';
 // Include AI Intelligence classes
 require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-intelligence.php';
 require_once CPD_DASHBOARD_PLUGIN_DIR . 'admin/class-cpd-admin-intelligence-settings.php';
+
+// Include access control class for v2 features
+require_once CPD_DASHBOARD_PLUGIN_DIR . 'includes/class-cpd-access-control.php';
 
 /**
  * Register activation and deactivation hooks.
@@ -60,7 +71,70 @@ function cpd_dashboard_activate() {
     // Flush rewrite rules for hot list settings
     cpd_add_hot_list_rewrite_rules();
     flush_rewrite_rules();
+
+    // V2: Create v2 tables and register premium capabilities
+    $cpd_database->create_all_v2_tables();
+    cpd_register_premium_capabilities();
 }
+
+register_activation_hook( __FILE__, 'cpd_dashboard_activate' );
+
+/**
+ * Register premium tier capabilities
+ * Called on activation and can be called manually if needed
+ */
+function cpd_register_premium_capabilities() {
+    // Get admin role
+    $admin_role = get_role( 'administrator' );
+    
+    if ( $admin_role ) {
+        // Admins get all premium capabilities
+        $admin_role->add_cap( CPD_PREMIUM_CAPABILITY );
+        $admin_role->add_cap( CPD_RTR_CAPABILITY );
+        $admin_role->add_cap( CPD_CAMPAIGN_BUILDER_CAPABILITY );
+    }
+    
+    // Get client role
+    $client_role = get_role( 'client' );
+    
+    if ( $client_role ) {
+        // Clients get premium capabilities (checked dynamically based on subscription)
+        $client_role->add_cap( CPD_PREMIUM_CAPABILITY );
+        $client_role->add_cap( CPD_RTR_CAPABILITY );
+        $client_role->add_cap( CPD_CAMPAIGN_BUILDER_CAPABILITY );
+    }
+    
+    // Log capability registration
+    error_log( 'CPD: Premium capabilities registered successfully' );
+}
+
+/**
+ * Check for database updates on admin_init
+ * This ensures migrations run even if plugin is already activated
+ */
+function cpd_check_database_version() {
+    // Only run for admins
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+    
+    require_once plugin_dir_path( __FILE__ ) . 'includes/class-cpd-database.php';
+    $database = new CPD_Database();
+    
+    $current_version = $database->get_current_version();
+    
+    // If version is below 2.0.0, run migrations
+    if ( version_compare( $current_version, '2.0.0', '<' ) ) {
+        error_log( 'CPD: Detected old database version, running migrations...' );
+        
+        $database->migrate_database();
+        $database->create_all_v2_tables();
+        
+        // Set flag to show admin notice
+        set_transient( 'cpd_database_upgraded', true, 30 );
+    }
+}
+add_action( 'admin_init', 'cpd_check_database_version' );
 
 /**
  * Deactivation hook to remove custom roles and clean up.
@@ -79,10 +153,11 @@ function cpd_dashboard_deactivate() {
     error_log( 'CPD Dashboard deactivated' );
 }
 
-register_activation_hook( __FILE__, 'cpd_dashboard_activate' );
 register_deactivation_hook( __FILE__, 'cpd_dashboard_deactivate' );
 
-// Handle plugin updates and migrations
+/**
+ * Handle plugin updates and migrations
+ */
 add_action( 'plugins_loaded', 'cpd_dashboard_check_version' );
 
 /**
@@ -129,27 +204,27 @@ function cpd_dashboard_register_roles() {
  */
 function cpd_dashboard_add_capabilities() {
     // Give administrators the dashboard capability (PRESERVED)
-    $admin_role = get_role('administrator');
-    if ($admin_role) {
-        $admin_role->add_cap('cpd_view_dashboard');
+    $admin_role = get_role( 'administrator' );
+    if ( $admin_role ) {
+        $admin_role->add_cap( 'cpd_view_dashboard' );
         // AI Intelligence capabilities for admins
-        $admin_role->add_cap('cpd_manage_intelligence');
-        $admin_role->add_cap('cpd_configure_intelligence');
-        $admin_role->add_cap('cpd_view_intelligence_stats');
-        $admin_role->add_cap('cpd_manage_clients');
-        $admin_role->add_cap('cpd_view_all_data');
-        $admin_role->add_cap('cpd_export_data');
-        $admin_role->add_cap('cpd_manage_users');
+        $admin_role->add_cap( 'cpd_manage_intelligence' );
+        $admin_role->add_cap( 'cpd_configure_intelligence' );
+        $admin_role->add_cap( 'cpd_view_intelligence_stats' );
+        $admin_role->add_cap( 'cpd_manage_clients' );
+        $admin_role->add_cap( 'cpd_view_all_data' );
+        $admin_role->add_cap( 'cpd_export_data' );
+        $admin_role->add_cap( 'cpd_manage_users' );
     }
 
     // Give the client role the dashboard capability (PRESERVED)
-    $client_role = get_role('client');
-    if ($client_role) {
-        $client_role->add_cap('cpd_view_dashboard');
+    $client_role = get_role( 'client' );
+    if ( $client_role ) {
+        $client_role->add_cap( 'cpd_view_dashboard' );
         // AI Intelligence and other capabilities for clients
-        $client_role->add_cap('cpd_request_intelligence');
-        $client_role->add_cap('cpd_view_own_data');
-        $client_role->add_cap('cpd_export_own_data');
+        $client_role->add_cap( 'cpd_request_intelligence' );
+        $client_role->add_cap( 'cpd_view_own_data' );
+        $client_role->add_cap( 'cpd_export_own_data' );
     }
 }
 
@@ -158,7 +233,8 @@ function cpd_dashboard_add_capabilities() {
  * PRESERVED from v1.0.0 + NEW AI Intelligence initialization
  */
 function cpd_dashboard_run() {
-    $plugin = new CPD_Dashboard();
+    // Initialize singleton FIRST - this is critical for premium features
+    $plugin = CPD_Dashboard::get_instance();
     $plugin->run();
 
     // Instantiate your admin class here (PRESERVED)
@@ -178,7 +254,224 @@ function cpd_dashboard_run() {
     }
 }
 
-add_action( 'plugins_loaded', 'cpd_dashboard_run' );
+// Run at priority 5 to ensure singleton is initialized before admin_menu hooks
+add_action( 'plugins_loaded', 'cpd_dashboard_run', 5 );
+
+/**
+ * Load DirectReach v2 Premium Features
+ * 
+ * Campaign Builder and Reading the Room are loaded as sub-plugins
+ * Only accessible to premium tier clients and admins
+ * 
+ * @since 2.0.0
+ */
+function cpd_load_premium_features() {
+    // Prevent multiple loads
+    static $loaded = false;
+    if ($loaded) {
+        return;
+    }
+    $loaded = true;
+    
+    // Load Campaign Builder
+    $campaign_builder_file = CPD_DASHBOARD_PLUGIN_DIR . 'RTR/campaign-builder/directreach-campaign-builder.php';
+    
+    if (file_exists($campaign_builder_file)) {
+        require_once $campaign_builder_file;
+        
+        // Call init function directly
+        if (function_exists('dr_campaign_builder_init')) {
+            dr_campaign_builder_init();
+        }
+    }
+}
+
+// Load premium features after plugins are loaded
+add_action( 'plugins_loaded', 'cpd_load_premium_features', 20 );
+
+/**
+ * Register Reading the Room menu
+ * Campaign Builder registers its own menu via sub-plugin
+ */
+function cpd_register_tier_based_menus() {
+    $current_user_id = get_current_user_id();
+    
+    // v2 Reading the Room - Admin or Premium tier clients ONLY
+    if ( CPD_Access_Control::is_admin_user( $current_user_id ) || 
+         CPD_Access_Control::has_v2_access( $current_user_id ) ) {
+        
+        add_menu_page(
+            __( 'Reading the Room', 'cpd' ),
+            __( 'Reading the Room', 'cpd' ),
+            'read', // Lower capability, we check tier in callback
+            'cpd-reading-room',
+            'cpd_render_rtr_dashboard_page',
+            'dashicons-groups',
+            27
+        );
+    }
+}
+add_action( 'admin_menu', 'cpd_register_tier_based_menus', 20 );
+
+/**
+ * Reading the Room page callback
+ */
+function cpd_render_rtr_dashboard_page() {
+    $current_user_id = get_current_user_id();
+    
+    // Double-check access
+    if ( ! CPD_Access_Control::is_admin_user( $current_user_id ) && 
+         ! CPD_Access_Control::has_v2_access( $current_user_id ) ) {
+        wp_die(
+            __( 'You do not have permission to access this page.', 'cpd' ),
+            __( 'Access Denied', 'cpd' ),
+            array( 'response' => 403 )
+        );
+    }
+    
+    ?>
+    <div class="wrap">
+        <h1><?php esc_html_e( 'Reading the Room Dashboard', 'cpd' ); ?></h1>
+        <div class="notice notice-info">
+            <p><?php esc_html_e( 'RTR Dashboard interface coming in Phase 5. Premium access verified!', 'cpd' ); ?></p>
+        </div>
+        <?php if ( CPD_Access_Control::is_admin_user( $current_user_id ) ) : ?>
+            <p><strong>Debug Info:</strong></p>
+            <ul>
+                <li>User ID: <?php echo esc_html( $current_user_id ); ?></li>
+                <li>Account ID: <?php echo esc_html( CPD_Access_Control::get_user_account_id( $current_user_id ) ?: 'N/A' ); ?></li>
+                <li>Tier: <?php echo esc_html( CPD_Access_Control::get_user_tier( $current_user_id ) ?: 'N/A' ); ?></li>
+                <li>RTR Enabled: <?php echo CPD_Access_Control::has_v2_access( $current_user_id ) ? 'Yes' : 'No'; ?></li>
+            </ul>
+        <?php endif; ?>
+    </div>
+    <?php
+}
+
+/**
+ * Protect premium URLs from unauthorized access
+ * Campaign Builder protection is handled by its own plugin
+ */
+function cpd_protect_tier_based_urls() {
+    if ( ! is_admin() ) {
+        return;
+    }
+    
+    $current_user_id = get_current_user_id();
+    $page = isset( $_GET['page'] ) ? sanitize_text_field( $_GET['page'] ) : '';
+    
+    // Only protect RTR page (Campaign Builder protects itself)
+    if ( $page === 'cpd-reading-room' ) {
+        // Admins always have access
+        if ( CPD_Access_Control::is_admin_user( $current_user_id ) ) {
+            return;
+        }
+        
+        // Check v2 access for non-admins
+        if ( ! CPD_Access_Control::has_v2_access( $current_user_id ) ) {
+            // Check if subscription is expired
+            if ( CPD_Access_Control::is_subscription_expired( $current_user_id ) ) {
+                wp_die(
+                    __( 'Your premium subscription has expired. Please contact your administrator to renew.', 'cpd' ),
+                    __( 'Subscription Expired', 'cpd' ),
+                    array( 'response' => 403 )
+                );
+            }
+            
+            // Redirect to v1 dashboard with error
+            wp_safe_redirect(
+                add_query_arg(
+                    array(
+                        'page' => 'cpd-dashboard',
+                        'premium_required' => '1',
+                    ),
+                    admin_url( 'admin.php' )
+                )
+            );
+            exit;
+        }
+    }
+    
+    // Check if basic user trying to access v1
+    if ( $page === 'cpd-dashboard' || $page === 'cpd-dashboard-management' ) {
+        // Admins always have access
+        if ( CPD_Access_Control::is_admin_user( $current_user_id ) ) {
+            return;
+        }
+        
+        // Premium users should NOT access v1
+        if ( ! CPD_Access_Control::has_v1_access( $current_user_id ) ) {
+            wp_safe_redirect(
+                add_query_arg(
+                    array(
+                        'page' => 'cpd-reading-room',
+                        'v1_not_available' => '1',
+                    ),
+                    admin_url( 'admin.php' )
+                )
+            );
+            exit;
+        }
+    }
+}
+add_action( 'admin_init', 'cpd_protect_tier_based_urls' );
+
+/**
+ * Show premium upgrade notice on v1 dashboard for basic clients
+ */
+function cpd_show_premium_upgrade_notice() {
+    $screen = get_current_screen();
+    
+    // Only show on v1 dashboard
+    if ( ! $screen || $screen->id !== 'toplevel_page_campaign-performance-dashboard' ) {
+        return;
+    }
+    
+    // Don't show to admins
+    if ( current_user_can( 'manage_options' ) ) {
+        return;
+    }
+    
+    $dashboard = CPD_Dashboard::get_instance();
+    
+    // Only show if user doesn't have premium access
+    if ( ! $dashboard->has_rtr_access() ) {
+        ?>
+        <div class="notice notice-info is-dismissible">
+            <h3><?php esc_html_e( 'Upgrade to Premium', 'cpd' ); ?></h3>
+            <p><?php esc_html_e( 'Unlock Reading the Room and Campaign Builder features with a premium subscription.', 'cpd' ); ?></p>
+            <p>
+                <strong><?php esc_html_e( 'Premium features include:', 'cpd' ); ?></strong>
+            </p>
+            <ul style="list-style: disc; margin-left: 20px;">
+                <li><?php esc_html_e( 'Automatic prospect qualification', 'cpd' ); ?></li>
+                <li><?php esc_html_e( '3-stage nurture workflow (Problem → Solution → Offer)', 'cpd' ); ?></li>
+                <li><?php esc_html_e( 'Email template system', 'cpd' ); ?></li>
+                <li><?php esc_html_e( 'Real-time engagement tracking', 'cpd' ); ?></li>
+                <li><?php esc_html_e( 'Advanced analytics', 'cpd' ); ?></li>
+            </ul>
+            <p>
+                <a href="#" class="button button-primary">
+                    <?php esc_html_e( 'Contact Sales', 'cpd' ); ?>
+                </a>
+            </p>
+        </div>
+        <?php
+    }
+    
+    // Show error if they tried to access premium feature
+    if ( isset( $_GET['premium_required'] ) ) {
+        ?>
+        <div class="notice notice-error is-dismissible">
+            <p>
+                <strong><?php esc_html_e( 'Premium Feature Required', 'cpd' ); ?></strong><br>
+                <?php esc_html_e( 'This feature requires a premium subscription. Please contact your administrator or upgrade your account.', 'cpd' ); ?>
+            </p>
+        </div>
+        <?php
+    }
+}
+add_action( 'admin_notices', 'cpd_show_premium_upgrade_notice' );
 
 // Add URL rewrite rules for Hot List Settings
 add_action( 'init', 'cpd_add_hot_list_rewrite_rules' );
@@ -214,11 +507,11 @@ function cpd_add_hot_list_query_vars( $vars ) {
     return $vars;
 }
 
-function cpd_parse_hot_list_request($wp) {
+function cpd_parse_hot_list_request( $wp ) {
     // Check if this is our hot list settings URL
-    if (strpos($_SERVER['REQUEST_URI'], '/directreach/reports/hot-list-settings') !== false ||
-        strpos($_SERVER['REQUEST_URI'], '/dashboarddev/campaign-dashboard/hot-list-settings') !== false ||
-        strpos($_SERVER['REQUEST_URI'], '/campaign-dashboard/hot-list-settings') !== false) {
+    if ( strpos( $_SERVER['REQUEST_URI'], '/directreach/reports/hot-list-settings' ) !== false ||
+         strpos( $_SERVER['REQUEST_URI'], '/dashboarddev/campaign-dashboard/hot-list-settings' ) !== false ||
+         strpos( $_SERVER['REQUEST_URI'], '/campaign-dashboard/hot-list-settings' ) !== false ) {
         
         // Manually set the query var
         $wp->query_vars['cpd_hot_list_settings'] = '1';
@@ -336,6 +629,6 @@ function cpd_enqueue_intelligence_assets( $hook ) {
             'intelligence_processing' => __( 'Processing...', 'cpd-dashboard' ),
             'intelligence_completed' => __( 'Intelligence Available', 'cpd-dashboard' ),
             'intelligence_error' => __( 'Error', 'cpd-dashboard' ),
-        )
+        ),
     ) );
 }

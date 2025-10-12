@@ -1,9 +1,9 @@
 /**
  * Admin-specific JavaScript for the Campaign Performance Dashboard plugin.
- * OPTIMIZED VERSION with performance improvements and duplicate call prevention
+ * OPTIMIZED VERSION with performance improvements and premium tier support
  */
 
-// Global state management for performance optimization - prevent redeclaration
+// Global state management for performance optimization
 (function() {
     const timestamp = Date.now();
     const globalKey = 'CPD_Dashboard_' + timestamp;
@@ -70,10 +70,8 @@ if (typeof window.cpdAdminInitialized === "undefined") {
   window.cpdAdminInitialized = true;
 
   jQuery(document).ready(function ($) {
-    // console.log("cpd-dashboard.js: Script started. jQuery document ready.");
-    // console.log("jQuery is working, $ is:", typeof $);
 
-    // Access localized data from cpd_dashboard_data (public-facing) for nonces needed on public page
+    // Access localized data
     const localizedPublicData =
       typeof cpd_dashboard_data !== "undefined" ? cpd_dashboard_data : {};
     const adminAjaxData =
@@ -120,40 +118,32 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       wrap.style.maxWidth = "none";
     }
 
-    const dashboardContent = $("#clients-section"); // Main dashboard content container (admin-only HTML)
-    const clientList = $(".account-list"); // Left sidebar client list (admin-only HTML)
-    const dateRangeSelect = $(".duration-select select"); // Date range selector (exists on both)
+    const dashboardContent = $("#clients-section");
+    const clientList = $(".account-list");
+    const dateRangeSelect = $(".duration-select select");
 
-    // Client Context JSON validation function - Enhanced
+    // Client Context JSON validation function
     function validateClientContextJSON(contextText) {
         if (!contextText.trim()) {
-            return { valid: true, error: null }; // Empty is allowed
+            return { valid: true, error: null };
         }
         
-        // Clean the text first - remove any invisible characters and normalize whitespace
         let cleanText = contextText.trim();
-        
-        // Remove any potential BOM (Byte Order Mark) characters
         cleanText = cleanText.replace(/^\uFEFF/, '');
-        
-        // Replace smart quotes with regular quotes (common copy/paste issue)
         cleanText = cleanText.replace(/[\u201C\u201D]/g, '"');
         cleanText = cleanText.replace(/[\u2018\u2019]/g, "'");
         
         try {
             const parsed = JSON.parse(cleanText);
             
-            // Check if it's a flat object (no nested objects except allowed ones)
             if (typeof parsed !== 'object' || Array.isArray(parsed)) {
                 return { valid: false, error: 'Context must be a JSON object' };
             }
             
-            // Check for templateId (required)
             if (!parsed.templateId || typeof parsed.templateId !== 'string') {
                 return { valid: false, error: 'templateId is required and must be a string' };
             }
             
-            // Validate structure is mostly flat
             for (const [key, value] of Object.entries(parsed)) {
                 if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                     return { valid: false, error: 'Context structure should be flat. Nested objects are not allowed except for arrays.' };
@@ -162,7 +152,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
             
             return { valid: true, error: null, parsed: parsed };
         } catch (e) {
-            // More detailed error messages
             let errorMessage = 'Invalid JSON format: ';
             if (e.message.includes('Unexpected token')) {
                 errorMessage += 'Check for missing commas, quotes, or brackets. ';
@@ -182,7 +171,65 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         }
     }
 
-    // NEW: Function to refresh client table
+    /**
+     * Handle subscription tier changes (conditional RTR enabling)
+     */
+    function setupPremiumTierHandlers() {
+        // Add client form
+        $('#add-subscription-tier').on('change', function() {
+            handleTierChange($(this).val(), '#add-rtr-enabled', false);
+        });
+        
+        // Edit client form
+        $('#edit-subscription-tier').on('change', function() {
+            handleTierChange($(this).val(), '#edit-rtr-enabled', true);
+        });
+        
+        // Initial state on page load
+        if ($('#add-subscription-tier').length) {
+            handleTierChange($('#add-subscription-tier').val(), '#add-rtr-enabled', false);
+        }
+    }
+    
+    /**
+     * Handle tier change logic
+     */
+    function handleTierChange(tier, checkboxSelector, isEdit) {
+        const $checkbox = $(checkboxSelector);
+        if (!$checkbox.length) return;
+        
+        const $form = $checkbox.closest('form');
+        const $rtrHelp = $form.find('.rtr-help');
+        const $rtrDisabledHelp = $form.find('.rtr-disabled-help');
+        
+        if (tier === 'premium') {
+            $checkbox.prop('disabled', false);
+            $rtrHelp.show();
+            $rtrDisabledHelp.hide();
+        } else {
+            $checkbox.prop('disabled', true);
+            $checkbox.prop('checked', false);
+            $rtrHelp.hide();
+            $rtrDisabledHelp.show();
+        }
+    }
+
+    /**
+     * Helper function to escape HTML
+     */
+    function escapeHtml(text) {
+        if (!text) return '';
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text.toString().replace(/[&<>"']/g, m => map[m]);
+    }
+
+    // Function to refresh client table with premium badges
     function refreshClientTable() {
       console.log("cpd-dashboard.js: Refreshing client management table...");
 
@@ -201,62 +248,80 @@ if (typeof window.cpdAdminInitialized === "undefined") {
             if (response.data.clients.length > 0) {
               response.data.clients.forEach((client) => {
                 const logoHtml = client.logo_url
-                  ? `<img src="${client.logo_url}" alt="Logo" class="client-logo-thumbnail">`
+                  ? `<img src="${escapeHtml(client.logo_url)}" alt="Logo" class="client-logo-thumbnail">`
                   : '<span class="no-logo">N/A</span>';
 
                 const webpageHtml = client.webpage_url
-                  ? `<a href="${client.webpage_url}" target="_blank" rel="noopener">${client.webpage_url}</a>`
+                  ? `<a href="${escapeHtml(client.webpage_url)}" target="_blank" rel="noopener">${escapeHtml(client.webpage_url)}</a>`
                   : '<span class="no-url">N/A</span>';
 
-                // Add AI intelligence status
+                // AI intelligence status
                 const isAIEnabled = [1, '1', true, 'true'].includes(client.ai_intelligence_enabled);
                 const aiStatusBadge = isAIEnabled
                   ? '<span class="ai-status-badge ai-enabled">✓ Enabled</span>'
                   : '<span class="ai-status-badge ai-disabled">✗ Disabled</span>';
 
                 const hasContextContent = client.client_context_info && client.client_context_info.toString().trim() !== '';
-
                 const aiContextIcon = isAIEnabled && hasContextContent
                   ? '<i class="fas fa-info-circle" title="Has context information" style="color: #28a745; cursor: help;"></i>'
                   : isAIEnabled
                   ? '<i class="fas fa-exclamation-triangle" title="No context information" style="color: #ffc107; cursor: help;"></i>'
                   : "";
 
+                // Premium tier badge
+                let premiumBadge = '';
+                if (client.subscription_tier === 'premium') {
+                    const rtrStatus = client.rtr_enabled == 1 ? 
+                        '<span style="color: #27ae60; font-size: 12px; margin-left: 6px;">● RTR Active</span>' : 
+                        '<span style="color: #999; font-size: 12px; margin-left: 6px;">○ RTR Inactive</span>';
+                    premiumBadge = `
+                        <span class="premium-badge" style="
+                            display: inline-block;
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            color: white;
+                            padding: 2px 8px;
+                            border-radius: 12px;
+                            font-size: 11px;
+                            font-weight: 600;
+                            margin-left: 8px;
+                            vertical-align: middle;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                            box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+                        ">PREMIUM</span>
+                        ${rtrStatus}
+                    `;
+                }
+
                 clientTableBody.append(`
-                                <tr data-client-id="${client.id}"
-                                    data-client-name="${client.client_name}"
-                                    data-account-id="${client.account_id}"
-                                    data-logo-url="${client.logo_url || ""}"
-                                    data-webpage-url="${
-                                      client.webpage_url || ""
-                                    }"
-                                    data-crm-email="${
-                                      client.crm_feed_email || ""
-                                    }"
-                                    data-ai-intelligence-enabled="${
-                                      client.ai_intelligence_enabled || 0
-                                    }"
-                                    data-client-context-info="${
-                                      client.client_context_info || ""
-                                    }">
-                                    <td>${client.client_name}</td>
-                                    <td>${client.account_id}</td>
-                                    <td>${logoHtml}</td>
-                                    <td>${webpageHtml}</td>
-                                    <td>${client.crm_feed_email || ""}</td>
-                                    <td><div style="display: flex; align-items: center; gap: 10px;">${aiStatusBadge}${aiContextIcon}</div></td>
-                                    <td class="actions-cell">
-                                        <button class="action-button edit-client" title="Edit Client">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="action-button delete-client" data-client-id="${
-                                          client.id
-                                        }" title="Delete Client">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                                `);
+                    <tr data-client-id="${escapeHtml(client.id)}"
+                        data-client-name="${escapeHtml(client.client_name)}"
+                        data-account-id="${escapeHtml(client.account_id)}"
+                        data-logo-url="${escapeHtml(client.logo_url || "")}"
+                        data-webpage-url="${escapeHtml(client.webpage_url || "")}"
+                        data-crm-email="${escapeHtml(client.crm_feed_email || "")}"
+                        data-ai-intelligence-enabled="${escapeHtml(client.ai_intelligence_enabled || 0)}"
+                        data-client-context-info="${escapeHtml(client.client_context_info || "")}"
+                        data-subscription-tier="${escapeHtml(client.subscription_tier || 'basic')}"
+                        data-rtr-enabled="${escapeHtml(client.rtr_enabled || 0)}"
+                        data-rtr-activated-at="${escapeHtml(client.rtr_activated_at || "")}"
+                        data-subscription-expires-at="${escapeHtml(client.subscription_expires_at || "")}">
+                        <td>${escapeHtml(client.client_name)}${premiumBadge}</td>
+                        <td>${escapeHtml(client.account_id)}</td>
+                        <td>${logoHtml}</td>
+                        <td>${webpageHtml}</td>
+                        <td>${escapeHtml(client.crm_feed_email || "")}</td>
+                        <td><div style="display: flex; align-items: center; gap: 10px;">${aiStatusBadge}${aiContextIcon}</div></td>
+                        <td class="actions-cell">
+                            <button class="action-button edit-client" title="Edit Client">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="action-button delete-client" data-client-id="${escapeHtml(client.id)}" title="Delete Client">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `);
               });
             } else {
               clientTableBody.append(
@@ -271,7 +336,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       });
     }
 
-    // NEW: Function to refresh user table
+    // Function to refresh user table
     function refreshUserTable() {
       $.ajax({
         url: cpd_admin_ajax.ajax_url,
@@ -290,30 +355,28 @@ if (typeof window.cpdAdminInitialized === "undefined") {
                 const linkedClientName = user.linked_client_name || "N/A";
                 const deleteButton = user.can_delete
                   ? `<button class="action-button delete-user" data-user-id="${user.ID}" title="Delete User">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>`
+                        <i class="fas fa-trash-alt"></i>
+                    </button>`
                   : "";
 
                 userTableBody.append(`
-                                    <tr data-user-id="${user.ID}"
-                                        data-username="${user.user_login}"
-                                        data-email="${user.user_email}"
-                                        data-role="${user.roles.join(", ")}"
-                                        data-client-account-id="${
-                                          user.client_account_id || ""
-                                        }">
-                                        <td>${user.user_login}</td>
-                                        <td>${user.user_email}</td>
-                                        <td>${user.roles.join(", ")}</td>
-                                        <td>${linkedClientName}</td>
-                                        <td class="actions-cell">
-                                            <button class="action-button edit-user" title="Edit User">
-                                                <i class="fas fa-edit"></i>
-                                            </button>
-                                            ${deleteButton}
-                                        </td>
-                                    </tr>
-                                `);
+                    <tr data-user-id="${user.ID}"
+                        data-username="${escapeHtml(user.user_login)}"
+                        data-email="${escapeHtml(user.user_email)}"
+                        data-role="${escapeHtml(user.roles.join(", "))}"
+                        data-client-account-id="${escapeHtml(user.client_account_id || "")}">
+                        <td>${escapeHtml(user.user_login)}</td>
+                        <td>${escapeHtml(user.user_email)}</td>
+                        <td>${escapeHtml(user.roles.join(", "))}</td>
+                        <td>${escapeHtml(linkedClientName)}</td>
+                        <td class="actions-cell">
+                            <button class="action-button edit-user" title="Edit User">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            ${deleteButton}
+                        </td>
+                    </tr>
+                `);
               });
             } else {
               userTableBody.append(
@@ -328,18 +391,15 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       });
     }
 
-    // OPTIMIZED: Function to load dashboard data via AJAX with deduplication
+    // Function to load dashboard data via AJAX with deduplication
     function loadDashboardData(clientId, duration) {
-      // Prevent duplicate calls
       if (CPD_Dashboard.isDuplicateRequest(clientId, duration)) {
         return;
       }
 
       const requestKey = CPD_Dashboard.getRequestKey(clientId, duration, 'dashboard');
       
-      // Check if already loading
       if (CPD_Dashboard.isLoading(requestKey)) {
-        // console.log('CPD Dashboard: Request already in progress, ignoring');
         return;
       }
 
@@ -350,7 +410,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         return;
       }
 
-      // Mark as loading
       CPD_Dashboard.setLoading(requestKey, true);
       dashboardContent.css("opacity", 0.5);
 
@@ -365,15 +424,9 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         url: cpd_admin_ajax.ajax_url,
         type: "POST",
         data: ajaxData,
-        timeout: 30000, // 30 second timeout
+        timeout: 30000,
         success: function (response) {
-          
           if (response.success && response.data) {
-            // Update dashboard sections if needed
-            // Dashboard update logic here (but won't run on admin page)
-            
-            // Only load hot list if main dashboard load was successful
-            // and we're not already loading hot list data
             const hotListKey = CPD_Dashboard.getRequestKey(clientId, duration, 'hotlist');
             if (!CPD_Dashboard.isLoading(hotListKey)) {
               CPD_Dashboard.debounce('hotListLoad', () => {
@@ -389,32 +442,24 @@ if (typeof window.cpdAdminInitialized === "undefined") {
             "loadDashboardData: AJAX request failed. Status:",
             textStatus,
             "Error:",
-            errorThrown,
-            "Response Text:",
-            jqXHR.responseText
+            errorThrown
           );
         },
         complete: function () {
           CPD_Dashboard.setLoading(requestKey, false);
           dashboardContent.css("opacity", 1);
-          // console.log("loadDashboardData: AJAX request complete.");
         },
       });
     }
 
-    // NEW: Separate hot list loading function
+    // Separate hot list loading function
     function loadHotListData(clientId, duration) {
       const requestKey = CPD_Dashboard.getRequestKey(clientId, duration, 'hotlist');
       
-      // Check if already loading
       if (CPD_Dashboard.isLoading(requestKey)) {
-        // console.log('CPD Hot List: Request already in progress, ignoring');
         return;
       }
 
-      // console.log('CPD Hot List: Loading hot list data for client:', clientId);
-      
-      // Mark as loading
       CPD_Dashboard.setLoading(requestKey, true);
 
       const ajaxData = {
@@ -429,8 +474,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         data: ajaxData,
         timeout: 30000,
         success: function(response) {
-          // console.log('CPD Hot List: Data loaded successfully');
-          
           if (response.success && response.data) {
             updateHotListSection(response.data);
           } else {
@@ -439,7 +482,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         },
         error: function(xhr, status, error) {
           console.error('CPD Hot List: AJAX error:', error);
-          // Don't show error for hot list failures to avoid user confusion
           updateHotListSection({ has_settings: false, hot_visitors: [] });
         },
         complete: function() {
@@ -453,20 +495,15 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       const $hotListPanel = $('.hot-list-panel');
       
       if (!$hotListPanel.length) {
-        // console.log('CPD Hot List: No hot list panel found');
         return;
       }
 
       if (data.has_settings && data.hot_visitors && data.hot_visitors.length > 0) {
-        // Update hot list with visitors
         renderHotListVisitors(data.hot_visitors, data.criteria_summary);
         $hotListPanel.show();
       } else {
-        // Hide hot list panel or show empty state
         $hotListPanel.hide();
       }
-
-      // console.log('CPD Hot List: Panel updated');
     }
 
     // Render hot list visitors
@@ -474,41 +511,34 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       const $hotListContent = $('.hot-list-content');
       
       if (!$hotListContent.length) {
-        // console.log('CPD Hot List: No content container found');
         return;
       }
 
-      // Clear existing content
       $hotListContent.empty();
 
-      // Add criteria summary
       if (criteria) {
         const criteriaHtml = `
           <div class="hot-list-criteria">
             <h4>Hot List Criteria</h4>
             <p>Requires ${criteria.required_matches} of ${criteria.active_filters} active filters</p>
             <ul>
-              ${criteria.criteria.map(c => `<li>${c}</li>`).join('')}
+              ${criteria.criteria.map(c => `<li>${escapeHtml(c)}</li>`).join('')}
             </ul>
           </div>
         `;
         $hotListContent.append(criteriaHtml);
       }
 
-      // Add visitors
       visitors.forEach(visitor => {
-        // You'll need to implement this based on your visitor card structure
-        const visitorHtml = renderVisitorCard(visitor, true); // true indicates hot list
+        const visitorHtml = renderVisitorCard(visitor, true);
         $hotListContent.append(visitorHtml);
       });
     }
 
-    // Helper function to render visitor cards (implement based on your structure)
+    // Helper function to render visitor cards
     function renderVisitorCard(visitor, isHotList = false) {
-      // Implement this based on your existing visitor card rendering logic
       return `<div class="visitor-card" data-visitor-id="${visitor.id}">
-        <!-- Your visitor card HTML here -->
-        <div class="visitor-info">${visitor.company_name || 'Unknown Company'}</div>
+        <div class="visitor-info">${escapeHtml(visitor.company_name || 'Unknown Company')}</div>
       </div>`;
     }
 
@@ -533,15 +563,13 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
           if (navLinks.length === 0 || sections.length === 0) {
             console.error(
-              "cpd-dashboard.js: CRITICAL ERROR: Navigation links or sections not found even after delay. Check admin-page.php structure and IDs."
+              "cpd-dashboard.js: Navigation links or sections not found. Check admin-page.php structure."
             );
             return;
           }
 
           const defaultSectionId = "clients-section";
-          const initialHash = window.location.hash.substring(1);
 
-          // Function to set the active section based on URL hash or default
           function setActiveSection() {
             const sections = document.querySelectorAll(
               ".admin-main-content .section-content"
@@ -578,11 +606,9 @@ if (typeof window.cpdAdminInitialized === "undefined") {
               targetSection.classList.add("active");
               targetSection.style.display = "block";
               targetLink.classList.add("active");
-
             } else {
               console.warn(
-                "setActiveSection: Fallback to default, targetSection or targetLink not found for:",
-                targetHashId
+                "setActiveSection: Fallback to default"
               );
               const fallbackSection = document.getElementById(defaultSectionId);
               const fallbackLink = document.querySelector(
@@ -602,7 +628,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           setActiveSection();
 
           navLinks.forEach((link) => {
-            // console.log("Adding click listener to nav link:", link);
             link.addEventListener("click", (event) => {
               if (link.getAttribute("target") === "_blank") {
                 return;
@@ -623,7 +648,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
               if (cleanedTargetId === "crm-emails") {
                 if (typeof loadEligibleVisitors === "function") {
-                  // console.log("Calling loadEligibleVisitors...");
                   loadEligibleVisitors();
                 } else {
                   console.warn("loadEligibleVisitors function not available");
@@ -652,24 +676,16 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           }
           
           try {
-              // Clean and parse the JSON
               let cleanText = rawJson.trim();
-              
-              // Remove BOM
               cleanText = cleanText.replace(/^\uFEFF/, '');
-              
-              // Replace smart quotes
               cleanText = cleanText.replace(/[\u201C\u201D]/g, '"');
               cleanText = cleanText.replace(/[\u2018\u2019]/g, "'");
               
-              // Parse and reformat
               const parsed = JSON.parse(cleanText);
               const formatted = JSON.stringify(parsed, null, 2);
               
-              // Update the textarea
               textarea.val(formatted);
               
-              // Show success
               const btn = $(this);
               const originalHtml = btn.html();
               btn.html('<i class="fas fa-check"></i> Formatted!').prop('disabled', true);
@@ -721,9 +737,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           }
           
           if (navigator.clipboard && window.isSecureContext) {
-              navigator.clipboard.writeText(templateText).then(function() {
-                  // console.log('Template copied to clipboard');
-              });
+              navigator.clipboard.writeText(templateText);
           }
           
           $('#json-template-popup').fadeOut();
@@ -754,7 +768,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       function showCopySuccess() {
           const copyBtn = $('#copy-template-btn');
           const originalText = copyBtn.text();
-          const originalClass = copyBtn.attr('class');
           
           copyBtn.addClass('copy-success').text('Copied!');
           
@@ -773,31 +786,35 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           }
       });
 
-      // --- AJAX for Management Forms ---
+      // Add Client Form with Premium Fields
       $("#add-client-form").on("submit", function (event) {
         event.preventDefault();
-        // console.log("cpd-dashboard.js: Add Client form submitted!");
 
-      // Validate client context JSON if AI is enabled
-      const aiEnabled = $("#new_ai_intelligence_enabled").is(":checked");
-      const contextInfo = $("#new_client_context_info").val();
-      
-      if (aiEnabled && contextInfo.trim()) {
-          const validation = validateClientContextJSON(contextInfo);
-          if (!validation.valid) {
-              alert("Client Context Error: " + validation.error);
-              $("#new_client_context_info").focus();
-              return;
-          }
-      }
+        // Validate client context JSON if AI is enabled
+        const aiEnabled = $("#new_ai_intelligence_enabled").is(":checked");
+        const contextInfo = $("#new_client_context_info").val();
+        
+        if (aiEnabled && contextInfo.trim()) {
+            const validation = validateClientContextJSON(contextInfo);
+            if (!validation.valid) {
+                alert("Client Context Error: " + validation.error);
+                $("#new_client_context_info").focus();
+                return;
+            }
+        }
 
         const form = $(this);
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop("disabled", true).text("Adding...");
 
-        const formData =
-          form.serialize() +
-          `&action=cpd_ajax_add_client&nonce=${cpd_admin_ajax.nonce}`;
+        // Build form data including premium fields
+        let formData = form.serialize() + `&action=cpd_ajax_add_client&nonce=${cpd_admin_ajax.nonce}`;
+        
+        // Add premium fields if they exist
+        if ($('#add-subscription-tier').length) {
+            formData += `&subscription_tier=${$('#add-subscription-tier').val() || 'basic'}`;
+            formData += `&rtr_enabled=${$('#add-rtr-enabled').is(':checked') ? '1' : '0'}`;
+        }
 
         $.ajax({
           url: cpd_admin_ajax.ajax_url,
@@ -805,8 +822,22 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           data: formData,
           success: function (response) {
             if (response.success) {
-              alert("Client added successfully!");
+              let message = 'Client added successfully!';
+              if (response.data && response.data.subscription_tier === 'premium') {
+                  message += ' Premium tier activated.';
+                  if (response.data.rtr_enabled) {
+                      message += ' RTR enabled.';
+                  }
+              }
+              alert(message);
               form[0].reset();
+              
+              // Reset premium fields to default
+              if ($('#add-subscription-tier').length) {
+                  $('#add-subscription-tier').val('basic');
+                  handleTierChange('basic', '#add-rtr-enabled', false);
+              }
+              
               refreshClientTable();
             } else {
               alert("Error: " + response.data.message);
@@ -823,7 +854,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
       $("#add-user-form").on("submit", function (event) {
         event.preventDefault();
-        // console.log("cpd-dashboard.js: Add User form submitted!");
         const form = $(this);
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop("disabled", true).text("Adding...");
@@ -854,13 +884,12 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         });
       });
 
-      // Client and User table action handlers
+      // Delete Client
       $("#clients-section .data-table").on(
         "click",
         ".action-button.delete-client",
         function (event) {
           event.preventDefault();
-          // console.log("cpd-dashboard.js: Delete Client button clicked!");
           const row = $(this).closest("tr");
           const clientId = row.data("client-id");
 
@@ -893,12 +922,12 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         }
       );
 
+      // Delete User
       $("#users-section .data-table").on(
         "click",
         ".action-button.delete-user",
         function (event) {
           event.preventDefault();
-          // console.log("cpd-dashboard.js: Delete User button clicked!");
           const row = $(this).closest("tr");
           const userId = row.data("user-id");
 
@@ -938,16 +967,13 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       const editClientModal = $("#edit-client-modal");
       const editClientForm = $("#edit-client-form");
 
-      // Edit client button handler
+      // Edit Client Button - Updated with Premium Fields
       $(document).on("click", ".action-button.edit-client", function (e) {
         e.preventDefault();
         e.stopPropagation();
-        // console.log("cpd-dashboard.js: Edit Client button clicked!");
-        // console.log("Edit button element:", this);
 
         const row = $(this).closest("tr");
         const clientId = row.data("client-id");
-        // console.log("cpd-dashboard.js: Edit Client ID:", clientId);
         const clientName = row.data("client-name");
         const accountId = row.data("account-id");
         const logoUrl = row.data("logo-url");
@@ -956,18 +982,23 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         const aiEnabled = row.data("ai-intelligence-enabled");
         const clientContext = row.data("client-context-info");
         
-        // Handle client context - convert object back to JSON string if needed
+        // Premium fields
+        const subscriptionTier = row.data("subscription-tier") || 'basic';
+        const rtrEnabled = row.data("rtr-enabled") || 0;
+        const rtrActivatedAt = row.data("rtr-activated-at");
+        const subscriptionExpiresAt = row.data("subscription-expires-at");
+        
+        // Handle client context
         let contextValue = "";
         if (clientContext) {
             if (typeof clientContext === 'object') {
-                // If it's already parsed as an object, stringify it with nice formatting
                 contextValue = JSON.stringify(clientContext, null, 2);
             } else {
-                // If it's still a string, use it as-is
                 contextValue = clientContext;
             }
         }
         
+        // Populate standard fields
         $("#edit_client_context_info").val(contextValue);
         $("#edit_client_id").val(clientId);
         $("#edit_client_name").val(clientName);
@@ -976,13 +1007,43 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         $("#edit_webpage_url").val(webpageUrl);
         $("#edit_crm_feed_email").val(crmEmail);
         $("#edit_ai_intelligence_enabled").prop("checked", aiEnabled == "1");
+        
+        // Populate premium fields if they exist
+        if ($('#edit-subscription-tier').length) {
+            $('#edit-subscription-tier').val(subscriptionTier);
+            $('#edit-rtr-enabled').prop('checked', rtrEnabled == 1);
+            
+            // Update conditional display
+            handleTierChange(subscriptionTier, '#edit-rtr-enabled', true);
+            
+            // Show RTR status if applicable
+            if (rtrEnabled && rtrActivatedAt) {
+                const activatedDate = new Date(rtrActivatedAt);
+                const expiresDate = subscriptionExpiresAt ? 
+                    new Date(subscriptionExpiresAt) : null;
+                
+                $('#rtr-activated-display').html(
+                    `<strong>Activated:</strong> ${activatedDate.toLocaleDateString()}`
+                );
+                
+                if (expiresDate) {
+                    $('#subscription-expires-display').html(
+                        `<strong>Expires:</strong> ${expiresDate.toLocaleDateString()}`
+                    );
+                }
+                
+                $('#rtr-status-info').show();
+            } else {
+                $('#rtr-status-info').hide();
+            }
+        }
 
         editClientModal.fadeIn();
       });
 
+      // Edit Client Form Submit with Premium Fields
       editClientForm.on("submit", function (event) {
         event.preventDefault();
-        // console.log("cpd-dashboard.js: Edit Client form submitted!");
 
         // Validate client context JSON if AI is enabled
         const aiEnabled = $("#edit_ai_intelligence_enabled").is(":checked");
@@ -1001,9 +1062,14 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop("disabled", true).text("Saving...");
 
-        const formData =
-          form.serialize() +
-          `&action=cpd_ajax_edit_client&nonce=${cpd_admin_ajax.nonce}`;
+        // Build form data including premium fields
+        let formData = form.serialize() + `&action=cpd_ajax_edit_client&nonce=${cpd_admin_ajax.nonce}`;
+        
+        // Add premium fields if they exist
+        if ($('#edit-subscription-tier').length) {
+            formData += `&subscription_tier=${$('#edit-subscription-tier').val() || 'basic'}`;
+            formData += `&rtr_enabled=${$('#edit-rtr-enabled').is(':checked') ? '1' : '0'}`;
+        }
 
         $.ajax({
           url: cpd_admin_ajax.ajax_url,
@@ -1011,7 +1077,20 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           data: formData,
           success: function (response) {
             if (response.success) {
-              alert("Client updated successfully!");
+              let message = 'Client updated successfully!';
+              
+              // Show additional feedback for premium changes
+              if (response.data) {
+                  if (response.data.tier_changed) {
+                      message += ' Subscription tier changed.';
+                  }
+                  if (response.data.rtr_status_changed) {
+                      message += response.data.rtr_enabled ? 
+                          ' RTR enabled.' : ' RTR disabled.';
+                  }
+              }
+              
+              alert(message);
               editClientModal.fadeOut();
               refreshClientTable();
             } else {
@@ -1028,13 +1107,11 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       });
 
       $(".modal .close").on("click", function () {
-        // console.log("cpd-dashboard.js: Modal close button clicked!");
         $(this).closest(".modal").fadeOut();
       });
 
       $(".modal").on("click", function (event) {
         if ($(event.target).hasClass("modal")) {
-          // console.log("cpd-dashboard.js: Modal background clicked!");
           $(this).fadeOut();
         }
       });
@@ -1043,7 +1120,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       const editUserForm = $("#edit-user-form");
 
       $(document).on("click", ".action-button.edit-user", function () {
-        // console.log("cpd-dashboard.js: Edit User button clicked!");
         const row = $(this).closest("tr");
         const userId = row.data("user-id");
         const username = row.data("username");
@@ -1062,7 +1138,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
       editUserForm.on("submit", function (event) {
         event.preventDefault();
-        // console.log("cpd-dashboard.js: Edit User form submitted!");
         const form = $(this);
         const submitBtn = form.find('button[type="submit"]');
         submitBtn.prop("disabled", true).text("Saving...");
@@ -1098,7 +1173,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       // ========================================
 
       if ($.fn.select2) {
-        // console.log("cpd-dashboard.js: Select2 found, initializing searchable selects.");
         $(".searchable-select").each(function () {
           let dropdownParent = $(this).closest(".modal").length
             ? $(this).closest(".modal")
@@ -1157,8 +1231,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
             console.error(
               "AJAX error during API key generation:",
               textStatus,
-              errorThrown,
-              jqXHR.responseText
+              errorThrown
             );
           },
           complete: function () {
@@ -1193,35 +1266,23 @@ if (typeof window.cpdAdminInitialized === "undefined") {
                 const fullName =
                   (visitor.first_name || "") + " " + (visitor.last_name || "");
                 eligibleVisitorsTableBody.append(`
-                                    <tr>
-                                        <td>${fullName.trim() || "N/A"}</td>
-                                        <td>${
-                                          visitor.company_name || "N/A"
-                                        }</td>
-                                        <td><a href="${
-                                          visitor.linkedin_url
-                                        }" target="_blank" rel="noopener">${
-                  visitor.linkedin_url || "N/A"
-                }</a></td>
-                                        <td>${visitor.city || "N/A"}</td>
-                                        <td>${visitor.state || "N/A"}</td>
-                                        <td>${visitor.zipcode || "N/A"}</td>
-                                        <td>${new Date(
-                                          visitor.last_seen_at
-                                        ).toLocaleString()}</td>
-                                        <td>${
-                                          visitor.recent_page_count || 0
-                                        }</td>
-                                        <td>${visitor.account_id || "N/A"}</td>
-                                        <td class="actions-cell">
-                                            <button class="action-button undo-crm-button" data-visitor-internal-id="${
-                                              visitor.id
-                                            }" title="Undo CRM Flag">
-                                                <i class="fas fa-undo"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                `);
+                    <tr>
+                        <td>${escapeHtml(fullName.trim() || "N/A")}</td>
+                        <td>${escapeHtml(visitor.company_name || "N/A")}</td>
+                        <td><a href="${escapeHtml(visitor.linkedin_url)}" target="_blank" rel="noopener">${escapeHtml(visitor.linkedin_url || "N/A")}</a></td>
+                        <td>${escapeHtml(visitor.city || "N/A")}</td>
+                        <td>${escapeHtml(visitor.state || "N/A")}</td>
+                        <td>${escapeHtml(visitor.zipcode || "N/A")}</td>
+                        <td>${new Date(visitor.last_seen_at).toLocaleString()}</td>
+                        <td>${visitor.recent_page_count || 0}</td>
+                        <td>${escapeHtml(visitor.account_id || "N/A")}</td>
+                        <td class="actions-cell">
+                            <button class="action-button undo-crm-button" data-visitor-internal-id="${visitor.id}" title="Undo CRM Flag">
+                                <i class="fas fa-undo"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `);
               });
             } else {
               eligibleVisitorsTableBody.append(
@@ -1238,7 +1299,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         });
       }
 
-      // Update button state and tooltip based on selection
       function updateButtonState() {
         const selectedValue = crmClientFilter.val();
         if (selectedValue === "all") {
@@ -1253,7 +1313,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         }
       }
 
-      // Event handlers with debouncing
       crmClientFilter.on("change", function () {
         CPD_Dashboard.debounce('crmClientChange', () => {
           loadEligibleVisitors();
@@ -1261,7 +1320,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         }, 300);
       });
 
-      // Initialize button state
       updateButtonState();
 
       triggerOnDemandSendButton.off("click").on("click", function () {
@@ -1317,22 +1375,21 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       // ========================================
 
       $("#add-referrer-mapping").on("click", function () {
-        // console.log("cpd-dashboard.js: Add referrer mapping clicked");
         const newRow = `
-                    <div class="referrer-mapping-row">
-                        <div class="form-group">
-                            <label>Domain</label>
-                            <input type="text" name="referrer_domains[]" placeholder="e.g., facebook.com">
-                        </div>
-                        <div class="form-group">
-                            <label>Logo URL</label>
-                            <input type="url" name="referrer_logos[]" placeholder="https://example.com/logo.png">
-                        </div>
-                        <div class="form-group">
-                            <button type="button" class="button button-secondary remove-mapping">Remove</button>
-                        </div>
-                    </div>
-                `;
+            <div class="referrer-mapping-row">
+                <div class="form-group">
+                    <label>Domain</label>
+                    <input type="text" name="referrer_domains[]" placeholder="e.g., facebook.com">
+                </div>
+                <div class="form-group">
+                    <label>Logo URL</label>
+                    <input type="url" name="referrer_logos[]" placeholder="https://example.com/logo.png">
+                </div>
+                <div class="form-group">
+                    <button type="button" class="button button-secondary remove-mapping">Remove</button>
+                </div>
+            </div>
+        `;
         $("#referrer-logo-mappings").append(newRow);
 
         const $newRow = $(
@@ -1341,9 +1398,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         $newRow.hide().fadeIn(300);
       });
 
-      // Remove referrer mapping row
       $(document).on("click", ".remove-mapping", function () {
-        // console.log("cpd-dashboard.js: Remove referrer mapping clicked");
         const $row = $(this).closest(".referrer-mapping-row");
 
         if (
@@ -1355,7 +1410,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         }
       });
 
-      // Domain input formatting helper
       $(document).on("input", 'input[name="referrer_domains[]"]', function () {
         const $input = $(this);
         let domain = $input.val().toLowerCase().trim();
@@ -1369,7 +1423,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         }
       });
 
-      // Form validation for referrer mappings
       $("#settings-form").on("submit", function (e) {
         const domains = $('input[name="referrer_domains[]"]');
         const logos = $('input[name="referrer_logos[]"]');
@@ -1417,14 +1470,11 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       // INTELLIGENCE SETTINGS FUNCTIONALITY
       // ========================================
 
-      // console.log("CPD Intelligence Settings: JavaScript loaded");
-
       const ajaxUrl =
         typeof cpd_admin_ajax !== "undefined"
           ? cpd_admin_ajax.ajax_url
           : ajaxurl;
 
-      // Webhook testing functionality
       const testWebhookBtn = $("#test-webhook-btn");
       const testResult = $("#webhook-test-result");
 
@@ -1435,14 +1485,14 @@ if (typeof window.cpdAdminInitialized === "undefined") {
 
           if (!webhookUrl || !apiKey) {
             testResult.html(
-              '<span style="color: #dc3545;">⚠️ Please enter both Webhook URL and API Key</span>'
+              '<span style="color: #dc3545;">Please enter both Webhook URL and API Key</span>'
             );
             return;
           }
 
           testWebhookBtn.prop("disabled", true).text("Testing...");
           testResult.html(
-            '<span style="color: #6c757d;">🔄 Testing connection...</span>'
+            '<span style="color: #6c757d;">Testing connection...</span>'
           );
 
           $.ajax({
@@ -1457,13 +1507,13 @@ if (typeof window.cpdAdminInitialized === "undefined") {
             success: function (response) {
               if (response.success) {
                 testResult.html(
-                  '<span style="color: #28a745;">✅ ' +
+                  '<span style="color: #28a745;">' +
                     response.data.message +
                     "</span>"
                 );
               } else {
                 testResult.html(
-                  '<span style="color: #dc3545;">❌ ' +
+                  '<span style="color: #dc3545;">' +
                     response.data.message +
                     "</span>"
                 );
@@ -1472,7 +1522,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
             error: function () {
               console.error("Webhook test error");
               testResult.html(
-                '<span style="color: #dc3545;">❌ Connection failed</span>'
+                '<span style="color: #dc3545;">Connection failed</span>'
               );
             },
             complete: function () {
@@ -1482,7 +1532,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         });
       }
 
-      // Intelligence Settings Form Submission
       const intelligenceForm = $("#intelligence-settings-form");
       if (intelligenceForm.length) {
         intelligenceForm.off("submit").on("submit", function (e) {
@@ -1517,22 +1566,20 @@ if (typeof window.cpdAdminInitialized === "undefined") {
             intelligence_crm_timeout: $("#intelligence_crm_timeout").val(),
           };
 
-          // console.log("Sending intelligence settings data:", formData);
-
           $.ajax({
             url: cpd_admin_ajax.ajax_url,
             type: "POST",
             data: formData,
             success: function (response) {
               if (response.success) {
-                alert("✅ " + response.data.message);
+                alert(response.data.message);
               } else {
-                alert("❌ Error: " + response.data.message);
+                alert("Error: " + response.data.message);
               }
             },
             error: function (xhr, status, error) {
               console.error("AJAX error:", error);
-              alert("❌ An error occurred while saving settings");
+              alert("An error occurred while saving settings");
             },
             complete: function () {
               submitBtn.prop("disabled", false).text(originalText);
@@ -1543,7 +1590,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         });
       }
 
-      // Intelligence Defaults Form Submission
       const defaultsForm = $("#intelligence-defaults-form");
       if (defaultsForm.length) {
         defaultsForm.on("submit", function (e) {
@@ -1565,14 +1611,14 @@ if (typeof window.cpdAdminInitialized === "undefined") {
             data: formData,
             success: function (response) {
               if (response.success) {
-                alert("✅ " + response.data.message);
+                alert(response.data.message);
               } else {
-                alert("❌ Error: " + response.data.message);
+                alert("Error: " + response.data.message);
               }
             },
             error: function () {
               console.error("Save error");
-              alert("❌ An error occurred while saving default settings");
+              alert("An error occurred while saving default settings");
             },
             complete: function () {
               submitBtn.prop("disabled", false).text(originalText);
@@ -1581,7 +1627,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         });
       }
 
-      // AI Intelligence Toggle for Add Client Form
       const newAiToggle = $("#new_ai_intelligence_enabled");
       const newContextGroup = $("#new-client-context-group");
 
@@ -1600,7 +1645,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         });
       }
 
-      // AI Intelligence Toggle for Edit Client Form
       const editAiToggle = $("#edit_ai_intelligence_enabled");
       const editContextGroup = $("#edit_client_context_info");
 
@@ -1617,19 +1661,17 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         });
       }
 
-    } else {
-      // console.log("cpd-dashboard.js: Not on admin management page. Checking if this is client dashboard page.");
+      // Initialize premium tier handlers
+      setupPremiumTierHandlers();
 
-      // Only run dashboard data loading logic if we're on the actual dashboard page
+    } else {
+
       const isDashboardPage =
         document.querySelector(".dashboard-container") ||
         document.querySelector(".client-dashboard") ||
         document.body.classList.contains("client-dashboard-page");
 
       if (isDashboardPage) {
-        // console.log("cpd-dashboard.js: Client dashboard page detected. Initializing dashboard data.");
-
-        // Dashboard initialization for client pages only with optimization
         setTimeout(function () {
           const initialClientIdElement = $(
             ".admin-sidebar .account-list li.active"
@@ -1649,7 +1691,6 @@ if (typeof window.cpdAdminInitialized === "undefined") {
           }
 
           const initialDuration = dateRangeSelect.val();
-          // console.log("cpd-dashboard.js: Initializing dashboard data load for client dashboard.");
 
           if (
             dashboardContent.length > 0 &&
@@ -1663,26 +1704,22 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         }, 150);
       } else {
         console.log(
-          "cpd-dashboard.js: Neither admin nor client dashboard page detected. Shared functions available only."
+          "cpd-dashboard.js: Neither admin nor client dashboard page detected."
         );
       }
     }
 
     // ========================================
-    // GLOBAL SHARED FUNCTIONALITY (runs on all pages)
+    // GLOBAL SHARED FUNCTIONALITY
     // ========================================
 
-    // These functions can be used by both admin and client pages
-
-    // A simple function to handle AJAX requests to our custom endpoint for visitor updates.
-    // This is primarily for the *dashboard* visitor actions.
     const sendAjaxRequestForVisitor = async (action, visitorId) => {
       const ajaxUrl = localizedPublicData.ajax_url || adminAjaxData.ajax_url;
-      const nonce = localizedPublicData.visitor_nonce; // This nonce is for public-facing visitor actions
+      const nonce = localizedPublicData.visitor_nonce;
 
       if (!ajaxUrl || !nonce) {
         console.error(
-          "sendAjaxRequestForVisitorStatus: Localized data (ajax_url or nonce) is missing."
+          "sendAjaxRequestForVisitor: Localized data missing."
         );
         return false;
       }
@@ -1702,53 +1739,46 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         if (!response.ok) {
           const errorText = await response.text();
           console.error(
-            `sendAjaxRequestForVisitorStatus: Server responded with status ${response.status}: ${errorText}`
+            `sendAjaxRequestForVisitor: Server error ${response.status}: ${errorText}`
           );
           throw new Error(
-            `Network response was not ok. Status: ${response.status}, Details: ${errorText}`
+            `Network response was not ok. Status: ${response.status}`
           );
         }
 
         const data = await response.json();
 
         if (data.success) {
-          // console.log(`sendAjaxRequestForVisitorStatus: Visitor ${visitorId} status updated successfully.`);
           return true;
         } else {
           console.error(
-            "sendAjaxRequestForVisitorStatus: AJAX error:",
+            "sendAjaxRequestForVisitor: AJAX error:",
             data.data
           );
           return false;
         }
       } catch (error) {
-        console.error("sendAjaxRequestForVisitorStatus: Fetch error:", error);
+        console.error("sendAjaxRequestForVisitor: Fetch error:", error);
         return false;
       }
     };
 
-    // OPTIMIZED: Visitor panel functionality with debouncing
     const visitorPanel = $(".visitor-panel");
 
     if (visitorPanel.length > 0) {
-      // Use namespaced events to prevent duplicate bindings
       visitorPanel.off('click.visitorActions').on(
         "click.visitorActions",
         ".add-crm-icon, .delete-icon",
         async function (event) {
           event.preventDefault();
-          // console.log("cpd-dashboard.js: Visitor button clicked!");
 
           const button = $(this);
           const visitorCard = button.closest(".visitor-card");
           const visitorId = visitorCard.data("visitor-id");
           
-          // Prevent rapid clicking
           if (button.prop('disabled')) {
             return;
           }
-          
-          // console.log("cpd-dashboard.js: Visitor ID:", visitorId);
 
           let updateAction = "";
           if (button.hasClass("add-crm-icon")) {
@@ -1758,43 +1788,35 @@ if (typeof window.cpdAdminInitialized === "undefined") {
                 "Are you sure you want to flag this visitor for CRM addition?"
               )
             ) {
-              // console.log("cpd-dashboard.js: CRM Add confirmation cancelled.");
               return;
             }
           } else if (button.hasClass("delete-icon")) {
             updateAction = "archive";
             if (
               !confirm(
-                "Are you sure you want to archive this visitor? They will no longer appear in the list."
+                "Are you sure you want to archive this visitor?"
               )
             ) {
-              // console.log("cpd-dashboard.js: Archive confirmation cancelled.");
               return;
             }
           }
-          // console.log("cpd-dashboard.js: Update action:", updateAction);
 
           button.prop("disabled", true).css("opacity", 0.6);
-          // console.log("cpd-dashboard.js: Button disabled.");
 
           try {
             const success = await sendAjaxRequestForVisitor(
               updateAction,
               visitorId
             );
-            // console.log("cpd-dashboard.js: sendAjaxRequestForVisitor success status:",success);
 
             if (success) {
-              // Check if clientList exists and has an active item before trying to access its data
               const currentClientId =
                 clientList.length > 0 && clientList.find("li.active").length > 0
                   ? clientList.find("li.active").data("client-id")
                   : "all";
               const currentDuration = dateRangeSelect.val();
 
-              // Only reload dashboard data if we're on a dashboard page (not admin page)
               if (typeof loadDashboardData === "function" && !isAdminPage) {
-                // Use debounced reload to prevent multiple rapid calls
                 CPD_Dashboard.debounce('dashboardReload', () => {
                   loadDashboardData(currentClientId, currentDuration);
                 }, 300);
@@ -1813,14 +1835,11 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       );
     }
 
-    // OPTIMIZED: Client list functionality with debouncing
     if (clientList.length > 0) {
-      // Use namespaced events to prevent duplicate bindings
       clientList.off('click.clientSelection').on("click.clientSelection", "li", function () {
         const listItem = $(this);
         const clientId = listItem.data("client-id");
         
-        // Prevent duplicate selections
         if (listItem.hasClass('active')) {
           return;
         }
@@ -1836,9 +1855,7 @@ if (typeof window.cpdAdminInitialized === "undefined") {
         }
         window.history.pushState({}, "", currentUrl.toString());
 
-        // Only call loadDashboardData if we're not on admin page
         if (typeof loadDashboardData === "function" && !isAdminPage) {
-          // Use debounced loading to prevent rapid calls
           CPD_Dashboard.debounce('clientChange', () => {
             loadDashboardData(clientId, dateRangeSelect.val());
           }, 300);
@@ -1846,19 +1863,15 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       });
     }
 
-    // OPTIMIZED: Date range selector functionality with debouncing
     if (dateRangeSelect.length > 0) {
       dateRangeSelect.off('change.durationChange').on("change.durationChange", function () {
-        // console.log("cpd-dashboard.js: Date range dropdown changed!");
         const activeClientListItem = clientList.find("li.active");
         const clientId =
           activeClientListItem.length > 0
             ? activeClientListItem.data("client-id")
             : "all";
 
-        // Only call loadDashboardData if we're not on admin page
         if (typeof loadDashboardData === "function" && !isAdminPage) {
-          // Use debounced loading to prevent rapid calls
           CPD_Dashboard.debounce('durationChange', () => {
             loadDashboardData(clientId, $(this).val());
           }, 300);
@@ -1866,23 +1879,15 @@ if (typeof window.cpdAdminInitialized === "undefined") {
       });
     }
 
-    // Cleanup on page unload
     $(window).on('beforeunload', function() {
-      // Clear all debounce timers
       Object.values(CPD_Dashboard.debounceTimers).forEach(timer => {
         if (timer) clearTimeout(timer);
       });
       
-      // Clear loading states
       CPD_Dashboard.loadingStates.clear();
       CPD_Dashboard.requestQueue.clear();
-      
-      // console.log("cpd-dashboard.js: Cleanup completed");
     });
 
-    // Make CPD_Dashboard available globally for debugging
-    // window.CPD_Dashboard = CPD_Dashboard;
-
-    console.log("cpd-dashboard.js: Initialization complete with performance optimizations.");
+    console.log("cpd-dashboard.js: Initialization complete with premium support.");
   });
 }

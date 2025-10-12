@@ -68,6 +68,20 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         Action Logs
                     </a>
                 </li>
+
+                <li>
+                    <a href="<?php echo admin_url('admin.php?page=dr-campaign-builder'); ?>" class="nav-link external-link">
+                        <i class="fas fa-bullhorn"></i>
+                        Campaign Builder
+                    </a>
+                </li>
+                <li>
+                    <a href="<?php echo admin_url('admin.php?page=dr-reading-room'); ?>" class="nav-link external-link">
+                        <i class="fas fa-door-open"></i>
+                        Reading the Room
+                    </a>
+                </li>
+
                 <?php if ( !empty( $client_dashboard_url ) ) : ?>
                 <li class="admin-dashboard-link">
                     <a href="<?php echo esc_url( $client_dashboard_url ); ?>" target="_blank" class="nav-link">
@@ -117,7 +131,30 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                             <label for="crm_feed_email">CRM Feed Email</label>
                             <input type="email" id="crm_feed_email" name="crm_feed_email">
                         </div>
-                        
+
+                        <div class="form-group">
+                            <label for="add-subscription-tier">Subscription Tier: <span class="required">*</span></label>
+                            <select id="add-subscription-tier" name="subscription_tier" required>
+                                <option value="basic">Basic</option>
+                                <option value="premium">Premium</option>
+                            </select>
+                            <small class="form-help">Select basic for standard features or premium for Reading the Room</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="add-rtr-enabled">
+                                <input type="checkbox" id="add-rtr-enabled" name="rtr_enabled" value="1" disabled>
+                                Enable Reading the Room
+                            </label>
+                            <small class="form-help rtr-help" style="display:none; color: #666;">
+                                RTR provides automated prospect nurturing with email sequences
+                            </small>
+                            <small class="form-help rtr-disabled-help" style="color: #999;">
+                                Premium subscription required to enable RTR
+                            </small>
+                        </div>                        
+
+
                         <div class="form-group ai-intelligence-toggle">
                             <label for="new_ai_intelligence_enabled">
                                 <input type="checkbox" 
@@ -186,9 +223,25 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                                         data-webpage-url="<?php echo esc_url( $client->webpage_url ); ?>"
                                         data-crm-email="<?php echo esc_attr( $client->crm_feed_email ); ?>"
                                         data-ai-intelligence-enabled="<?php echo esc_attr( $client->ai_intelligence_enabled ?? 0 ); ?>"
-                                        data-client-context-info="<?php echo esc_attr( $client->client_context_info ?? '' ); ?>">
+                                        data-client-context-info="<?php echo esc_attr( $client->client_context_info ?? '' ); ?>"
+                                        data-subscription-tier="<?php echo esc_attr( $client->subscription_tier ?? 'basic' ); ?>"
+                                        data-rtr-enabled="<?php echo esc_attr( $client->rtr_enabled ?? 0 ); ?>"
+                                        data-rtr-activated-at="<?php echo esc_attr( $client->rtr_activated_at ?? '' ); ?>"
+                                        data-subscription-expires-at="<?php echo esc_attr( $client->subscription_expires_at ?? '' ); ?>">
                                         
-                                        <td><?php echo esc_html( wp_unslash( $client->client_name ) ); ?></td>
+                                        
+                                        <td>
+                                            <?php echo esc_html( wp_unslash( $client->client_name ) ); ?>
+                                            <?php if ( isset($client->subscription_tier) && $client->subscription_tier === 'premium' ): ?>
+                                                <span class="premium-badge">Premium</span>
+                                            <?php endif; ?>
+                                            <?php if ( isset($client->rtr_enabled) && $client->rtr_enabled ): ?>
+                                                <span class="rtr-status active" title="Reading the Room Active">
+                                                    <i class="fas fa-check-circle"></i>
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>                                            
+                                        
                                         <td><?php echo esc_html( $client->account_id ); ?></td>
                                         <td>
                                             <?php if ( ! empty( $client->logo_url ) ) : ?>
@@ -840,6 +893,37 @@ $client_dashboard_url = get_option( 'cpd_client_dashboard_url', '' ); // Get the
                         <label for="edit_crm_feed_email">CRM Feed Email</label>
                         <input type="email" id="edit_crm_feed_email" name="crm_feed_email">
                     </div>
+
+                    <div class="form-group">
+                        <label for="edit-subscription-tier">Subscription Tier: <span class="required">*</span></label>
+                        <select id="edit-subscription-tier" name="subscription_tier" required>
+                            <option value="basic">Basic</option>
+                            <option value="premium">Premium</option>
+                        </select>
+                        <small class="form-help">Select basic for standard features or premium for Reading the Room</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit-rtr-enabled">
+                            <input type="checkbox" id="edit-rtr-enabled" name="rtr_enabled" value="1">
+                            Enable Reading the Room
+                        </label>
+                        <small class="form-help rtr-help" style="display:none; color: #666;">
+                            RTR provides automated prospect nurturing with email sequences
+                        </small>
+                        <small class="form-help rtr-disabled-help" style="color: #999;">
+                            Premium subscription required to enable RTR
+                        </small>
+                        <div id="rtr-status-info" style="margin-top: 10px; display:none; padding: 10px; background: #f0f9ff; border-left: 4px solid #3498db;">
+                            <strong>RTR Status:</strong>
+                            <div style="margin-top: 5px;">
+                                <span id="rtr-activated-display"></span>
+                            </div>
+                            <div style="margin-top: 5px;">
+                                <span id="subscription-expires-display"></span>
+                            </div>
+                        </div>
+                    </div>                    
                     <div class="form-group ai-intelligence-section">
                         <h3>AI Intelligence Settings</h3>
                         <div class="ai-intelligence-toggle">

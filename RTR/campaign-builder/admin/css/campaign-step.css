@@ -1,0 +1,536 @@
+/**
+ * Campaign Step Styles
+ * 
+ * @package DirectReach_Campaign_Builder
+ * @since 2.0.0
+ */
+
+/* Campaign Step Container */
+.campaign-step-container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Step Header */
+.step-header {
+    margin-bottom: 2rem;
+}
+
+.step-header h2 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.5rem;
+    color: var(--text-color-dark);
+}
+
+.step-header .step-description {
+    margin: 0;
+    color: var(--text-color-light);
+    font-size: 1rem;
+}
+
+.selected-client-name {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+/* Campaigns Header */
+.campaigns-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.campaigns-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--text-color-dark);
+}
+
+/* Campaign Grid */
+.campaign-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+/* Campaign Card */
+.campaign-card {
+    background: white;
+    border: 2px solid var(--line-color);
+    border-radius: 8px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.campaign-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.campaign-card.selected {
+    border-color: var(--primary-color);
+    background: rgba(var(--primary-rgb), 0.05);
+}
+
+.campaign-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.campaign-name {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-color-dark);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: 0.5rem;
+}
+
+.campaign-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.btn-icon {
+    background: none;
+    border: none;
+    padding: 0.5rem;
+    cursor: pointer;
+    color: var(--text-color-light);
+    transition: color 0.3s ease;
+    border-radius: 4px;
+}
+
+.btn-icon:hover {
+    color: var(--text-color-dark);
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.edit-campaign-btn:hover {
+    color: var(--info-color);
+}
+
+.delete-campaign-btn:hover {
+    color: var(--error-color);
+}
+
+.campaign-body {
+    padding-top: 1rem;
+    border-top: 1px solid var(--line-color);
+}
+
+.campaign-utm {
+    margin: 0 0 0.75rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.campaign-utm .label {
+    font-weight: 500;
+    color: var(--text-color-light);
+}
+
+.campaign-utm code {
+    background: var(--bg-color);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    color: var(--text-color-dark);
+}
+
+.campaign-description {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.9rem;
+    color: var(--text-color-light);
+    line-height: 1.4;
+}
+
+.campaign-dates {
+    margin: 0 0 0.75rem 0;
+    font-size: 0.85rem;
+    color: var(--text-color-light);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.campaign-settings {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-color-light);
+}
+
+.settings-source {
+    font-weight: 500;
+}
+
+.selected-indicator {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line-color);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--primary-color);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.selected-indicator i {
+    font-size: 1.25rem;
+}
+
+/* Empty State */
+.no-campaigns {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--text-color-light);
+    font-size: 1rem;
+}
+
+/* Campaign Form */
+.campaign-form {
+    background: white;
+    border: 1px solid var(--line-color);
+    border-radius: 8px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-color-dark);
+    font-size: 0.9rem;
+}
+
+.required {
+    color: var(--error-color);
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--line-color);
+    border-radius: 4px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+}
+
+textarea.form-control {
+    resize: vertical;
+    min-height: 80px;
+    font-family: inherit;
+}
+
+.field-hint {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.85rem;
+    color: var(--text-color-light);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+/* UTM Validation */
+.utm-validation {
+    margin-top: 0.5rem;
+}
+
+.validation-message {
+    display: inline-block;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.validation-message.success {
+    color: var(--success-color);
+    background: rgba(39, 174, 96, 0.1);
+}
+
+.validation-message.error {
+    color: var(--error-color);
+    background: rgba(231, 76, 60, 0.1);
+}
+
+/* Form Actions */
+.form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line-color);
+}
+
+/* Settings Preview */
+.settings-preview {
+    background: white;
+    border: 1px solid var(--line-color);
+    border-radius: 8px;
+    padding: 2rem;
+    margin-top: 2rem;
+}
+
+.settings-preview h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.25rem;
+    color: var(--text-color-dark);
+}
+
+.settings-source-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--bg-color);
+    border-radius: 4px;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.settings-source-info i {
+    color: var(--info-color);
+    font-size: 1.25rem;
+}
+
+.customize-link {
+    margin-left: auto;
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+
+.customize-link:hover {
+    text-decoration: underline;
+}
+
+.settings-preview-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.settings-section {
+    padding: 1rem;
+    background: var(--bg-color);
+    border-radius: 4px;
+}
+
+.settings-section h4 {
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    color: var(--text-color-dark);
+    font-weight: 600;
+}
+
+.thresholds-list,
+.scoring-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.threshold-item,
+.scoring-category {
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.threshold-item strong,
+.scoring-category strong {
+    color: var(--text-color-dark);
+    font-weight: 600;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+    text-align: center;
+    color: var(--text-color-light);
+    font-size: 0.9rem;
+}
+
+/* Loading State */
+.loading-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    text-align: center;
+}
+
+.spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid var(--line-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 1rem;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.loading-state p {
+    color: var(--text-color-light);
+    font-size: 1rem;
+}
+
+/* Error State */
+.error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    text-align: center;
+}
+
+.error-state i {
+    font-size: 4rem;
+    color: var(--error-color);
+    margin-bottom: 1rem;
+}
+
+.error-state h3 {
+    margin: 0 0 0.5rem 0;
+    color: var(--text-color-dark);
+    font-size: 1.5rem;
+}
+
+.error-state p {
+    margin: 0 0 1.5rem 0;
+    color: var(--text-color-light);
+}
+
+.error-message {
+    font-weight: 500;
+    color: var(--error-color);
+}
+
+/* Buttons (inheriting from base.css, specific overrides only) */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--secondary-color);
+}
+
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background: white;
+    color: var(--text-color-dark);
+    border: 1px solid var(--line-color);
+}
+
+.btn-secondary:hover {
+    background: #f8f9fa;
+    border-color: var(--primary-color);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .campaign-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .settings-preview-content {
+        grid-template-columns: 1fr;
+    }
+    
+    .campaigns-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+    }
+    
+    .form-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .campaign-form {
+        padding: 1.5rem;
+    }
+    
+    .settings-preview {
+        padding: 1.5rem;
+    }
+    
+    .campaign-card {
+        padding: 1rem;
+    }
+}

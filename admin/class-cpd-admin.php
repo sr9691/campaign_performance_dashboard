@@ -625,6 +625,9 @@ class CPD_Admin {
         $logo_url = esc_url_raw( $_POST['logo_url'] );
         $webpage_url = esc_url_raw( $_POST['webpage_url'] );
         $crm_feed_email = sanitize_text_field( $_POST['crm_feed_email'] );
+        $subscription_tier = sanitize_text_field($_POST['subscription_tier']);
+        $rtr_enabled = isset($_POST['rtr_enabled']) ? 1 : 0;
+
         
         // AI Intelligence fields
         $ai_intelligence_enabled = isset( $_POST['ai_intelligence_enabled'] ) ? 1 : 0;
@@ -636,6 +639,30 @@ class CPD_Admin {
             $validation = $this->validate_client_context_json( $client_context_info );
             if ( ! $validation['valid'] ) {
                 wp_send_json_error( array( 'message' => 'Client Context Error: ' . $validation['error'] ) );
+            }
+        }
+
+        // Validate subscription tier
+        if (!in_array($subscription_tier, array('basic', 'premium'))) {
+            $subscription_tier = 'basic';
+        }
+        
+        // Validate RTR enabled (can only be true if premium)
+        if ($rtr_enabled && $subscription_tier !== 'premium') {
+            wp_send_json_error(array(
+                'message' => 'Reading the Room can only be enabled for premium subscriptions'
+            ));
+        }
+
+        // Calculate premium timestamps
+        $rtr_activated_at = null;
+        $subscription_expires_at = null;
+        
+        if ($subscription_tier === 'premium') {
+            $subscription_expires_at = date('Y-m-d H:i:s', strtotime('+10 years'));
+            
+            if ($rtr_enabled) {
+                $rtr_activated_at = current_time('mysql');
             }
         }
 
@@ -652,13 +679,27 @@ class CPD_Admin {
                 'client_context_info' => $client_context_info,
                 'ai_settings_updated_at' => current_time( 'mysql' ),
                 'ai_settings_updated_by' => get_current_user_id(),
+                'subscription_tier' => $subscription_tier,
+                'rtr_enabled' => $rtr_enabled,
+                'rtr_activated_at' => $rtr_activated_at,
+                'subscription_expires_at' => $subscription_expires_at
             ),
             array( '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%d' )
         );
         
         $user_id = get_current_user_id();
         if ( $result ) {
-            $this->log_action( $user_id, 'CLIENT_ADDED', 'Client "' . $client_name . '" (ID: ' . $account_id . ') was added via AJAX with AI ' . ( $ai_intelligence_enabled ? 'enabled' : 'disabled' ) . '.' );
+            $this->log_action(
+                get_current_user_id(),
+                'client_created',
+                sprintf(
+                    'Created client: %s (Account ID: %s, Tier: %s, RTR: %s)',
+                    $client_name,
+                    $account_id,
+                    $subscription_tier,
+                    $rtr_enabled ? 'enabled' : 'disabled'
+                )
+            );
             wp_send_json_success( array( 'message' => 'Client added successfully!' ) );
         } else {
             $this->log_action( $user_id, 'CLIENT_ADD_FAILED', 'Failed to add client "' . $client_name . '" via AJAX.' );
@@ -715,12 +756,44 @@ class CPD_Admin {
         if ( $client_id <= 0 ) {
             wp_send_json_error( array( 'message' => 'Invalid client ID.' ) );
         }
+
+
+        $current_client = $this->wpdb->get_row(
+            $this->wpdb->prepare(
+                "SELECT * FROM {$this->client_table} WHERE id = %d",
+                $client_id
+            )
+        );
         
+        if (!$current_client) {
+            wp_send_json_error(array('message' => 'Client not found'));
+        }
+        
+        // Get account_id from current record (it's read-only)**
+        $account_id = $current_client->account_id;
+
         // Original fields
         $client_name = sanitize_text_field( $_POST['client_name'] );
         $logo_url = esc_url_raw( $_POST['logo_url'] );
         $webpage_url = esc_url_raw( $_POST['webpage_url'] );
         $crm_feed_email = sanitize_text_field( $_POST['crm_feed_email'] );
+
+        // NEW: Premium fields
+        $subscription_tier = sanitize_text_field($_POST['subscription_tier']);
+        $rtr_enabled = isset($_POST['rtr_enabled']) ? 1 : 0;
+        
+       
+        // Validate subscription tier
+        if (!in_array($subscription_tier, array('basic', 'premium'))) {
+            $subscription_tier = 'basic';
+        }
+        
+        // Validate RTR enabled
+        if ($rtr_enabled && $subscription_tier !== 'premium') {
+            wp_send_json_error(array(
+                'message' => 'Reading the Room can only be enabled for premium subscriptions'
+            ));
+        }        
         
         // AI Intelligence fields
         $ai_intelligence_enabled = isset( $_POST['ai_intelligence_enabled'] ) ? 1 : 0;
@@ -734,6 +807,36 @@ class CPD_Admin {
                 wp_send_json_error( array( 'message' => 'Client Context Error: ' . $validation['error'] ) );
             }
         }
+
+        // Handle premium tier changes
+        $rtr_activated_at = $current_client->rtr_activated_at;
+        $subscription_expires_at = $current_client->subscription_expires_at;
+        $tier_changed = false;
+        $rtr_status_changed = false;
+        
+        // Check if tier changed to premium
+        if ($subscription_tier === 'premium' && $current_client->subscription_tier !== 'premium') {
+            $subscription_expires_at = date('Y-m-d H:i:s', strtotime('+10 years'));
+            $tier_changed = true;
+        }
+        
+        // Check if tier changed to basic
+        if ($subscription_tier === 'basic' && $current_client->subscription_tier === 'premium') {
+            $rtr_enabled = 0; // Force disable RTR when downgrading
+            $subscription_expires_at = null;
+            $tier_changed = true;
+        }
+        
+        // Check if RTR is being enabled for the first time
+        if ($rtr_enabled && !$current_client->rtr_enabled && !$current_client->rtr_activated_at) {
+            $rtr_activated_at = current_time('mysql');
+            $rtr_status_changed = true;
+        }
+        
+        // Check if RTR is being disabled
+        if (!$rtr_enabled && $current_client->rtr_enabled) {
+            $rtr_status_changed = true;
+        }        
                 
         $updated = $this->wpdb->update(
             $this->client_table,
@@ -747,16 +850,55 @@ class CPD_Admin {
                 'client_context_info' => $client_context_info,
                 'ai_settings_updated_at' => current_time( 'mysql' ),
                 'ai_settings_updated_by' => get_current_user_id(),
+                'subscription_tier' => $subscription_tier,
+                'rtr_enabled' => $rtr_enabled,
+                'rtr_activated_at' => $rtr_activated_at,
+                'subscription_expires_at' => $subscription_expires_at                
             ),
             array( 'id' => $client_id ),
             array( '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%d' ),
             array( '%d' )
         );
-    
+
+        // Build log message
+        $log_parts = array();
+        $log_parts[] = sprintf('Updated client: %s (Account ID: %s)', $client_name, $account_id);
+        
+        if ($tier_changed) {
+            $log_parts[] = sprintf(
+                'Subscription tier changed: %s → %s',
+                $current_client->subscription_tier,
+                $subscription_tier
+            );
+        }
+        
+        if ($rtr_status_changed) {
+            $log_parts[] = sprintf(
+                'RTR status changed: %s',
+                $rtr_enabled ? 'enabled' : 'disabled'
+            );
+        }
+        
+        // Log action
+        $this->log_action(
+            get_current_user_id(),
+            'client_updated',
+            implode('; ', $log_parts)
+        );
+        
+
         $user_id = get_current_user_id();
         if ( $updated !== false ) {
             $this->log_action( $user_id, 'CLIENT_EDITED_AJAX', 'Client ID ' . $client_id . ' was edited via AJAX with AI ' . ( $ai_intelligence_enabled ? 'enabled' : 'disabled' ) . '.' );
-            wp_send_json_success( array( 'message' => 'Client updated successfully!' ) );
+            wp_send_json_success(array(
+                'message' => 'Client updated successfully',
+                'subscription_tier' => $subscription_tier,
+                'rtr_enabled' => $rtr_enabled,
+                'rtr_activated_at' => $rtr_activated_at,
+                'subscription_expires_at' => $subscription_expires_at,
+                'tier_changed' => $tier_changed,
+                'rtr_status_changed' => $rtr_status_changed
+            ));        
         } else {
             $this->log_action( $user_id, 'CLIENT_EDIT_FAILED_AJAX', 'Failed to edit client ID ' . $client_id . ' via AJAX.' );
             wp_send_json_error( array( 'message' => 'Failed to update client.' ) );
