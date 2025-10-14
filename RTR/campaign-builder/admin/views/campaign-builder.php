@@ -195,6 +195,23 @@ $user_role = !empty($current_user->roles) ? ucfirst($current_user->roles[0]) : '
 <!-- Notification Container -->
 <div class="notification-container"></div>
 
+<?php
+/**
+ * Include Client Settings Side Panel
+ * This file is in the scoring-system directory
+ */
+$panel_template = DR_CB_PLUGIN_DIR . '../scoring-system/admin/views/partials/client-settings-panel.php';
+
+if (file_exists($panel_template)) {
+    include $panel_template;
+} else {
+    // Debug: Show the path being checked
+    if (defined('WP_DEBUG') && WP_DEBUG) {
+        echo '<!-- Client Settings Panel not found at: ' . esc_html($panel_template) . ' -->';
+    }
+}
+?>
+
 <script>
 // Settings Dropdown Toggle - Vanilla JavaScript
 (function() {

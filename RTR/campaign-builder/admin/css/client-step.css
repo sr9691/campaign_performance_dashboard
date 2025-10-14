@@ -393,14 +393,19 @@
     gap: 0.5rem;
     flex-wrap: wrap;
     justify-content: center;
+    margin-bottom: 0.5rem;
 }
 
+/* Update the general .badge rule */
 .badge {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.25rem;
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
+    width: 36px;
+    height: 36px;
+    padding: 0; 
+    border-radius: 50%; /* Circular shape */
     font-size: 0.75rem;
     font-weight: 500;
 }
@@ -408,11 +413,78 @@
 .badge-premium {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
+    border: none;
+    box-shadow: none;
 }
 
-.badge-rtr {
-    background: var(--success-color);
+
+/* Wrapper for the Configure Button to match Badge size */
+.configure-client-container {
+    /* Should match the dimensions of the .badge */
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* No border/background here, as the button itself has them */
+}
+
+/* Card Actions - ENHANCED */
+.card-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-top: 0.25rem;
+}
+
+/* Configure Button - ENHANCED */
+.configure-client-btn {
+    width: 36px; /* Keep size for safety, although .badge should handle it */
+    height: 36px; /* Keep size for safety */
+    padding: 0;
+    
+    /* Crucial: Override the white background and border */
+    background: none; 
+    border: none; 
+    
+    /* Keep functional and transition properties */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    
+    /* Ensure text color is inherited from .badge-premium (white) */
+    color: var(--text-color-light); /* This will be overridden by .badge-premium but is a safe fallback */
+}
+
+.configure-client-btn:hover {
+    /* Use filter on the gradient background for the hover effect */
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); /* Re-apply or use filter */
+    filter: brightness(1.1); /* Brighter version of the purple gradient */
     color: white;
+    border-color: transparent; /* Ensure no border appears */
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.3);
+}
+
+.configure-client-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(var(--primary-rgb), 0.2);
+}
+
+.configure-client-btn:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.configure-client-btn i {
+    font-size: 1rem;
+    transition: transform 0.3s ease;
+}
+
+.configure-client-btn:hover i {
+    transform: rotate(45deg);
 }
 
 /* Responsive */
@@ -427,5 +499,29 @@
     
     .form-row {
         grid-template-columns: 1fr;
+    }
+}
+
+/* Accessibility - High Contrast Mode */
+@media (prefers-contrast: high) {
+    .configure-client-btn {
+        border-width: 2px;
+    }
+    
+    .configure-client-btn:focus {
+        outline-width: 3px;
+    }
+}
+
+/* Accessibility - Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+    .configure-client-btn,
+    .configure-client-btn i,
+    .client-card {
+        transition: none;
+    }
+    
+    .create-client-form {
+        animation: none;
     }
 }

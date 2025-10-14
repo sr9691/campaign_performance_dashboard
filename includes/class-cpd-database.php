@@ -630,6 +630,307 @@ class CPD_Database {
             return false;
         }
     }
+
+
+    /**
+     * Room Scoring System schema updates
+     */
+    public function create_scoring_rules_tables() {
+        global $wpdb;
+        
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        // 1. Create global scoring rules table
+        $table_global_scoring_rules = $wpdb->prefix . 'rtr_global_scoring_rules';
+        $sql_global_scoring_rules = "CREATE TABLE IF NOT EXISTS {$table_global_scoring_rules} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            room_type ENUM('problem', 'solution', 'offer') NOT NULL,
+            rules_config LONGTEXT NOT NULL COMMENT 'JSON: all rules for this room',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_room (room_type)
+        ) {$charset_collate};";
+        
+        // 2. Create client scoring rules table
+        $table_client_scoring_rules = $wpdb->prefix . 'rtr_client_scoring_rules';
+        $sql_client_scoring_rules = "CREATE TABLE IF NOT EXISTS {$table_client_scoring_rules} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            client_id mediumint(9) NOT NULL,
+            room_type ENUM('problem', 'solution', 'offer') NOT NULL,
+            rules_config LONGTEXT NOT NULL COMMENT 'JSON: client customizations',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_client_room (client_id, room_type),
+            INDEX idx_client (client_id),
+            FOREIGN KEY (client_id) REFERENCES {$wpdb->prefix}cpd_clients(id) ON DELETE CASCADE
+        ) {$charset_collate};";
+        
+        // 3. Create room thresholds table
+        $table_room_thresholds = $wpdb->prefix . 'rtr_room_thresholds';
+        $sql_room_thresholds = "CREATE TABLE IF NOT EXISTS {$table_room_thresholds} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            client_id mediumint(9) NULL DEFAULT NULL COMMENT 'NULL = global default',
+            problem_max INT DEFAULT 40,
+            solution_max INT DEFAULT 60,
+            offer_min INT DEFAULT 61,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_client (client_id),
+            INDEX idx_client (client_id)
+        ) {$charset_collate};";
+        
+        // 4. Create campaign target pages table
+        $table_campaign_target_pages = $wpdb->prefix . 'rtr_campaign_target_pages';
+        $sql_campaign_target_pages = "CREATE TABLE IF NOT EXISTS {$table_campaign_target_pages} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            campaign_id BIGINT UNSIGNED NOT NULL,
+            page_url VARCHAR(2048) NOT NULL,
+            page_title VARCHAR(255),
+            url_pattern VARCHAR(500) COMMENT 'Regex pattern for matching',
+            room_type ENUM('problem', 'solution', 'offer') NOT NULL,
+            points_multiplier DECIMAL(3,2) DEFAULT 1.00,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_campaign (campaign_id),
+            INDEX idx_room (room_type),
+            FOREIGN KEY (campaign_id) 
+                REFERENCES {$wpdb->prefix}dr_campaign_settings(id) 
+                ON DELETE CASCADE
+        ) {$charset_collate};";
+        
+        // Execute table creation
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql_global_scoring_rules);
+        dbDelta($sql_client_scoring_rules);
+        dbDelta($sql_room_thresholds);
+        dbDelta($sql_campaign_target_pages);
+        
+        // 5. Modify wp_cpd_visitors table - add scoring columns
+        $table_visitors = $wpdb->prefix . 'cpd_visitors';
+        
+        // Check if columns exist before adding
+        $lead_score_exists = $wpdb->get_results(
+            "SHOW COLUMNS FROM {$table_visitors} LIKE 'lead_score'"
+        );
+        
+        if (empty($lead_score_exists)) {
+            $wpdb->query("ALTER TABLE {$table_visitors} 
+                ADD COLUMN lead_score INT DEFAULT 0 AFTER last_seen_at");
+            $wpdb->query("ALTER TABLE {$table_visitors} 
+                ADD INDEX idx_lead_score (lead_score)");
+        }
+        
+        $current_room_exists = $wpdb->get_results(
+            "SHOW COLUMNS FROM {$table_visitors} LIKE 'current_room'"
+        );
+        
+        if (empty($current_room_exists)) {
+            $wpdb->query("ALTER TABLE {$table_visitors} 
+                ADD COLUMN current_room ENUM('none', 'problem', 'solution', 'offer') DEFAULT 'none' 
+                AFTER lead_score");
+            $wpdb->query("ALTER TABLE {$table_visitors} 
+                ADD INDEX idx_current_room (current_room)");
+        }
+        
+        $score_calculated_exists = $wpdb->get_results(
+            "SHOW COLUMNS FROM {$table_visitors} LIKE 'score_calculated_at'"
+        );
+        
+        if (empty($score_calculated_exists)) {
+            $wpdb->query("ALTER TABLE {$table_visitors} 
+                ADD COLUMN score_calculated_at DATETIME NULL AFTER current_room");
+        }
+        
+        // 6. Initialize global defaults
+        $this->initialize_global_scoring_defaults();
+        $this->initialize_global_room_thresholds();
+        
+        // Log the upgrade
+        error_log('DirectReach: Database upgraded to v2.1.0 (Room Scoring System)');
+    }
+
+    /**
+     * Initialize global scoring rule defaults
+     */
+    private function initialize_global_scoring_defaults() {
+        global $wpdb;
+        
+        $table = $wpdb->prefix . 'rtr_global_scoring_rules';
+        
+        // Check if defaults already exist
+        $existing = $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+        if ($existing > 0) {
+            return; // Already initialized
+        }
+        
+        // Problem Room Default Rules
+        $problem_rules = json_encode([
+            'revenue' => [
+                'enabled' => false,
+                'points' => 10,
+                'values' => ['$1M - $5M', '$5M - $10M', '$10M - $50M', '$50M - $100M', '$100M+']
+            ],
+            'company_size' => [
+                'enabled' => true,
+                'points' => 10,
+                'values' => ['11-50', '51-200', '201-500', '501-1000', '1000+']
+            ],
+            'industry_alignment' => [
+                'enabled' => true,
+                'points' => 15,
+                'values' => [
+                    'Information Technology|Computer Software',
+                    'Marketing & Advertising|Marketing & Advertising'
+                ]
+            ],
+            'target_states' => [
+                'enabled' => false,
+                'points' => 5,
+                'values' => []
+            ],
+            'visited_target_pages' => [
+                'enabled' => false,
+                'points' => 10,
+                'max_points' => 30
+            ],
+            'multiple_visits' => [
+                'enabled' => true,
+                'points' => 5,
+                'minimum_visits' => 2
+            ],
+            'role_match' => [
+                'enabled' => false,
+                'points' => 5,
+                'target_roles' => [
+                    'decision_makers' => ['CEO', 'President', 'Director', 'VP', 'Chief'],
+                    'technical' => ['Engineer', 'Developer', 'CTO', 'Architect'],
+                    'marketing' => ['Marketing', 'CMO', 'Brand', 'Content'],
+                    'sales' => ['Sales', 'Business Development', 'Account']
+                ],
+                'match_type' => 'contains'
+            ],
+            'minimum_threshold' => [
+                'enabled' => true,
+                'required_score' => 20
+            ]
+        ]);
+        
+        // Solution Room Default Rules
+        $solution_rules = json_encode([
+            'email_open' => [
+                'enabled' => true,
+                'points' => 2
+            ],
+            'email_click' => [
+                'enabled' => true,
+                'points' => 5
+            ],
+            'email_multiple_click' => [
+                'enabled' => true,
+                'points' => 8,
+                'minimum_clicks' => 2
+            ],
+            'page_visit' => [
+                'enabled' => true,
+                'points_per_visit' => 3,
+                'max_points' => 15
+            ],
+            'key_page_visit' => [
+                'enabled' => true,
+                'points' => 10,
+                'key_pages' => ['/pricing', '/demo', '/contact', '/products']
+            ],
+            'ad_engagement' => [
+                'enabled' => true,
+                'points' => 5,
+                'utm_sources' => ['google', 'linkedin', 'facebook', 'twitter']
+            ]
+        ]);
+        
+        // Offer Room Default Rules
+        $offer_rules = json_encode([
+            'demo_request' => [
+                'enabled' => true,
+                'points' => 25,
+                'detection_method' => 'url_pattern',
+                'patterns' => ['/demo/requested', '/demo/confirmation', '/schedule-demo']
+            ],
+            'contact_form' => [
+                'enabled' => true,
+                'points' => 20,
+                'detection_method' => 'utm_parameter',
+                'utm_content' => 'form_submitted'
+            ],
+            'pricing_page' => [
+                'enabled' => true,
+                'points' => 15,
+                'page_urls' => ['/pricing', '/plans', '/buy']
+            ],
+            'pricing_question' => [
+                'enabled' => true,
+                'points' => 20,
+                'detection_method' => 'utm_parameter',
+                'utm_content' => 'pricing_inquiry'
+            ],
+            'partner_referral' => [
+                'enabled' => true,
+                'points' => 15,
+                'detection_method' => 'utm_source',
+                'utm_sources' => ['partner_referral', 'partner']
+            ],
+            'webinar_attendance' => [
+                'enabled' => false,
+                'points' => 0,
+                'detection_method' => 'utm_parameter'
+            ]
+        ]);
+        
+        // Insert default rules
+        $wpdb->insert($table, [
+            'room_type' => 'problem',
+            'rules_config' => $problem_rules
+        ]);
+        
+        $wpdb->insert($table, [
+            'room_type' => 'solution',
+            'rules_config' => $solution_rules
+        ]);
+        
+        $wpdb->insert($table, [
+            'room_type' => 'offer',
+            'rules_config' => $offer_rules
+        ]);
+        
+        error_log('DirectReach: Global scoring rules initialized');
+    }
+
+    /**
+     * Initialize global room thresholds
+     */
+    private function initialize_global_room_thresholds() {
+        global $wpdb;
+        
+        $table = $wpdb->prefix . 'rtr_room_thresholds';
+        
+        // Check if global defaults exist
+        $existing = $wpdb->get_var(
+            "SELECT COUNT(*) FROM {$table} WHERE client_id IS NULL"
+        );
+        
+        if ($existing > 0) {
+            return; // Already initialized
+        }
+        
+        // Insert global defaults
+        $wpdb->insert($table, [
+            'client_id' => null,
+            'problem_max' => 40,
+            'solution_max' => 60,
+            'offer_min' => 61
+        ]);
+        
+        error_log('DirectReach: Global room thresholds initialized');
+    }
+
     
     /**
      * V2: Create all v2 tables
@@ -642,6 +943,7 @@ class CPD_Database {
         $success = $success && $this->create_email_tracking_table();
         $success = $success && $this->create_room_progression_table();
         $success = $success && $this->create_email_templates_table();
+        $success = $success && $this->create_scoring_rules_tables();
         
         if ($success) {
             error_log('CPD: All v2 tables created successfully');

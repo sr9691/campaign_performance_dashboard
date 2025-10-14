@@ -265,25 +265,62 @@ add_action( 'plugins_loaded', 'cpd_dashboard_run', 5 );
  * 
  * @since 2.0.0
  */
-function cpd_load_premium_features() {
-    // Prevent multiple loads
-    static $loaded = false;
-    if ($loaded) {
-        return;
-    }
-    $loaded = true;
-    
-    // Load Campaign Builder
-    $campaign_builder_file = CPD_DASHBOARD_PLUGIN_DIR . 'RTR/campaign-builder/directreach-campaign-builder.php';
-    
-    if (file_exists($campaign_builder_file)) {
-        require_once $campaign_builder_file;
+/**
+ * Load DirectReach v2 Premium Features
+ * 
+ * Campaign Builder and Reading the Room are loaded as sub-plugins
+ * Only accessible to premium tier clients and admins
+ * 
+ * @since 2.0.0
+ */
+    function cpd_load_premium_features() {
+        // Prevent multiple loads
+        static $loaded = false;
+        if ($loaded) {
+            return;
+        }
+        $loaded = true;
         
-        // Call init function directly
-        if (function_exists('dr_campaign_builder_init')) {
-            dr_campaign_builder_init();
+        // Load Campaign Builder
+        $campaign_builder_file = CPD_DASHBOARD_PLUGIN_DIR . 'RTR/campaign-builder/directreach-campaign-builder.php';
+        
+        if (file_exists($campaign_builder_file)) {
+            require_once $campaign_builder_file;
+            
+            // Call init function directly
+            if (function_exists('dr_campaign_builder_init')) {
+                dr_campaign_builder_init();
+            }
+        } else {
+            error_log('CPD: Campaign Builder file not found: ' . $campaign_builder_file);
+        }
+        
+        // Load Scoring System
+        $scoring_system_file = CPD_DASHBOARD_PLUGIN_DIR . 'RTR/scoring-system/directreach-scoring-system.php';
+        
+        if (file_exists($scoring_system_file)) {
+            require_once $scoring_system_file;
+            
+            // Call init function directly (don't rely on plugins_loaded hook)
+            if (function_exists('directreach_scoring_system')) {
+                directreach_scoring_system();
+            }
+            
+            error_log('CPD: ✓ Scoring System loaded and initialized');
+        } else {
+            error_log('CPD: ERROR - Scoring System file not found: ' . $scoring_system_file);
         }
     }
+
+    // Load Scoring System
+    $scoring_system_file = CPD_DASHBOARD_PLUGIN_DIR . 'RTR/scoring-system/directreach-scoring-system.php';
+
+    if (file_exists($scoring_system_file)) {
+        require_once $scoring_system_file;
+        error_log('CPD: ✓ Scoring System loaded successfully');
+    } else {
+        error_log('CPD: ERROR - Scoring System file not found: ' . $scoring_system_file);
+    }    
 }
 
 // Load premium features after plugins are loaded

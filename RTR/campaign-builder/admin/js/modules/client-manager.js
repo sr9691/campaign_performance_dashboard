@@ -11,11 +11,12 @@ import EventEmitter from '../utils/event-emitter.js';
 import APIClient from '../utils/api-client.js';
 
 export default class ClientManager extends EventEmitter {
-    constructor(config) {
+    constructor(config, settingsManager = null) {
         super();
         
         this.config = config;
         this.api = new APIClient(config.apiUrl, config.nonce);
+        this.settingsManager = settingsManager; // NEW: Settings panel manager
         
         this.clients = [];
         this.filteredClients = [];
@@ -107,6 +108,31 @@ export default class ClientManager extends EventEmitter {
                 this.loadClients();
             });
         }
+
+        // Event delegation for client cards - UPDATED
+        if (this.elements.clientsList) {
+            this.elements.clientsList.addEventListener('click', (e) => {
+                // Check if configure button was clicked
+                const configureBtn = e.target.closest('.configure-client-btn');
+                if (configureBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const card = configureBtn.closest('.client-card');
+                    if (card) {
+                        const clientId = parseInt(card.dataset.clientId);
+                        this.handleConfigureClick(clientId);
+                    }
+                    return;
+                }
+
+                // Otherwise handle card selection
+                const card = e.target.closest('.client-card');
+                if (card) {
+                    const clientId = parseInt(card.dataset.clientId);
+                    this.selectClient(clientId);
+                }
+            });
+        }
     }
     
     /**
@@ -172,9 +198,6 @@ export default class ClientManager extends EventEmitter {
         
         const html = this.filteredClients.map(client => this.renderClientCard(client)).join('');
         this.elements.clientsList.innerHTML = html;
-        
-        // Attach click handlers
-        this.attachClientClickHandlers();
     }
     
     /**
@@ -198,10 +221,12 @@ export default class ClientManager extends EventEmitter {
                 </div>
                 <div class="client-card-body">
                     <div class="client-meta">
-                        <span class="badge badge-premium">
-                            <i class="fas fa-crown"></i> Premium
-                        </span>
-                        ${client.rtrEnabled ? '<span class="badge badge-rtr"><i class="fas fa-door-open"></i> RTR Enabled</span>' : ''}
+                        <button type="button" 
+                                class="badge badge-premium configure-client-btn" 
+                                title="Configure Settings" 
+                                aria-label="Configure client settings">
+                            <i class="fas fa-cog"></i>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -209,17 +234,29 @@ export default class ClientManager extends EventEmitter {
     }
     
     /**
-     * Attach click handlers to client cards
+     * Handle configure button click - NEW
      */
-    attachClientClickHandlers() {
-        const cards = this.elements.clientsList.querySelectorAll('.client-card');
+    handleConfigureClick(clientId) {
+        const client = this.clients.find(c => c.id === clientId);
         
-        cards.forEach(card => {
-            card.addEventListener('click', () => {
-                const clientId = parseInt(card.dataset.clientId);
-                this.selectClient(clientId);
+        if (!client) {
+            console.error('Client not found:', clientId);
+            return;
+        }
+
+        // Open side panel with client data
+        if (this.settingsManager) {
+            this.settingsManager.openPanel(client);
+        } else {
+            console.warn('Settings manager not initialized');
+            this.emit('notification', {
+                type: 'warning',
+                message: 'Settings panel not available'
             });
-        });
+        }
+
+        // Emit event
+        this.emit('client:configure', { clientId, client });
     }
     
     /**
@@ -345,6 +382,36 @@ export default class ClientManager extends EventEmitter {
     setSelectedClient(clientId) {
         if (clientId) {
             this.selectClient(clientId);
+        }
+    }
+
+    /**
+     * Refresh client data after settings update - NEW
+     */
+    async refreshClient(clientId) {
+        try {
+            const response = await this.api.get(`/clients/${clientId}`);
+            
+            if (response.success) {
+                // Update in clients array
+                const index = this.clients.findIndex(c => c.id === clientId);
+                if (index !== -1) {
+                    this.clients[index] = response.data;
+                }
+
+                // Update in filtered list
+                const filteredIndex = this.filteredClients.findIndex(c => c.id === clientId);
+                if (filteredIndex !== -1) {
+                    this.filteredClients[filteredIndex] = response.data;
+                }
+
+                // Re-render to show updated data
+                this.renderClients();
+
+                this.emit('client:refreshed', response.data);
+            }
+        } catch (error) {
+            console.error('Error refreshing client:', error);
         }
     }
     

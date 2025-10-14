@@ -303,41 +303,72 @@ class DR_Campaign_Builder {
             'dr-cb-variables' => array(
                 'file' => 'variables.css',
                 'deps' => array(),
+                'path' => DR_CB_PLUGIN_URL . 'admin/css/',
             ),
+
+            // Core layout and resets
             'dr-cb-base' => array(
                 'file' => 'base.css',
                 'deps' => array('dr-cb-variables'),
+                'path' => DR_CB_PLUGIN_URL . 'admin/css/',
             ),
             
             // Step-specific styles
             'dr-cb-client-step' => array(
                 'file' => 'client-step.css',
                 'deps' => array('dr-cb-base'),
+                'path' => DR_CB_PLUGIN_URL . 'admin/css/',
             ),
+
+            // Workflow configuration step
             'dr-cb-campaign-step' => array(
                 'file' => 'campaign-step.css',
                 'deps' => array('dr-cb-base'),
+                'path' => DR_CB_PLUGIN_URL . 'admin/css/',
             ),
+            
+            // Template selection and editing
             'dr-cb-templates-step' => array(
                 'file' => 'templates-step.css',
                 'deps' => array('dr-cb-base'),
+                'path' => DR_CB_PLUGIN_URL . 'admin/css/',
             ),
             
             // Additional feature styles
             'dr-cb-global-templates' => array(
                 'file' => 'global-templates.css',
                 'deps' => array('dr-cb-base'),
+                'path' => DR_CB_PLUGIN_URL . 'admin/css/',
             ),
+
+            // Client settings panel - FROM SCORING SYSTEM
+            'dr-cb-client-settings-panel' => array(
+                'file' => 'client-settings-panel.css',
+                'deps' => array('dr-cb-base'),
+                'path' => $this->get_scoring_system_url() . 'admin/css/',
+            ),            
         );
         
         foreach ($css_files as $handle => $config) {
             wp_enqueue_style(
                 $handle,
-                DR_CB_PLUGIN_URL . 'admin/css/' . $config['file'],
+                $config['path'] . $config['file'],
                 $config['deps'],
                 DR_CB_VERSION
             );
         }
+    }
+
+    /**
+     * Get the URL to the scoring system directory
+     * 
+     * @return string
+     */
+    private function get_scoring_system_url() {
+        // Campaign Builder URL: .../RTR/campaign-builder/
+        // Scoring System URL:   .../RTR/scoring-system/
+        // Go up 2 levels from plugin file, then into scoring-system
+        return plugin_dir_url(dirname(dirname(__FILE__))) . 'scoring-system/';
     }
     
     /**

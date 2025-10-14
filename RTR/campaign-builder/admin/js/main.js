@@ -10,6 +10,8 @@ import WorkflowManager from './modules/workflow.js';
 import ClientManager from './modules/client-manager.js';
 import CampaignManager from './modules/campaign-manager.js';
 import TemplateManager from './modules/template-manager.js';
+// FIXED: Import from scoring-system directory (3 levels up, then into scoring-system)
+import ClientSettingsManager from '../../../scoring-system/admin/js/modules/client-settings-manager.js';
 
 import NotificationSystem from './modules/notifications.js';
 
@@ -18,13 +20,41 @@ class CampaignBuilderApp {
     constructor(config) {
         this.config = config;
         
+        console.log('=== Initializing Campaign Builder ===');
+        
         this.stateManager = new StateManager(config);
+        console.log('✓ StateManager initialized');
+        
         this.notifications = new NotificationSystem();
+        console.log('✓ NotificationSystem initialized');
+
+        // NEW: Initialize Client Settings Manager FIRST
+        try {
+            this.clientSettingsManager = new ClientSettingsManager(config);
+            console.log('✓ ClientSettingsManager initialized:', this.clientSettingsManager);
+            
+            if (!this.clientSettingsManager) {
+                throw new Error('ClientSettingsManager returned undefined');
+            }
+        } catch (error) {
+            console.error('✗ Failed to initialize ClientSettingsManager:', error);
+            this.clientSettingsManager = null;
+        }
 
         // Initialize feature managers
-        this.clientManager = new ClientManager(config);
+        // UPDATED: Pass clientSettingsManager to ClientManager
+        try {
+            this.clientManager = new ClientManager(config, this.clientSettingsManager);
+            console.log('✓ ClientManager initialized with settingsManager:', this.clientSettingsManager ? 'YES' : 'NO');
+        } catch (error) {
+            console.error('✗ Failed to initialize ClientManager:', error);
+        }
+        
         this.campaignManager = new CampaignManager(config, this.stateManager);
+        console.log('✓ CampaignManager initialized');
+        
         this.templateManager = new TemplateManager(config, this.stateManager);
+        console.log('✓ TemplateManager initialized');
 
         // Initialize workflow WITH all managers
         this.workflowManager = new WorkflowManager(
@@ -34,9 +64,12 @@ class CampaignBuilderApp {
             this.campaignManager,
             this.templateManager
         );
+        console.log('✓ WorkflowManager initialized');
         
         // Setup event listeners
         this.setupEventListeners();
+        console.log('✓ Event listeners set up');
+        console.log('=== Campaign Builder Initialization Complete ===');
     }
     
     /**
@@ -80,9 +113,34 @@ class CampaignBuilderApp {
             this.showNotification(`Client "${client.name}" created successfully`, 'success');
         });
         
+        this.clientManager.on('client:configure', (data) => {
+            console.log('Configure client clicked:', data.clientId);
+            // The settings panel is opened by ClientManager calling settingsManager.openPanel()
+        });
+        
         this.clientManager.on('notification', (notification) => {
             this.showNotification(notification.message, notification.type);
         });
+
+        // NEW: Client Settings Manager events
+        if (this.clientSettingsManager) {
+            this.clientSettingsManager.on('settings:saved', (data) => {
+                console.log('Settings saved for client:', data.clientId);
+                this.showNotification('Settings saved successfully', 'success');
+                
+                // Refresh client data in the client manager
+                if (this.clientManager.refreshClient) {
+                    this.clientManager.refreshClient(data.clientId);
+                }
+            });
+            
+            this.clientSettingsManager.on('settings:error', (error) => {
+                console.error('Settings error:', error);
+                this.showNotification(error.message || 'Failed to save settings', 'error');
+            });
+        } else {
+            console.warn('ClientSettingsManager not available - settings events not registered');
+        }
         
         // Campaign manager events
         this.campaignManager.on('campaign:selected', (campaign) => {

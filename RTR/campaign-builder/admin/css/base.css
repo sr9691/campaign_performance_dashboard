@@ -1,5 +1,5 @@
 /**
- * Base Styles for Campaign Builder
+ * Base Styles for Campaign Builder - UPDATED FOR IMPROVED AESTHETICS (Settings Menu Enhanced)
  */
 
 
@@ -7,7 +7,9 @@
 body,
 .campaign-builder-wrap,
 .global-templates-page {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    /* Use the font-family defined in variables.css for a unified system */
+    font-family: var(--font-family);
+    line-height: 1.6; /* Slight increase for readability */
 }
 
 .campaign-builder-wrap *:not(.fas):not(.far):not(.fal):not(.fab),
@@ -18,31 +20,30 @@ body,
 /* Reset and Base */
 .campaign-builder-wrap {
     min-height: 100vh;
+    /* Use background-color alias from variables.css */
     background: var(--background-color);
-}
-
-/* Reset and Base */
-.campaign-builder-wrap {
-    min-height: 100vh;
-    background: var(--background-color);
+    color: var(--text-color-dark); /* Ensure all text uses the dark color by default */
 }
 
 .campaign-builder-wrap * {
     box-sizing: border-box;
 }
 
-/* Header */
+/* --------------------------------------------------------------------------
+   Header
+   -------------------------------------------------------------------------- */
 .admin-header {
-    background: white;
-    border-bottom: 1px solid var(--line-color);
+    background: var(--card-bg); /* Use card background for explicit white/light */
+    border-bottom: none; /* Remove border for a cleaner look */
     padding: 0;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    /* Use a slightly stronger, yet soft shadow for a floating effect */
+    box-shadow: var(--shadow-sm); 
 }
 
 .header-content {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 16px 32px;
+    padding: var(--spacing-md) var(--spacing-xl); /* Use variable spacing */
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -51,32 +52,33 @@ body,
 .header-left {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: var(--spacing-lg); /* Use variable spacing */
 }
 
 .header-logo {
-    height: 32px;
+    height: 36px; /* Slightly larger logo */
     width: auto;
 }
 
 .admin-badge {
     background: var(--primary-color);
     color: white;
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-size: 14px;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-sm);
     font-weight: 600;
+    letter-spacing: 0.5px; /* Subtle letter spacing for "badge" text */
 }
 
 .header-right {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: var(--spacing-lg);
 }
 
-/* ==========================================================================
-   Settings Dropdown
-   ========================================================================== */
+/* --------------------------------------------------------------------------
+   Settings Dropdown (Enhanced)
+   -------------------------------------------------------------------------- */
 
 .settings-dropdown {
     position: relative;
@@ -86,30 +88,33 @@ body,
 .settings-toggle {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: white;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--card-bg);
     border: 1px solid var(--line-color);
-    border-radius: 4px;
+    border-radius: var(--btn-border-radius);
     cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    transition: all var(--transition-fast);
     white-space: nowrap;
 }
 
 .settings-toggle:hover {
-    background: #f8f9fa;
+    background: #f0f4f8; /* A slightly lighter hover than #f8f9fa */
     border-color: var(--primary-color);
+    color: var(--primary-color);
 }
 
 .settings-toggle .fa-chevron-down {
     font-size: 10px;
-    transition: transform 0.2s ease;
+    transition: transform var(--transition-fast) ease;
 }
 
 .settings-dropdown.active .settings-toggle {
-    background: #f8f9fa;
+    background: #f0f4f8;
     border-color: var(--primary-color);
+    color: var(--primary-color);
 }
 
 .settings-dropdown.active .settings-toggle .fa-chevron-down {
@@ -119,31 +124,34 @@ body,
 /* Dropdown Menu - Use display only (simpler and more reliable) */
 .settings-menu {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + var(--spacing-sm));
     right: 0;
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    min-width: 220px;
-    z-index: 1000;
-    display: none; /* Hidden by default */
+    background: var(--card-bg);
+    /* REMOVED outer border, relying on shadow */
+    border-radius: var(--border-radius); 
+    box-shadow: var(--shadow-lg); /* Stronger shadow for clear elevation */
+    min-width: 240px; 
+    z-index: var(--z-dropdown);
+    overflow: hidden; 
+    display: none; 
 }
 
 /* Show when active - SIMPLE */
 .settings-dropdown.active .settings-menu {
-    display: block; /* Show when active */
+    display: block; 
 }
 
 /* Menu Items */
 .settings-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md); 
     cursor: pointer;
-    transition: background 0.2s;
-    border-bottom: 1px solid #f0f0f1;
+    /* Added transform for hover effect */
+    transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast); 
+    /* Very subtle separator */
+    border-bottom: 1px solid #f0f4f8; 
 }
 
 .settings-item:last-child {
@@ -151,24 +159,34 @@ body,
 }
 
 .settings-item:hover {
-    background: #f8f9fa;
+    background: #f0f4f8; 
+    /* Subtle movement on hover */
+    transform: translateX(2px);
+    /* Very light shadow on hover for a slight "lift" */
+    box-shadow: 0 1px 0 rgba(0,0,0,0.05); 
 }
 
+/* Icons - Distinct Color */
 .settings-item i {
-    width: 16px;
+    width: 18px; 
     text-align: center;
-    color: #646970;
-    font-size: 14px;
+    /* Use secondary color for a pop of color */
+    color: var(--secondary-color); 
+    font-size: var(--font-size-base); 
 }
 
+/* Text - Lighter Weight */
 .settings-item span {
-    color: #1d2327;
-    font-size: 14px;
-    font-weight: 500;
+    color: var(--text-color-dark);
+    font-size: var(--font-size-sm); 
+    /* Lighter weight for modern look */
+    font-weight: 400; 
 }
 
+/* Hover State */
 .settings-item:hover i,
 .settings-item:hover span {
+    /* Revert to primary color on hover for strong feedback */
     color: var(--primary-color);
 }
 
@@ -176,12 +194,13 @@ body,
 .admin-user-info {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--spacing-sm);
+    padding-right: var(--spacing-sm); /* Add a little spacing on the right of the user info before logout */
 }
 
 .user-avatar {
-    width: 36px;
-    height: 36px;
+    width: 38px; /* Slightly larger avatar */
+    height: 38px;
     border-radius: 50%;
     background: var(--primary-color);
     color: white;
@@ -189,53 +208,58 @@ body,
     align-items: center;
     justify-content: center;
     font-weight: 600;
-    font-size: 14px;
+    font-size: var(--font-size-sm);
+    box-shadow: var(--shadow-sm);
 }
 
 .user-details {
-    line-height: 1.4;
+    line-height: 1.3; /* Tighter line height for the small text */
 }
 
 .user-name {
     font-weight: 600;
-    font-size: 14px;
+    font-size: var(--font-size-sm);
 }
 
 .user-role {
-    font-size: 12px;
-    color: var(--text-color-light);
+    font-size: var(--font-size-xs);
+    color: var(--text-color-muted); /* Muted color for the role */
 }
 
 /* Logout Button */
 .logout-btn {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: white;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--card-bg);
     border: 1px solid var(--line-color);
-    border-radius: 4px;
+    border-radius: var(--btn-border-radius);
     cursor: pointer;
-    font-size: 14px;
-    transition: all 0.2s;
+    font-size: var(--font-size-sm);
+    transition: all var(--transition-fast);
 }
 
 .logout-btn:hover {
-    background: #fee;
+    background: #fff5f5; /* Softer red hover */
     border-color: var(--error-color);
     color: var(--error-color);
 }
 
-/* Breadcrumb */
+/* --------------------------------------------------------------------------
+   Breadcrumb
+   -------------------------------------------------------------------------- */
 .workflow-breadcrumb {
-    background: white;
+    background: var(--card-bg);
     border-bottom: 1px solid var(--line-color);
+    /* Subtle shadow to separate it from the content background */
+    box-shadow: var(--shadow-sm); 
 }
 
 .breadcrumb-container {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 20px 32px;
+    padding: var(--spacing-md) var(--spacing-xl); /* Tighter padding */
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -243,49 +267,56 @@ body,
 
 .breadcrumb-steps {
     display: flex;
-    align-items: center;
-    gap: 16px;
+    align-items: stretch; /* Stretch items to maintain a line */
+    gap: 0; /* Remove gap, separators will handle spacing */
 }
 
 .breadcrumb-item {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 12px 20px;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-lg); /* Padding adjustment */
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all var(--transition-normal);
     color: var(--text-color-light);
+    border-left: 3px solid transparent; /* Prepare for active state */
+    margin: 0; /* Remove any default margins */
 }
 
 .breadcrumb-item.active {
     color: var(--primary-color);
     font-weight: 600;
-    background-color: rgba(0, 60, 108, 0.1);
-    border-left: 3px solid var(--primary-color);
+    background-color: rgba(44, 67, 93, 0.08); /* Use a lighter primary color alpha */
+    border-left: 3px solid var(--secondary-color); /* Use secondary for a pop of color */
 }
 
 .breadcrumb-item.completed {
     color: var(--success-color);
 }
 
+.breadcrumb-item.completed .step-info {
+    opacity: 0.7; /* Dim the text a bit when completed */
+}
+
 .breadcrumb-item.completed::after {
     content: '✓';
-    display: inline-block;
-    width: 20px;
-    height: 20px;
+    display: inline-flex; /* Use flex for perfect centering */
+    align-items: center;
+    justify-content: center;
+    width: 22px; /* Slightly larger checkmark */
+    height: 22px;
     background-color: var(--success-color);
     color: white;
     border-radius: 50%;
-    text-align: center;
-    line-height: 20px;
-    font-size: 12px;
-    margin-left: auto;
+    font-size: 14px;
+    margin-left: var(--spacing-sm);
+    font-weight: bold;
 }
 
 .breadcrumb-item.active:hover,
 .breadcrumb-item.completed:hover {
-    background-color: rgba(0, 60, 108, 0.15);
+    background-color: rgba(44, 67, 93, 0.12); /* Slightly darker hover */
 }
 
 .breadcrumb-item.disabled:hover {
@@ -293,58 +324,64 @@ body,
 }
 
 .breadcrumb-item.disabled {
-    opacity: 0.5;
+    opacity: 0.6; /* Slightly less opaque */
     cursor: not-allowed;
-    color: var(--text-color-light);
+    color: var(--text-color-muted);
 }
 
 .step-icon {
-    font-size: 20px;
+    font-size: var(--font-size-lg);
 }
 
 .step-info {
-    line-height: 1.4;
+    line-height: 1.3;
 }
 
 .step-label {
     font-weight: 600;
-    font-size: 14px;
+    font-size: var(--font-size-sm);
 }
 
 .step-status {
-    font-size: 12px;
-    opacity: 0.8;
+    font-size: var(--font-size-xs);
+    opacity: 0.9; /* Slightly less opacity for status */
 }
 
 .breadcrumb-separator {
+    color: var(--text-color-light);
     opacity: 0.3;
+    padding: 0 var(--spacing-sm); /* Add padding around the separator */
 }
 
 /* Save Indicator */
 .save-indicator {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    gap: var(--spacing-sm);
+    font-size: var(--font-size-sm);
     color: var(--success-color);
+    font-weight: 500;
 }
 
 .save-indicator.unsaved {
     color: var(--warning-color);
 }
 
-/* Main Content */
+/* --------------------------------------------------------------------------
+   Main Content
+   -------------------------------------------------------------------------- */
 .workflow-main {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 32px;
+    padding: var(--spacing-xl);
 }
 
 .workflow-container {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    padding: 32px;
+    background: var(--card-bg);
+    border-radius: var(--border-radius-lg); /* Larger, softer border radius */
+    /* Use a softer, more lifted shadow */
+    box-shadow: var(--shadow-md); 
+    padding: var(--spacing-xl);
 }
 
 /* Step Content */
@@ -361,30 +398,37 @@ body,
 }
 
 .step-title {
-    font-size: 24px;
+    font-size: var(--font-size-xl);
     font-weight: 700;
-    margin: 0 0 8px 0;
+    margin: 0 0 var(--spacing-sm) 0;
+    color: var(--primary-color); /* Use primary color for main title */
 }
 
 .step-description {
     color: var(--text-color-light);
-    margin: 0 0 24px 0;
+    margin: 0 0 var(--spacing-lg) 0;
+    font-size: var(--font-size-base);
 }
 
 .step-body {
-    min-height: 300px;
+    min-height: 350px; /* Slightly taller minimum height */
+    padding: var(--spacing-md) 0;
 }
 
 .step-placeholder {
     text-align: center;
-    padding: 60px 20px;
-    color: var(--text-color-light);
+    padding: var(--spacing-xxl) var(--spacing-lg);
+    color: var(--text-color-muted);
+    background: #f8f9fa; /* Light background for the placeholder area */
+    border-radius: var(--border-radius);
+    border: 1px dashed var(--line-color);
 }
 
 .step-placeholder i {
-    font-size: 48px;
-    margin-bottom: 16px;
-    opacity: 0.3;
+    font-size: var(--spacing-xxl);
+    margin-bottom: var(--spacing-md);
+    opacity: 0.4;
+    color: var(--text-color-muted);
 }
 
 /* Navigation */
@@ -392,37 +436,43 @@ body,
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 16px;
-    margin-top: 32px;
-    padding-top: 24px;
-    border-top: 1px solid var(--line-color);
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-xl);
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid #eee; /* Lighter top border */
 }
 
 .nav-spacer {
     flex: 1;
 }
 
-/* Buttons */
+/* --------------------------------------------------------------------------
+   Buttons
+   -------------------------------------------------------------------------- */
 .btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-size: 14px;
+    gap: var(--spacing-sm);
+    padding: var(--btn-padding);
+    border-radius: var(--btn-border-radius);
+    font-size: var(--font-size-sm); /* Adjusted font size for buttons */
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all var(--transition-fast);
     border: none;
+    line-height: 1; /* Ensure consistent button height */
 }
 
 .btn-primary {
     background: var(--primary-color);
     color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); /* Subtle shadow for primary button */
 }
 
 .btn-primary:hover {
     background: var(--secondary-color);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+    transform: translateY(-1px); /* Slight lift on hover */
 }
 
 .btn-secondary {
@@ -432,7 +482,7 @@ body,
 }
 
 .btn-secondary:hover {
-    background: #f8f9fa;
+    background: #f0f4f8; /* Consistent light hover */
     border-color: var(--primary-color);
 }
 
@@ -442,33 +492,36 @@ body,
 }
 
 .btn-ghost:hover {
-    background: #f8f9fa;
+    background: #f0f4f8;
+    color: var(--primary-color);
 }
 
-/* Notification Container */
+/* --------------------------------------------------------------------------
+   Notification Container
+   -------------------------------------------------------------------------- */
 .notification-container {
     position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 9999;
+    top: var(--spacing-lg);
+    right: var(--spacing-lg);
+    z-index: var(--z-notification);
     max-width: 400px;
 }
 
 .notification {
     background: white;
-    padding: 16px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    margin-bottom: 12px;
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-lg);
+    margin-bottom: var(--spacing-sm);
     display: flex;
-    align-items: center;
-    gap: 12px;
-    animation: slideIn 0.3s ease;
+    align-items: flex-start; /* Align icon/close to the top */
+    gap: var(--spacing-md);
+    animation: slideIn 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); /* Smoother animation curve */
 }
 
 @keyframes slideIn {
     from {
-        transform: translateX(100%);
+        transform: translateX(110%);
         opacity: 0;
     }
     to {
@@ -478,12 +531,12 @@ body,
 }
 
 .notification.fade-out {
-    animation: slideOut 0.3s ease;
+    animation: slideOut 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 @keyframes slideOut {
     to {
-        transform: translateX(100%);
+        transform: translateX(110%);
         opacity: 0;
     }
 }
@@ -509,9 +562,36 @@ body,
     background: none;
     border: none;
     cursor: pointer;
-    opacity: 0.5;
+    opacity: 0.6;
+    color: var(--text-color-muted);
+    font-size: var(--font-size-lg);
 }
 
 .notification-close:hover {
     opacity: 1;
+    color: var(--text-color-dark);
+}
+
+/* Add an icon to the notification for better visual cue (assumes Font Awesome is available) */
+.notification::before {
+    font-family: "Font Awesome 5 Free";
+    font-weight: 900;
+    content: '\f05a'; /* Default info icon */
+    font-size: 1.2rem;
+    color: var(--info-color);
+}
+
+.notification-success::before {
+    content: '\f058'; /* Check circle */
+    color: var(--success-color);
+}
+
+.notification-error::before {
+    content: '\f057'; /* Times circle */
+    color: var(--error-color);
+}
+
+.notification-warning::before {
+    content: '\f071'; /* Exclamation triangle */
+    color: var(--warning-color);
 }

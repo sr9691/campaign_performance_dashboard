@@ -58,9 +58,6 @@ function dr_campaign_builder_init() {
         return;
     }
     
-    // Initialize the plugin (singleton pattern)
-    DR_Campaign_Builder::get_instance();
-
     // Load Global Templates Admin (if in admin context)
     if (is_admin()) {
         $admin_file = DR_CB_PLUGIN_DIR . 'includes/admin/class-global-templates-admin.php';
@@ -68,6 +65,20 @@ function dr_campaign_builder_init() {
             require_once $admin_file;
         }
     }
+
+    if (is_admin()) {
+        // Load Scoring System
+        $scoring_system_file = DR_CB_PLUGIN_DIR . '../scoring-system/directreach-scoring-system.php';
+        if (file_exists($scoring_system_file)) {
+            require_once $scoring_system_file;
+        } else {
+            error_log('DR_CB Bootstrap: ERROR - Scoring system file not found: ' . $scoring_system_file);
+        }
+    }
+
+    // Initialize the plugin (singleton pattern)
+    DR_Campaign_Builder::get_instance();
+
 }
 
 // NOTE: This file is loaded by the main plugin, which calls dr_campaign_builder_init()
