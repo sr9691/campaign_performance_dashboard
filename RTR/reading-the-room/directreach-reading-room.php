@@ -66,6 +66,10 @@ class ReadingRoomDashboard {
         require_once $base_path . '/includes/api/class-jobs-controller.php';
         
         
+        // Phase 3: Campaign Attribution Classes
+        require_once $base_path . '/includes/class-campaign-matcher.php';
+        require_once $base_path . '/includes/class-visitor-campaign-manager.php';
+        
         // Initialize
         $this->database = new Reading_Room_Database();
         $this->rest_controller = new API\Reading_Room_Controller();
@@ -199,7 +203,6 @@ class ReadingRoomDashboard {
                     <li>Campaign analytics</li>
                 </ul>
                 <br>
-                <a href="<?php echo admin_url('admin.php?page=dr-upgrade'); ?>" class="upgrade-btn">Upgrade to Premium</a>
             </div>
         </body>
         </html>

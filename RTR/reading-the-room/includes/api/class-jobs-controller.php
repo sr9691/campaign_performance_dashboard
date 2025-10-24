@@ -59,6 +59,26 @@ class Jobs_Controller extends \WP_REST_Controller {
                 )
             )
         ));
+        
+        // Campaign attribution matching endpoint (Phase 3)
+        register_rest_route($this->namespace, '/jobs/match-campaigns', array(
+            'methods' => 'POST',
+            'callback' => array($this, 'match_campaigns'),
+            'permission_callback' => array($this, 'check_permission'),
+            'args' => array(
+                'client_id' => array(
+                    'required' => true,
+                    'type' => 'integer',
+                    'sanitize_callback' => 'absint'
+                ),
+                'mode' => array(
+                    'required' => false,
+                    'default' => 'incremental',
+                    'enum' => array('incremental', 'full'),
+                    'sanitize_callback' => 'sanitize_text_field'
+                )
+            )
+        ));
     }
 
     /**
@@ -601,5 +621,249 @@ class Jobs_Controller extends \WP_REST_Controller {
             ),
             array('%d', '%s', '%s', '%s')
         );
+    }
+
+    /**
+     * Match visitors to campaigns based on content links
+     * 
+     * POST /jobs/match-campaigns
+     * Body: { client_id: 5, mode: "incremental" }
+     */
+    public function match_campaigns($request) {
+        global $wpdb;
+        
+        $start_time = microtime(true);
+        $client_id = $request->get_param('client_id');
+        $mode = $request->get_param('mode');
+        
+        $this->log_action('CAMPAIGN_MATCH_START', sprintf(
+            'Campaign matching job started for client %d (mode: %s)',
+            $client_id,
+            $mode
+        ));
+        
+        try {
+            // Load matcher and manager classes
+            require_once CPD_DASHBOARD_PLUGIN_DIR . 'RTR/reading-the-room/includes/class-campaign-matcher.php';
+            require_once CPD_DASHBOARD_PLUGIN_DIR . 'RTR/reading-the-room/includes/class-visitor-campaign-manager.php';
+            
+            $matcher = new \DirectReach\ReadingTheRoom\Campaign_Matcher();
+            $manager = new \DirectReach\ReadingTheRoom\Visitor_Campaign_Manager();
+            
+            // Initialize stats
+            $stats = array(
+                'mode' => $mode,
+                'client_id' => $client_id,
+                'visitors_processed' => 0,
+                'campaigns_checked' => 0,
+                'attributions_created' => 0,
+                'attributions_updated' => 0,
+                'total_matches' => 0,
+                'errors' => array()
+            );
+            
+            // STEP 1: Load and cache content links for this client
+            $content_links_cache = $matcher->load_content_links_for_client($client_id);
+            
+            if (empty($content_links_cache)) {
+                $duration = round(microtime(true) - $start_time, 2);
+                
+                $this->log_action('CAMPAIGN_MATCH_COMPLETE', sprintf(
+                    'Campaign matching completed for client %d: No active campaigns with content links. Duration: %.2fs',
+                    $client_id,
+                    $duration
+                ));
+                
+                return rest_ensure_response(array(
+                    'success' => true,
+                    'message' => 'No active campaigns with content links found',
+                    'stats' => array_merge($stats, array(
+                        'duration_seconds' => $duration
+                    ))
+                ));
+            }
+            
+            $cache_stats = $matcher->get_cache_stats();
+            $stats['campaigns_checked'] = $cache_stats['campaigns'];
+            
+            // STEP 2: Get visitors to process
+            $account_id = $this->get_account_id_for_client($client_id);
+            
+            if (!$account_id) {
+                throw new \Exception('Could not find account_id for client ' . $client_id);
+            }
+            
+            // Build visitor query based on mode
+            if ($mode === 'incremental') {
+                // Process visitors active in last 3 days
+                $visitors = $wpdb->get_results($wpdb->prepare(
+                    "SELECT id, account_id, recent_page_urls, client_id
+                     FROM {$wpdb->prefix}cpd_visitors
+                     WHERE account_id = %s
+                     AND last_seen_at >= DATE_SUB(NOW(), INTERVAL 3 DAY)
+                     AND is_archived = 0
+                     ORDER BY last_seen_at DESC",
+                    $account_id
+                ));
+            } else {
+                // Process all active visitors
+                $visitors = $wpdb->get_results($wpdb->prepare(
+                    "SELECT id, account_id, recent_page_urls, client_id
+                     FROM {$wpdb->prefix}cpd_visitors
+                     WHERE account_id = %s
+                     AND is_archived = 0
+                     ORDER BY last_seen_at DESC",
+                    $account_id
+                ));
+            }
+            
+            if (empty($visitors)) {
+                $duration = round(microtime(true) - $start_time, 2);
+                
+                $this->log_action('CAMPAIGN_MATCH_COMPLETE', sprintf(
+                    'Campaign matching completed for client %d: No visitors to process. Duration: %.2fs',
+                    $client_id,
+                    $duration
+                ));
+                
+                return rest_ensure_response(array(
+                    'success' => true,
+                    'message' => 'No visitors to process',
+                    'stats' => array_merge($stats, array(
+                        'duration_seconds' => $duration
+                    ))
+                ));
+            }
+            
+            $stats['visitors_processed'] = count($visitors);
+            
+            // STEP 3: Process each visitor
+            foreach ($visitors as $visitor) {
+                try {
+                    // Skip visitors with no recent pages
+                    if (empty($visitor->recent_page_urls)) {
+                        continue;
+                    }
+                    
+                    // Parse recent_page_urls
+                    $page_urls = json_decode($visitor->recent_page_urls, true);
+                    
+                    if (!is_array($page_urls) || empty($page_urls)) {
+                        $stats['errors'][] = "Visitor {$visitor->id}: Invalid or empty recent_page_urls";
+                        continue;
+                    }
+                    
+                    // Match visitor to campaigns
+                    $matches = $matcher->match_visitor_to_campaigns($visitor);
+                    
+                    if (empty($matches)) {
+                        continue; // No matches for this visitor
+                    }
+                    
+                    // Create/update attribution for each matched campaign
+                    foreach ($matches as $campaign_id => $matched_urls) {
+                        try {
+                            // Get campaign_id string for storage
+                            $campaign = $wpdb->get_row($wpdb->prepare(
+                                "SELECT campaign_id FROM {$wpdb->prefix}dr_campaign_settings WHERE id = %d",
+                                $campaign_id
+                            ));
+                            
+                            if (!$campaign) {
+                                $stats['errors'][] = "Campaign {$campaign_id} not found in database";
+                                continue;
+                            }
+                            
+                            $campaign_id_str = $campaign->campaign_id;
+                            
+                            // Check if attribution exists
+                            $existing = $manager->attribution_exists($visitor->id, $campaign_id_str);
+                            
+                            // Create or update attribution
+                            $result = $manager->create_or_update_attribution(
+                                $visitor->id,
+                                $campaign_id,
+                                $campaign_id_str,
+                                $matched_urls,
+                                $account_id
+                            );
+                            
+                            if ($result !== false) {
+                                $stats['total_matches']++;
+                                
+                                if ($existing) {
+                                    $stats['attributions_updated']++;
+                                } else {
+                                    $stats['attributions_created']++;
+                                }
+                            }
+                            
+                        } catch (\Exception $e) {
+                            $stats['errors'][] = "Visitor {$visitor->id}, Campaign {$campaign_id}: {$e->getMessage()}";
+                            error_log("Campaign Matching: Error for visitor {$visitor->id}, campaign {$campaign_id}: {$e->getMessage()}");
+                        }
+                    }
+                    
+                } catch (\Exception $e) {
+                    $stats['errors'][] = "Visitor {$visitor->id}: {$e->getMessage()}";
+                    error_log("Campaign Matching: Error processing visitor {$visitor->id}: {$e->getMessage()}");
+                }
+            }
+            
+            // Calculate duration
+            $duration = round(microtime(true) - $start_time, 2);
+            $stats['duration_seconds'] = $duration;
+            
+            // Log completion
+            $this->log_action('CAMPAIGN_MATCH_COMPLETE', sprintf(
+                'Campaign matching completed for client %d. Visitors: %d, Campaigns: %d, Created: %d, Updated: %d, Total Matches: %d, Errors: %d, Duration: %.2fs',
+                $client_id,
+                $stats['visitors_processed'],
+                $stats['campaigns_checked'],
+                $stats['attributions_created'],
+                $stats['attributions_updated'],
+                $stats['total_matches'],
+                count($stats['errors']),
+                $duration
+            ));
+            
+            return rest_ensure_response(array(
+                'success' => true,
+                'stats' => $stats
+            ));
+            
+        } catch (\Exception $e) {
+            $duration = round(microtime(true) - $start_time, 2);
+            
+            $this->log_action('CAMPAIGN_MATCH_ERROR', sprintf(
+                'Campaign matching failed for client %d: %s (Duration: %.2fs)',
+                $client_id,
+                $e->getMessage(),
+                $duration
+            ));
+            
+            return new \WP_Error(
+                'campaign_match_failed',
+                $e->getMessage(),
+                array('status' => 500)
+            );
+        }
+    }
+    
+    /**
+     * Get account_id for a client_id
+     * 
+     * @param int $client_id Client ID
+     * @return string|null Account ID or null
+     */
+    private function get_account_id_for_client($client_id) {
+        global $wpdb;
+        
+        $account_id = $wpdb->get_var($wpdb->prepare(
+            "SELECT account_id FROM {$wpdb->prefix}cpd_clients WHERE id = %d",
+            $client_id
+        ));
+        
+        return $account_id;
     }
 }
