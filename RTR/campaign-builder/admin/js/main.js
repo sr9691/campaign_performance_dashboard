@@ -1,387 +1,325 @@
 /**
- * Campaign Builder - Main Entry Point
+ * Campaign Builder Main Entry Point - COMPLETE WITH CONTENT LINKS
  * 
  * @package DirectReach_Campaign_Builder
  * @since 2.0.0
  */
 
-import StateManager from './modules/state-manager.js';
 import WorkflowManager from './modules/workflow.js';
+import StateManager from './modules/state-manager.js';
 import ClientManager from './modules/client-manager.js';
 import CampaignManager from './modules/campaign-manager.js';
+import ContentLinksManager from './modules/content-links-manager.js';
 import TemplateManager from './modules/template-manager.js';
-// FIXED: Import from scoring-system directory (3 levels up, then into scoring-system)
-import ClientSettingsManager from '../../../scoring-system/admin/js/modules/client-settings-manager.js';
 
-import NotificationSystem from './modules/notifications.js';
-
-
-class CampaignBuilderApp {
+class CampaignBuilder {
     constructor(config) {
         this.config = config;
-        
-        console.log('=== Initializing Campaign Builder ===');
-        
-        this.stateManager = new StateManager(config);
-        console.log('✓ StateManager initialized');
-        
-        this.notifications = new NotificationSystem();
-        console.log('✓ NotificationSystem initialized');
-
-        // NEW: Initialize Client Settings Manager FIRST
-        try {
-            this.clientSettingsManager = new ClientSettingsManager(config);
-            console.log('✓ ClientSettingsManager initialized:', this.clientSettingsManager);
-            
-            if (!this.clientSettingsManager) {
-                throw new Error('ClientSettingsManager returned undefined');
-            }
-        } catch (error) {
-            console.error('✗ Failed to initialize ClientSettingsManager:', error);
-            this.clientSettingsManager = null;
-        }
-
-        // Initialize feature managers
-        // UPDATED: Pass clientSettingsManager to ClientManager
-        try {
-            this.clientManager = new ClientManager(config, this.clientSettingsManager);
-            console.log('✓ ClientManager initialized with settingsManager:', this.clientSettingsManager ? 'YES' : 'NO');
-        } catch (error) {
-            console.error('✗ Failed to initialize ClientManager:', error);
-        }
-        
-        this.campaignManager = new CampaignManager(config, this.stateManager);
-        console.log('✓ CampaignManager initialized');
-        
-        this.templateManager = new TemplateManager(config, this.stateManager);
-        console.log('✓ TemplateManager initialized');
-
-        // Initialize workflow WITH all managers
-        this.workflowManager = new WorkflowManager(
-            config, 
-            this.stateManager,
-            this.clientManager,
-            this.campaignManager,
-            this.templateManager
-        );
-        console.log('✓ WorkflowManager initialized');
-        
-        // Setup event listeners
-        this.setupEventListeners();
-        console.log('✓ Event listeners set up');
-        console.log('=== Campaign Builder Initialization Complete ===');
+        this.managers = {};
+        this.init();
     }
     
     /**
-     * Initialize application
+     * Initialize the campaign builder
      */
     async init() {
         try {
-            // Initialize workflow first
-            await this.workflowManager.init();
+            console.log('Campaign Builder: Initializing...', this.config);
             
-            // Load clients BEFORE restoring state
-            await this.clientManager.loadClients();
+            // Initialize managers in order
+            this.initializeStateManager();
+            this.initializeClientManager();
+            this.initializeCampaignManager();
+            this.initializeContentLinksManager();
+            this.initializeTemplateManager();
+            this.initializeWorkflowManager();
             
-            // Load campaigns (will be filtered by selected client if any)
-            const campaigns = await this.campaignManager.loadCampaigns();
-            console.log('Loaded campaigns:', campaigns.length);
+            // Setup global event listeners
+            this.setupGlobalListeners();
             
-            // NOW restore state (clients are loaded, so selection will work)
-            this.restoreState();
+            // Initialize workflow (loads state and renders initial step)
+            await this.managers.workflow.init();
             
-            // Setup event listeners
-            this.setupEventListeners();
+            console.log('Campaign Builder: Initialized successfully');
             
-            console.log('Campaign Builder initialized successfully');
         } catch (error) {
-            console.error('Error initializing Campaign Builder:', error);
+            console.error('Campaign Builder: Initialization failed', error);
+            this.showFatalError(error);
         }
     }
     
     /**
-     * Setup all event listeners
+     * Initialize State Manager
      */
-    setupEventListeners() {
-
-        // Client manager events
-        this.clientManager.on('client:selected', (client) => {
-            this.handleClientSelected(client);
-        });
+    initializeStateManager() {
+        this.managers.state = new StateManager(this.config);
+        this.managers.state.init();
         
-        this.clientManager.on('client:created', (client) => {
-            this.showNotification(`Client "${client.name}" created successfully`, 'success');
-        });
+        console.log('Campaign Builder: State Manager initialized');
+    }
+    
+    /**
+     * Initialize Client Manager
+     */
+    initializeClientManager() {
+        this.managers.client = new ClientManager(this.config, this.managers.state);
         
-        this.clientManager.on('client:configure', (data) => {
-            console.log('Configure client clicked:', data.clientId);
-            // The settings panel is opened by ClientManager calling settingsManager.openPanel()
-        });
-        
-        this.clientManager.on('notification', (notification) => {
-            this.showNotification(notification.message, notification.type);
-        });
-
-        // NEW: Client Settings Manager events
-        if (this.clientSettingsManager) {
-            this.clientSettingsManager.on('settings:saved', (data) => {
-                console.log('Settings saved for client:', data.clientId);
-                this.showNotification('Settings saved successfully', 'success');
-                
-                // Refresh client data in the client manager
-                if (this.clientManager.refreshClient) {
-                    this.clientManager.refreshClient(data.clientId);
-                }
+        // Listen for client selection
+        this.managers.client.on('client:selected', (client) => {
+            console.log('Client selected:', client);
+            
+            // Update state
+            this.managers.state.updateState({
+                clientId: client.id,
+                clientName: client.client_name
             });
             
-            this.clientSettingsManager.on('settings:error', (error) => {
-                console.error('Settings error:', error);
-                this.showNotification(error.message || 'Failed to save settings', 'error');
-            });
-        } else {
-            console.warn('ClientSettingsManager not available - settings events not registered');
-        }
-        
-        // Campaign manager events
-        this.campaignManager.on('campaign:selected', (campaign) => {
-            this.handleCampaignSelected(campaign);
+            // Update breadcrumb
+            this.managers.workflow?.updateBreadcrumbText('client', client.client_name);
         });
         
-        this.campaignManager.on('campaign:created', (campaign) => {
-            console.log('Campaign created:', campaign.campaign_name);
-        });
-        
-        this.campaignManager.on('campaign:updated', (campaign) => {
-            console.log('Campaign updated:', campaign.campaign_name);
-        });
-        
-        this.campaignManager.on('campaign:deselected', () => {
-            this.handleCampaignDeselected();
-        });
-        
-        this.campaignManager.on('campaigns:loaded', (campaigns) => {
-            console.log(`Loaded ${campaigns.length} campaigns`);
-        });
-        
-        this.campaignManager.on('campaigns:error', (error) => {
-            this.showNotification('Failed to load campaigns', 'error');
-        });
-        
-        this.campaignManager.on('notification', (notification) => {
-            this.showNotification(notification.message, notification.type);
-        });
-
-        // Template manager events
-        this.templateManager.on('template:saved', (data) => {
-            console.log('Template saved:', data.room);
-        });
-
-        this.templateManager.on('templates:complete', () => {
-            this.handleTemplatesComplete();
-        });
-
-        this.templateManager.on('notification', (notification) => {
-            this.showNotification(notification.message, notification.type);
-        });        
-        
-        // Workflow manager events
-        this.workflowManager.on('notification:show', (data) => {
+        this.managers.client.on('notification', (data) => {
             this.showNotification(data.message, data.type);
         });
         
-        this.workflowManager.on('step:changed', (step) => {
-            this.handleStepChanged(step);
-        });
-
-        this.setupSettingsDropdown();        
-    }
-    
-    
-    /**
-     * Handle client selection
-     * 
-     * @param {Object} client - Selected client object
-     */
-    handleClientSelected(client) {
-        console.log('Client selected:', client.name);
-        
-        // Update workflow state
-        this.workflowManager.updateState({
-            clientId: client.id,
-            clientName: client.name,
-
-        });
-        
-        // Update breadcrumb
-        this.workflowManager.updateBreadcrumbText('client', client.name);
-        
-        // Enable navigation to campaign step
-        this.workflowManager.enableNavigation('campaign');
-        
-        // Load campaigns for this client
-        this.campaignManager.loadCampaigns(client.id, client.name);
-        
-        // Move to campaign step
-        this.workflowManager.renderCurrentStep('campaign');
-        
-        this.showNotification(`Selected client: ${client.name}`, 'success');
+        console.log('Campaign Builder: Client Manager initialized');
     }
     
     /**
-     * Handle campaign selection
-     * 
-     * @param {Object} campaign - Selected campaign object
+     * Initialize Campaign Manager
      */
-    handleCampaignSelected(campaign) {
-        // Update state
-        this.stateManager.updateState({
-            campaignId: campaign.id,
-            campaignName: campaign.campaign_name,
-            utmCampaign: campaign.utm_campaign
-        });
+    initializeCampaignManager() {
+        this.managers.campaign = new CampaignManager(this.config, this.managers.state);
         
-        // Update workflow
-        this.workflowManager.updateState({
-            campaignId: campaign.id,
-            campaignName: campaign.campaign_name,
-            utmCampaign: campaign.utm_campaign
-        });
-        
-        // Enable next step button
-        this.workflowManager.enableNavigation('next');
-    }
-    
-    /**
-     * Handle campaign deselection
-     */
-    handleCampaignDeselected() {
-        console.log('Campaign deselected');
-        
-        // Update workflow state
-        this.workflowManager.updateState({
-            campaignId: null,
-            campaignName: null,
-            utmCampaign: null
-        });
-        
-        // Update breadcrumb
-        this.workflowManager.updateBreadcrumbText('campaign', 'Select Campaign');
-        
-        // Disable navigation to templates step
-        this.workflowManager.disableNavigation('templates');
-    }
-    
-    /**
-     * Handle templates load complete
-     */
-    handleTemplatesComplete() {
-        this.stateManager.updateState({
-            templates: this.templateManager.getTemplates()
-        });
-    }
-
-    /**
-     * Handle step changes
-     * 
-     * @param {string} step - New step name
-     */
-    handleStepChanged(step) {
-        console.log('Step changed to:', step);
-        
-        // If navigating back to client step, clear campaign selection
-        if (step === 'client') {
-            this.campaignManager.clearSelection();
-        }
-        
-        // If navigating to campaign step, ensure campaigns are loaded
-        if (step === 'campaign') {
-            const state = this.stateManager.getState();
-            if (state.clientId) {
-                this.campaignManager.selectedClientId = state.clientId;
-                this.campaignManager.selectedClientName = state.clientName;
-                
-                // Update client name display
-                const clientNameDisplay = document.querySelector('.selected-client-name');
-                if (clientNameDisplay) {
-                    clientNameDisplay.textContent = state.clientName;
-                }
-                
-                // Load campaigns for this client
-                this.campaignManager.loadCampaigns(state.clientId);
-            }
-        }
-
         // Listen for campaign selection
-        this.campaignManager.on('campaign:selected', (campaign) => {
-            this.handleCampaignSelected(campaign);
-        });
-
-        // If navigating to templates step, load templates for selected campaign
-        if (step === 'templates') {
-            const state = this.stateManager.getState();
-            if (state.campaignId) {
-                const campaignNameDisplay = document.querySelector('.selected-campaign-name');
-                if (campaignNameDisplay) {
-                    campaignNameDisplay.textContent = state.campaignName;
-                }
-                this.templateManager.loadTemplates(state.campaignId);
+        this.managers.campaign.on('campaign:selected', (campaign) => {
+            console.log('Campaign selected:', campaign);
+            
+            // Update state
+            this.managers.state.updateState({
+                campaignId: campaign.id,
+                campaignName: campaign.campaign_name,
+                utmCampaign: campaign.utm_campaign
+            });
+            
+            // Update breadcrumb
+            this.managers.workflow?.updateBreadcrumbText('campaign', campaign.campaign_name);
+            
+            // Load content links for this campaign
+            if (this.managers.contentLinks) {
+                this.managers.contentLinks.loadLinks();
             }
-        }        
+            
+            // Load templates for this campaign
+            if (this.managers.template) {
+                this.managers.template.loadTemplates();
+            }
+        });
+        
+        this.managers.campaign.on('campaign:created', (campaign) => {
+            console.log('Campaign created:', campaign);
+        });
+        
+        this.managers.campaign.on('campaign:updated', (campaign) => {
+            console.log('Campaign updated:', campaign);
+        });
+        
+        this.managers.campaign.on('campaign:deselected', () => {
+            console.log('Campaign deselected');
+        });
+        
+        this.managers.campaign.on('notification', (data) => {
+            this.showNotification(data.message, data.type);
+        });
+        
+        console.log('Campaign Builder: Campaign Manager initialized');
     }
     
     /**
-     * Restore state from previous session
+     * Initialize Content Links Manager
      */
-    async restoreState() {
-        const state = this.stateManager.getState();
+    initializeContentLinksManager() {
+        this.managers.contentLinks = new ContentLinksManager(this.config, this.managers.state);
         
-        if (!state || !state.clientId) {
-            // No saved state, start at beginning
-            this.workflowManager.renderCurrentStep('client');
-            return;
+        // Listen for links loaded
+        this.managers.contentLinks.on('links:loaded', (links) => {
+            console.log('Content links loaded:', links);
+            
+            // Update state with link counts
+            this.managers.state.updateState({
+                contentLinks: {
+                    problem: links.problem.length,
+                    solution: links.solution.length,
+                    offer: links.offer.length
+                }
+            });
+        });
+        
+        this.managers.contentLinks.on('notification', (data) => {
+            this.showNotification(data.message, data.type);
+        });
+        
+        console.log('Campaign Builder: Content Links Manager initialized');
+    }
+    
+    /**
+     * Initialize Template Manager
+     */
+    initializeTemplateManager() {
+        this.managers.template = new TemplateManager(this.config, this.managers.state);
+        
+        this.managers.template.on('notification', (data) => {
+            this.showNotification(data.message, data.type);
+        });
+        
+        console.log('Campaign Builder: Template Manager initialized');
+    }
+    
+    /**
+     * Initialize Workflow Manager
+     */
+    initializeWorkflowManager() {
+        this.managers.workflow = new WorkflowManager(
+            this.config,
+            this.managers.state,
+            this.managers.client,
+            this.managers.campaign,
+            this.managers.contentLinks,
+            this.managers.template
+        );
+        
+        // Listen for step changes
+        this.managers.workflow.on('step:changed', (step) => {
+            console.log('Step changed to:', step);
+            
+            // Load data when entering specific steps
+            if (step === 'client') {
+                // Client step - load clients if needed
+                const state = this.managers.state.getState();
+                if (!state.clientId) {
+                    this.managers.client.loadClients();
+                }
+            } else if (step === 'campaign') {
+                // Campaign step - load campaigns for selected client
+                const state = this.managers.state.getState();
+                if (state.clientId) {
+                    this.managers.campaign.loadCampaigns(state.clientId);
+                }
+            } else if (step === 'content-links') {
+                // Content links step - load links for selected campaign
+                const state = this.managers.state.getState();
+                if (state.campaignId) {
+                    this.managers.contentLinks.loadLinks();
+                }
+            } else if (step === 'templates') {
+                // Templates step - load templates for selected campaign
+                const state = this.managers.state.getState();
+                if (state.campaignId) {
+                    this.managers.template.loadTemplates();
+                }
+            }
+        });
+        
+        this.managers.workflow.on('workflow:initialized', () => {
+            console.log('Workflow initialized');
+        });
+        
+        this.managers.workflow.on('workflow:error', (error) => {
+            console.error('Workflow error:', error);
+            this.showNotification('Workflow error: ' + error.message, 'error');
+        });
+        
+        this.managers.workflow.on('state:loaded', (state) => {
+            console.log('State loaded:', state);
+        });
+        
+        this.managers.workflow.on('notification:show', (data) => {
+            this.showNotification(data.message, data.type);
+        });
+        
+        console.log('Campaign Builder: Workflow Manager initialized');
+    }
+    
+    /**
+     * Setup global event listeners
+     */
+    setupGlobalListeners() {
+        // Settings dropdown toggle
+        const settingsToggle = document.querySelector('.settings-toggle');
+        const settingsDropdown = document.querySelector('.settings-dropdown');
+        
+        if (settingsToggle && settingsDropdown) {
+            settingsToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                settingsDropdown.classList.toggle('active');
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!settingsDropdown.contains(e.target)) {
+                    settingsDropdown.classList.remove('active');
+                }
+            });
         }
         
-        console.log('Restoring state:', state);
-        
-        // Restore client selection
-        if (state.clientId) {
-            this.clientManager.setSelectedClient(state.clientId);
-            this.workflowManager.updateBreadcrumbText('client', state.clientName);
-            this.workflowManager.enableNavigation('campaign');
+        // Logout button
+        const logoutBtn = document.querySelector('.logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                if (confirm('Are you sure you want to log out?')) {
+                    window.location.href = this.config.dashboardUrl + '&action=logout';
+                }
+            });
         }
         
-        // Restore campaign selection
-        if (state.campaignId) {
-            // Load campaigns first, then select
-            await this.campaignManager.loadCampaigns(state.clientId, state.clientName);
-            this.campaignManager.selectCampaign(state.campaignId);
-            this.workflowManager.updateBreadcrumbText('campaign', state.campaignName);
-            this.workflowManager.enableNavigation('templates');
-        }
+        // Handle browser back/forward buttons
+        window.addEventListener('popstate', (e) => {
+            if (e.state && e.state.step) {
+                this.managers.workflow?.goToStep(e.state.step);
+            }
+        });
         
-        // Show appropriate step
-        if (state.current_step) {
-            this.workflowManager.renderCurrentStep(state.current_step);
+        // Save draft button (if exists)
+        const saveDraftBtn = document.querySelector('[data-action="save-draft"]');
+        if (saveDraftBtn) {
+            saveDraftBtn.addEventListener('click', async () => {
+                try {
+                    await this.managers.state.forceSave();
+                    this.showNotification('Draft saved successfully', 'success');
+                } catch (error) {
+                    console.error('Failed to save draft:', error);
+                    this.showNotification('Failed to save draft', 'error');
+                }
+            });
         }
     }
     
     /**
-     * Show notification toast
+     * Show notification
      * 
      * @param {string} message - Notification message
-     * @param {string} type - Type (success, error, warning, info)
+     * @param {string} type - Notification type (success, error, warning, info)
      */
     showNotification(message, type = 'info') {
         const container = document.querySelector('.notification-container');
-        if (!container) return;
+        if (!container) {
+            console.warn('Notification container not found');
+            return;
+        }
         
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
         
-        const icon = this.getNotificationIcon(type);
+        const iconMap = {
+            success: 'fa-check-circle',
+            error: 'fa-times-circle',
+            warning: 'fa-exclamation-triangle',
+            info: 'fa-info-circle'
+        };
+        
         notification.innerHTML = `
-            <i class="fas fa-${icon}"></i>
-            <span>${message}</span>
+            <i class="fas ${iconMap[type]}"></i>
+            <span>${this.escapeHtml(message)}</span>
             <button class="notification-close">
                 <i class="fas fa-times"></i>
             </button>
@@ -389,140 +327,108 @@ class CampaignBuilderApp {
         
         container.appendChild(notification);
         
-        // Auto dismiss after 5 seconds
-        setTimeout(() => {
-            notification.classList.add('fade-out');
-            setTimeout(() => notification.remove(), 300);
+        // Auto-dismiss after 5 seconds
+        const autoDismissTimeout = setTimeout(() => {
+            this.dismissNotification(notification);
         }, 5000);
         
-        // Close button
-        notification.querySelector('.notification-close').addEventListener('click', () => {
-            notification.classList.add('fade-out');
-            setTimeout(() => notification.remove(), 300);
+        // Manual dismiss
+        const closeBtn = notification.querySelector('.notification-close');
+        closeBtn.addEventListener('click', () => {
+            clearTimeout(autoDismissTimeout);
+            this.dismissNotification(notification);
         });
     }
     
     /**
-     * Get icon for notification type
+     * Dismiss notification
      * 
-     * @param {string} type - Notification type
-     * @returns {string} Icon class
+     * @param {HTMLElement} notification - Notification element
      */
-    getNotificationIcon(type) {
-        const icons = {
-            success: 'check-circle',
-            error: 'exclamation-circle',
-            warning: 'exclamation-triangle',
-            info: 'info-circle'
-        };
-        return icons[type] || 'info-circle';
+    dismissNotification(notification) {
+        notification.classList.add('fade-out');
+        setTimeout(() => {
+            notification.remove();
+        }, 300);
     }
     
     /**
-     * Setup save indicator
-     */
-    setupSaveIndicator() {
-        setInterval(() => {
-            const indicator = document.querySelector('.save-indicator');
-            if (!indicator) return;
-            
-            const lastSaved = this.stateManager.getLastSaved();
-            if (lastSaved) {
-                const timeAgo = this.getTimeAgo(lastSaved);
-                indicator.textContent = `Last saved: ${timeAgo}`;
-                indicator.classList.remove('unsaved');
-            } else if (this.stateManager.hasUnsavedChanges()) {
-                indicator.textContent = 'Unsaved changes';
-                indicator.classList.add('unsaved');
-            }
-        }, 10000); // Update every 10 seconds
-    }
-    
-    /**
-     * Setup settings dropdown
+     * Show fatal error
      * 
-     * ADDED: Handle clicks on Settings menu items
+     * @param {Error} error - Error object
      */
-    setupSettingsDropdown() {
-        const settingsBtn = document.querySelector('[data-toggle="settings-dropdown"]');
-        const dropdown = document.querySelector('.settings-dropdown');
-        const settingsMenu = document.querySelector('.settings-menu');
-        
-        if (!settingsBtn || !dropdown) return;
-        
-        // Toggle dropdown on button click
-        settingsBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            dropdown.classList.toggle('active');
-        });
-        
-        // Close on outside click
-        document.addEventListener('click', () => {
-            dropdown.classList.remove('active');
-        });
-        
-        // Prevent closing when clicking inside dropdown
-        dropdown.addEventListener('click', (e) => {
-            e.stopPropagation();
-        });
-        
-        // Handle menu item clicks
-        if (settingsMenu) {
-            settingsMenu.addEventListener('click', (e) => {
-                const settingsItem = e.target.closest('.settings-item');
-                
-                if (!settingsItem) return;
-                
-                const action = settingsItem.dataset.action;
-                
-                switch(action) {
-                    case 'room-thresholds':
-                        // TODO: Handle room thresholds (existing functionality)
-                        console.log('Room thresholds clicked');
-                        break;
-                        
-                    case 'scoring-rules':
-                        // TODO: Handle scoring rules (existing functionality)
-                        console.log('Scoring rules clicked');
-                        break;
-                        
-                    case 'global-templates':
-                        // Navigate to Global Templates page
-                        window.location.href = 'admin.php?page=dr-global-templates';
-                        break;
-                }
-                
-                // Close dropdown after selection
-                dropdown.classList.remove('active');
-            });
+    showFatalError(error) {
+        const container = document.querySelector('.workflow-container');
+        if (!container) {
+            console.error('Fatal error but no container found to display it');
+            return;
         }
+        
+        container.innerHTML = `
+            <div style="padding: 60px 20px; text-align: center; max-width: 800px; margin: 0 auto;">
+                <i class="fas fa-exclamation-triangle" style="font-size: 64px; color: #e74c3c; margin-bottom: 20px;"></i>
+                <h2 style="color: #333; margin-bottom: 12px; font-size: 24px;">Initialization Error</h2>
+                <p style="color: #666; margin-bottom: 20px; font-size: 16px;">
+                    The Campaign Builder failed to initialize. Please refresh the page or contact support if the problem persists.
+                </p>
+                <details style="text-align: left; margin-bottom: 24px;">
+                    <summary style="cursor: pointer; color: #666; font-weight: 600; margin-bottom: 12px;">
+                        Error Details
+                    </summary>
+                    <pre style="background: #f8f9fa; padding: 20px; border-radius: 4px; overflow: auto; font-size: 12px; line-height: 1.5;">
+${error.message}
+
+${error.stack ? error.stack : ''}
+                    </pre>
+                </details>
+                <button class="btn btn-primary" onclick="window.location.reload()" style="padding: 12px 24px; font-size: 16px;">
+                    <i class="fas fa-redo"></i> Reload Page
+                </button>
+            </div>
+        `;
     }
     
     /**
-     * Get time ago string
+     * Escape HTML
      * 
-     * @param {Date} date - Date object
-     * @returns {string}
+     * @param {string} text - Text to escape
+     * @return {string} Escaped text
      */
-    getTimeAgo(date) {
-        const now = new Date();
-        const diff = now - date;
-        const seconds = Math.floor(diff / 1000);
-        
-        if (seconds < 60) return 'just now';
-        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-        return date.toLocaleDateString();
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    /**
+     * Get manager instance
+     * 
+     * @param {string} name - Manager name
+     * @return {Object|null} Manager instance
+     */
+    getManager(name) {
+        return this.managers[name] || null;
+    }
+    
+    /**
+     * Get current state
+     * 
+     * @return {Object} Current state
+     */
+    getState() {
+        return this.managers.state?.getState() || {};
     }
 }
 
-// Initialize when DOM is ready
-document.addEventListener('DOMContentLoaded', async () => {
-    if (typeof drCampaignBuilderConfig !== 'undefined') {
-        const app = new CampaignBuilderApp(drCampaignBuilderConfig);
-        await app.init(); // AWAIT the async init
-        window.campaignBuilderApp = app;
+// Initialize when DOM is ready and config is available
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof window.drCampaignBuilderConfig !== 'undefined') {
+        console.log('Campaign Builder: Config found, initializing...');
+        window.drCampaignBuilder = new CampaignBuilder(window.drCampaignBuilderConfig);
     } else {
-        console.error('Campaign Builder configuration not found. Make sure drCampaignBuilderConfig is localized.');
+        console.error('Campaign Builder: Configuration not found. Ensure drCampaignBuilderConfig is defined.');
     }
 });
+
+// Export for use in other scripts if needed
+export default CampaignBuilder;

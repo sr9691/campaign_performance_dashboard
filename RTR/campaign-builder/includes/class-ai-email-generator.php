@@ -154,18 +154,444 @@ class CPD_AI_Email_Generator {
     }
 
     /**
-     * Call Gemini API with generation payload
-     *
-     * @param array $payload Generation payload
-     * @return array|WP_Error API response or error
+    * Generate test email with mock data
+    * 
+    * Used for testing prompt templates before deployment.
+    * Uses hardcoded mock prospect data for consistent comparisons.
+    *
+    * @param array  $prompt_template 7-component prompt structure
+    * @param int    $campaign_id Campaign ID for content links
+    * @param string $room_type Room type (problem/solution/offer)
+    * @return array|WP_Error Generation result or error
+    */
+    public function generate_email_for_test( $prompt_template, $campaign_id, $room_type = 'problem' ) {
+        // Validate prompt template structure
+        $validation = $this->validate_prompt_template( $prompt_template );
+        if ( is_wp_error( $validation ) ) {
+            return $validation;
+        }
+
+        // Get mock prospect data
+        $mock_prospect = $this->get_mock_prospect_data( $room_type );
+
+        // Load real content links from campaign
+        $content_links = $this->load_content_links( $campaign_id, $room_type );
+        
+        // If no links found, use generic fallback
+        if ( empty( $content_links ) ) {
+            $content_links = $this->get_fallback_content_links( $room_type );
+        }
+
+        // Create mock template object
+        $mock_template = $this->create_mock_template( $prompt_template, $room_type );
+
+        // Build generation payload
+        $payload = $mock_template->build_generation_payload(
+            $mock_prospect,
+            $content_links
+        );
+
+        // Generate email via Gemini API
+        $generation_start = microtime( true );
+        $result = $this->call_gemini_api( $payload );
+        $generation_time = ( microtime( true ) - $generation_start ) * 1000;
+
+        if ( is_wp_error( $result ) ) {
+            error_log( '[DirectReach] Test generation failed: ' . $result->get_error_message() );
+            return $result;
+        }
+
+        // Store generation metadata
+        $metadata = array(
+            'generation_time_ms' => round( $generation_time, 2 ),
+            'template_type' => 'test',
+            'campaign_id' => $campaign_id,
+            'room_type' => $room_type,
+            'prompt_tokens' => $result['usage']['prompt_tokens'] ?? 0,
+            'completion_tokens' => $result['usage']['completion_tokens'] ?? 0,
+            'total_tokens' => $result['usage']['total_tokens'] ?? 0,
+            'cost' => $this->calculate_cost( $result['usage'] ?? array() ),
+            'mock_prospect_used' => true,
+        );
+
+        // Format response
+        return array(
+            'success' => true,
+            'subject' => $result['subject'],
+            'body_html' => $result['body_html'],
+            'body_text' => $result['body_text'],
+            'selected_url' => $result['selected_url'],
+            'mock_prospect' => array(
+                'company_name' => $mock_prospect['company_name'],
+                'contact_name' => $mock_prospect['contact_name'],
+                'job_title' => $mock_prospect['job_title'],
+            ),
+            'usage' => array(
+                'prompt_tokens' => $metadata['prompt_tokens'],
+                'completion_tokens' => $metadata['completion_tokens'],
+                'total_tokens' => $metadata['total_tokens'],
+                'cost' => $metadata['cost'],
+            ),
+            'generation_time_ms' => $metadata['generation_time_ms'],
+            'metadata' => $metadata,
+        );
+    }
+
+    /**
+     * Validate prompt template structure
+     * 
+     * @param array $prompt_template
+     * @return bool|WP_Error True if valid, WP_Error otherwise
      */
-    private function call_gemini_api( $payload ) {
+    private function validate_prompt_template( $prompt_template ) {
+        if ( ! is_array( $prompt_template ) ) {
+            return new WP_Error(
+                'invalid_prompt_template',
+                'Prompt template must be an array'
+            );
+        }
+
+        $required_components = array(
+            'persona',
+            'style',
+            'output',
+            'personalization',
+            'constraints',
+            'examples',
+            'context'
+        );
+
+        foreach ( $required_components as $component ) {
+            if ( ! isset( $prompt_template[ $component ] ) ) {
+                return new WP_Error(
+                    'missing_component',
+                    sprintf( 'Missing required component: %s', $component )
+                );
+            }
+        }
+
+        // Check if at least one component has content
+        $has_content = false;
+        foreach ( $prompt_template as $value ) {
+            if ( ! empty( $value ) && trim( $value ) !== '' ) {
+                $has_content = true;
+                break;
+            }
+        }
+
+        if ( ! $has_content ) {
+            return new WP_Error(
+                'empty_prompt',
+                'At least one prompt component must have content'
+            );
+        }
+
+        return true;
+    }
+
+    /**
+     * Get hardcoded mock prospect data
+     * 
+     * Consistent mock data for comparing prompt variations.
+     *
+     * @param string $room_type Current room
+     * @return array Mock prospect data
+     */
+    private function get_mock_prospect_data( $room_type = 'problem' ) {
+        // Base mock prospect
+        $mock_prospect = array(
+            'id' => 0,
+            'company_name' => 'Acme Manufacturing Corp',
+            'contact_name' => 'Sarah Johnson',
+            'contact_email' => 'sjohnson@acmemfg.com',
+            'job_title' => 'VP of Marketing',
+            'current_room' => $room_type,
+            'lead_score' => 35,
+            'days_in_room' => 3,
+            'email_sequence_position' => 1,
+            'urls_sent' => json_encode( array() ),
+            'company_size' => '201-500',
+            'company_industry' => 'Manufacturing',
+            'company_revenue' => '$10M - $50M',
+        );
+
+        // Room-specific engagement data
+        $engagement_data = array(
+            'page_view_count' => 8,
+            'last_visit' => date( 'Y-m-d H:i:s', strtotime( '-2 hours' ) ),
+        );
+
+        // Vary recent pages by room
+        switch ( $room_type ) {
+            case 'problem':
+                $engagement_data['recent_pages'] = array(
+                    array(
+                        'url' => '/features/marketing-automation',
+                        'intent' => 'research',
+                        'timestamp' => date( 'Y-m-d H:i:s', strtotime( '-2 hours' ) ),
+                    ),
+                    array(
+                        'url' => '/case-studies/manufacturing',
+                        'intent' => 'evaluation',
+                        'timestamp' => date( 'Y-m-d H:i:s', strtotime( '-3 hours' ) ),
+                    ),
+                    array(
+                        'url' => '/blog/attribution-challenges',
+                        'intent' => 'education',
+                        'timestamp' => date( 'Y-m-d H:i:s', strtotime( '-1 day' ) ),
+                    ),
+                );
+                break;
+
+            case 'solution':
+                $engagement_data['recent_pages'] = array(
+                    array(
+                        'url' => '/pricing',
+                        'intent' => 'consideration',
+                        'timestamp' => date( 'Y-m-d H:i:s', strtotime( '-1 hour' ) ),
+                    ),
+                    array(
+                        'url' => '/demo',
+                        'intent' => 'evaluation',
+                        'timestamp' => date( 'Y-m-d H:i:s', strtotime( '-2 hours' ) ),
+                    ),
+                    array(
+                        'url' => '/features/reporting',
+                        'intent' => 'research',
+                        'timestamp' => date( 'Y-m-d H:i:s', strtotime( '-1 day' ) ),
+                    ),
+                );
+                break;
+
+            case 'offer':
+                $engagement_data['recent_pages'] = array(
+                    array(
+                        'url' => '/pricing/enterprise',
+                        'intent' => 'purchase',
+                        'timestamp' => date( 'Y-m-d H:i:s', strtotime( '-30 minutes' ) ),
+                    ),
+                    array(
+                        'url' => '/contact-sales',
+                        'intent' => 'purchase',
+                        'timestamp' => date( 'Y-m-d H:i:s', strtotime( '-1 hour' ) ),
+                    ),
+                    array(
+                        'url' => '/demo/request',
+                        'intent' => 'evaluation',
+                        'timestamp' => date( 'Y-m-d H:i:s', strtotime( '-2 hours' ) ),
+                    ),
+                );
+                break;
+        }
+
+        $mock_prospect['engagement_data'] = json_encode( $engagement_data );
+
+        return $mock_prospect;
+    }
+
+    /**
+     * Get fallback content links when campaign has none
+     * 
+     * @param string $room_type
+     * @return array Generic content links
+     */
+    private function get_fallback_content_links( $room_type ) {
+        $fallback_links = array(
+            'problem' => array(
+                array(
+                    'id' => 0,
+                    'link_title' => 'Complete Guide to Marketing Attribution',
+                    'link_url' => 'https://example.com/guides/marketing-attribution',
+                    'link_description' => 'Learn how to properly track and attribute marketing conversions across multiple touchpoints.',
+                    'url_summary' => 'Comprehensive guide covering attribution models, implementation strategies, and common challenges in marketing attribution.',
+                    'link_order' => 1,
+                ),
+                array(
+                    'id' => 0,
+                    'link_title' => '5 Marketing Challenges in Manufacturing',
+                    'link_url' => 'https://example.com/blog/manufacturing-marketing-challenges',
+                    'link_description' => 'Unique marketing challenges facing manufacturing companies and how to overcome them.',
+                    'url_summary' => 'Article addressing manufacturing-specific marketing challenges including long sales cycles, technical audiences, and ROI measurement.',
+                    'link_order' => 2,
+                ),
+            ),
+            'solution' => array(
+                array(
+                    'id' => 0,
+                    'link_title' => 'Marketing Automation ROI Calculator',
+                    'link_url' => 'https://example.com/tools/roi-calculator',
+                    'link_description' => 'Calculate the potential ROI of marketing automation for your business.',
+                    'url_summary' => 'Interactive calculator helping businesses estimate time savings, cost reduction, and revenue impact of marketing automation.',
+                    'link_order' => 1,
+                ),
+                array(
+                    'id' => 0,
+                    'link_title' => 'Customer Success Stories',
+                    'link_url' => 'https://example.com/case-studies',
+                    'link_description' => 'See how companies like yours achieved results with our platform.',
+                    'url_summary' => 'Case studies from manufacturing, B2B services, and enterprise companies showing measurable improvements in marketing efficiency.',
+                    'link_order' => 2,
+                ),
+            ),
+            'offer' => array(
+                array(
+                    'id' => 0,
+                    'link_title' => 'Enterprise Pricing & Features',
+                    'link_url' => 'https://example.com/pricing/enterprise',
+                    'link_description' => 'Custom solutions for large organizations with dedicated support.',
+                    'url_summary' => 'Enterprise plan details including unlimited users, dedicated support, custom integrations, and SLA guarantees.',
+                    'link_order' => 1,
+                ),
+                array(
+                    'id' => 0,
+                    'link_title' => 'Schedule a Demo',
+                    'link_url' => 'https://example.com/demo/schedule',
+                    'link_description' => 'See the platform in action with a personalized demo.',
+                    'url_summary' => 'Book a live demonstration tailored to your specific use case and industry, with Q&A and implementation discussion.',
+                    'link_order' => 2,
+                ),
+            ),
+        );
+
+        return isset( $fallback_links[ $room_type ] )
+            ? $fallback_links[ $room_type ]
+            : $fallback_links['problem'];
+    }
+
+    /**
+     * Create mock template object from raw prompt data
+     * 
+     * @param array  $prompt_template
+     * @param string $room_type
+     * @return CPD_Prompt_Template
+     */
+    private function create_mock_template( $prompt_template, $room_type ) {
+        $template_data = array(
+            'id' => 0,
+            'template_name' => 'Test Template',
+            'room_type' => $room_type,
+            'is_global' => false,
+            'prompt_template' => $prompt_template,
+        );
+
+        return new CPD_Prompt_Template( $template_data );
+    }    
+
+    /**
+     * Call Gemini API to generate email
+     */
+    private function call_gemini_api( $payload, $retry_with_fallback = true ) {
         $api_key = $this->settings->get_api_key();
         if ( empty( $api_key ) ) {
             return new WP_Error( 'no_api_key', 'Gemini API key not configured' );
         }
 
         $model = $this->settings->get_model();
+        
+        // DEBUG: Log the model being used
+        error_log( '[DirectReach] Using Gemini model: ' . $model );
+        
+        $endpoint = sprintf(
+            'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
+            $model,
+            $api_key
+        );
+
+        // Build comprehensive prompt
+        $prompt = $this->build_complete_prompt( $payload );
+
+        // Prepare request body
+        $body = array(
+            'contents' => array(
+                array(
+                    'parts' => array(
+                        array( 'text' => $prompt )
+                    )
+                )
+            ),
+            'generationConfig' => array(
+                'temperature' => $this->settings->get_temperature(),
+                'maxOutputTokens' => $this->settings->get_max_tokens(),
+                'topP' => 0.8,
+                'topK' => 40,
+            ),
+        );
+
+        // Make API request
+        $response = wp_remote_post( $endpoint, array(
+            'timeout' => 30,
+            'headers' => array(
+                'Content-Type' => 'application/json',
+            ),
+            'body' => wp_json_encode( $body ),
+        ));
+
+        if ( is_wp_error( $response ) ) {
+            return new WP_Error(
+                'api_request_failed',
+                'Failed to connect to Gemini API: ' . $response->get_error_message()
+            );
+        }
+
+        $status_code = wp_remote_retrieve_response_code( $response );
+        $response_body = wp_remote_retrieve_body( $response );
+
+        // Handle 404 - model not found or not supported
+        if ( $status_code === 404 && $retry_with_fallback ) {
+            error_log( sprintf(
+                '[DirectReach] Model %s not found/supported, falling back to gemini-1.5-flash',
+                $model
+            ));
+            
+            // Try again with known working model
+            return $this->call_gemini_api_with_model( $payload, 'gemini-1.5-flash', false );
+        }
+
+        if ( $status_code !== 200 ) {
+            error_log( sprintf(
+                '[DirectReach] Gemini API error (status %d): %s',
+                $status_code,
+                $response_body
+            ));
+            
+            // Parse and log the error details
+            $error_data = json_decode( $response_body, true );
+            if ( isset( $error_data['error']['message'] ) ) {
+                error_log( '[DirectReach] Gemini error message: ' . $error_data['error']['message'] );
+            }
+
+            return new WP_Error(
+                'api_error',
+                sprintf( 'Gemini API returned status %d', $status_code ),
+                array( 'status' => $status_code, 'body' => $response_body )
+            );
+        }
+
+        $data = json_decode( $response_body, true );
+        if ( json_last_error() !== JSON_ERROR_NONE ) {
+            return new WP_Error(
+                'invalid_response',
+                'Invalid JSON response from Gemini API'
+            );
+        }
+
+        // Parse response
+        return $this->parse_gemini_response( $data, $payload );
+    }
+
+    /**
+     * Call Gemini API with specific model (helper for fallback)
+     *
+     * @param array  $payload Generation payload
+     * @param string $model Model name to use
+     * @param bool   $retry_with_fallback Whether to retry on failure
+     * @return array|WP_Error API response or error
+     */
+    private function call_gemini_api_with_model( $payload, $model, $retry_with_fallback = false ) {
+        $api_key = $this->settings->get_api_key();
+        
+        error_log( '[DirectReach] Fallback: Using model ' . $model );
+        
         $endpoint = sprintf(
             'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
             $model,
@@ -213,7 +639,7 @@ class CPD_AI_Email_Generator {
 
         if ( $status_code !== 200 ) {
             error_log( sprintf(
-                '[DirectReach] Gemini API error (status %d): %s',
+                '[DirectReach] Fallback model also failed (status %d): %s',
                 $status_code,
                 $response_body
             ));
@@ -289,10 +715,28 @@ class CPD_AI_Email_Generator {
         $lines[] = "Days in Current Stage: {$visitor_info['days_in_room']}";
         $lines[] = "Email Sequence Position: {$visitor_info['email_sequence_position']}";
 
+        // Parse recent_pages if it's a JSON string
+        $recent_pages = array();
         if ( ! empty( $visitor_info['recent_pages'] ) ) {
+            if ( is_string( $visitor_info['recent_pages'] ) ) {
+                // It's a JSON string, decode it
+                $recent_pages = json_decode( $visitor_info['recent_pages'], true );
+            } elseif ( is_array( $visitor_info['recent_pages'] ) ) {
+                // Already an array
+                $recent_pages = $visitor_info['recent_pages'];
+            }
+        }
+
+        if ( ! empty( $recent_pages ) && is_array( $recent_pages ) ) {
             $lines[] = "\nRecent Pages Visited:";
-            foreach ( array_slice( $visitor_info['recent_pages'], 0, 5 ) as $page ) {
-                $lines[] = "- {$page['url']} (" . ($page['intent'] ?? 'unknown intent') . ")";
+            foreach ( array_slice( $recent_pages, 0, 5 ) as $page ) {
+                if ( is_array( $page ) && isset( $page['url'] ) ) {
+                    $intent = $page['intent'] ?? 'unknown intent';
+                    $lines[] = "- {$page['url']} ({$intent})";
+                } elseif ( is_string( $page ) ) {
+                    // If it's just a URL string
+                    $lines[] = "- {$page}";
+                }
             }
         }
 

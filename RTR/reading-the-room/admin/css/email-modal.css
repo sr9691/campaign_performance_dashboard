@@ -1,0 +1,565 @@
+/**
+ * Email Generation Modal - Specific Styles
+ * 
+ * Extends base modal system with email-specific features
+ * 
+ * @package DirectReach
+ * @subpackage ReadingTheRoom
+ * @since 1.0.0
+ */
+
+/* ============================================
+   Email Modal Container (Extends Base)
+   ============================================ */
+
+.email-generation-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    animation: fadeIn 0.2s ease;
+}
+
+.email-generation-modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.email-modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+}
+
+/* ============================================
+   Email Modal Content (Extends Base)
+   ============================================ */
+
+.email-modal-content {
+    position: relative;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 700px;
+    width: 90%;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.3s ease;
+}
+
+/* ============================================
+   Email Modal Header (Extends Base)
+   ============================================ */
+
+.email-modal-header {
+    padding: 24px 28px;
+    border-bottom: 1px solid #e5e7eb;
+    background: linear-gradient(to bottom, #ffffff, #f8f9fa);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+
+.email-modal-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #2c435d;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.email-modal-header h3 i {
+    color: #4294cc;
+    font-size: 1.4rem;
+}
+
+.email-modal-header .prospect-name {
+    color: #4294cc;
+    font-weight: 600;
+}
+
+/* ============================================
+   Email Modal Body
+   ============================================ */
+
+.email-modal-body {
+    padding: 28px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-body-section {
+    display: none;
+}
+
+.modal-body-section.active {
+    display: block;
+}
+
+/* ============================================
+   Loading State (Email-Specific)
+   ============================================ */
+
+.loading-state {
+    text-align: center;
+    padding: 60px 40px;
+}
+
+.loading-spinner {
+    margin-bottom: 20px;
+}
+
+.loading-spinner i {
+    font-size: 3rem;
+    color: #4294cc;
+    animation: spin 1s linear infinite;
+}
+
+.loading-text {
+    font-size: 1.1rem;
+    color: #2c435d;
+    margin: 0 0 20px 0;
+    font-weight: 500;
+}
+
+.loading-progress {
+    width: 100%;
+    height: 4px;
+    background: #e5e7eb;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 15px;
+}
+
+.progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #4294cc, #6bb3e0);
+    border-radius: 2px;
+    animation: progress 2s ease-in-out infinite;
+}
+
+@keyframes progress {
+    0% { width: 0%; }
+    50% { width: 70%; }
+    100% { width: 100%; }
+}
+
+.loading-hint {
+    display: block;
+    color: #6b7280;
+    font-size: 0.875rem;
+    font-style: italic;
+}
+
+/* ============================================
+   Email Preview State
+   ============================================ */
+
+.email-metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 16px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    border: 1px solid #e5e7eb;
+}
+
+.meta-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+}
+
+.meta-item i {
+    color: #6b7280;
+    font-size: 0.9rem;
+}
+
+.meta-label {
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.meta-value {
+    color: #2c435d;
+    font-weight: 600;
+}
+
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.global-badge {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+/* Email Subject */
+.email-subject-section {
+    margin-bottom: 24px;
+}
+
+.email-label {
+    display: block;
+    font-weight: 600;
+    color: #2c435d;
+    margin-bottom: 8px;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.email-subject {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 1rem;
+    color: #2c435d;
+    background: white;
+    transition: all 0.2s ease;
+    min-height: 44px;
+}
+
+.email-subject:focus {
+    outline: none;
+    border-color: #4294cc;
+    box-shadow: 0 0 0 3px rgba(66, 148, 204, 0.1);
+}
+
+.email-subject:hover {
+    border-color: #cbd5e1;
+}
+
+/* Email Body */
+.email-body-section {
+    margin-bottom: 24px;
+}
+
+.email-body {
+    width: 100%;
+    padding: 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: #2c435d;
+    background: white;
+    min-height: 250px;
+    max-height: 400px;
+    overflow-y: auto;
+    transition: all 0.2s ease;
+}
+
+.email-body:focus {
+    outline: none;
+    border-color: #4294cc;
+    box-shadow: 0 0 0 3px rgba(66, 148, 204, 0.1);
+}
+
+.email-body:hover {
+    border-color: #cbd5e1;
+}
+
+.email-body p {
+    margin: 0 0 12px 0;
+}
+
+.email-body p:last-child {
+    margin-bottom: 0;
+}
+
+.email-body strong {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.email-body a {
+    color: #4294cc;
+    text-decoration: underline;
+}
+
+/* Tracking Info */
+.email-tracking-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #fef3c7;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    color: #92400e;
+}
+
+.email-tracking-info i {
+    color: #d97706;
+}
+
+/* ============================================
+   Error State (Email-Specific)
+   ============================================ */
+
+.error-state {
+    text-align: center;
+    padding: 60px 40px;
+}
+
+.error-icon {
+    margin-bottom: 20px;
+}
+
+.error-icon i {
+    font-size: 3.5rem;
+    color: #ef4444;
+}
+
+.error-state h4 {
+    margin: 0 0 12px 0;
+    font-size: 1.25rem;
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.error-message {
+    color: #6b7280;
+    margin: 0 0 20px 0;
+    font-size: 1rem;
+    line-height: 1.5;
+}
+
+.fallback-message {
+    padding: 16px;
+    background: #fef3c7;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    color: #92400e;
+    font-size: 0.9rem;
+    margin-top: 20px;
+}
+
+/* ============================================
+   Email Modal Footer (Extends Base)
+   ============================================ */
+
+.email-modal-footer {
+    padding: 20px 28px;
+    border-top: 1px solid #e5e7eb;
+    background: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+/* Inherit button styles from base modals.css */
+.email-modal-footer .btn {
+    padding: 10px 20px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.email-modal-footer .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ============================================
+   Copy Success Toast (Email-Specific)
+   ============================================ */
+
+.copy-success {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #059669;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    font-weight: 500;
+    box-shadow: 0 4px 16px rgba(5, 150, 105, 0.4);
+    animation: slideUpToast 0.3s ease;
+    z-index: 10;
+}
+
+.copy-success.active {
+    display: flex;
+}
+
+.copy-success i {
+    font-size: 1.2rem;
+}
+
+@keyframes slideUpToast {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* ============================================
+   Email Icon States (Prospect Rows)
+   ============================================ */
+
+.email-icons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.email-icons i {
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+/* Not Sent */
+.email-not-sent {
+    color: #d1d5db;
+}
+
+.email-not-sent:hover {
+    color: #9ca3af;
+}
+
+/* Pending - Can generate */
+.email-pending {
+    color: #4294cc;
+    cursor: pointer;
+}
+
+.email-pending:hover {
+    color: #3a83ba;
+    transform: scale(1.15);
+}
+
+/* Generating - In progress */
+.email-generating {
+    color: #f59e0b;
+    animation: spin 1s linear infinite;
+    cursor: wait;
+}
+
+/* Ready - Generated but not copied */
+.email-ready {
+    color: #8b5cf6;
+    cursor: pointer;
+}
+
+.email-ready:hover {
+    color: #7c3aed;
+    transform: scale(1.15);
+}
+
+/* Sent - Copied to clipboard */
+.email-sent {
+    color: #059669;
+    position: relative;
+}
+
+.email-sent .sent-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #059669;
+    color: white;
+    font-size: 0.5rem;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid white;
+    font-weight: bold;
+}
+
+/* Opened - Tracking pixel fired */
+.email-opened {
+    color: #0891b2;
+    position: relative;
+}
+
+.email-opened .opened-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    font-size: 0.7rem;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+}
+
+/* ============================================
+   Email Modal Responsive Overrides
+   ============================================ */
+
+@media (max-width: 768px) {
+    .email-modal-content {
+        max-width: 95%;
+        max-height: 95vh;
+    }
+    
+    .email-modal-header h3 {
+        font-size: 1.1rem;
+    }
+    
+    .email-metadata {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .email-body {
+        min-height: 200px;
+        max-height: 300px;
+    }
+}
+
+/* ============================================
+   Email Modal Accessibility
+   ============================================ */
+
+.email-subject:focus-visible,
+.email-body:focus-visible {
+    outline: none;
+    border-color: #4294cc;
+    box-shadow: 0 0 0 3px rgba(66, 148, 204, 0.2);
+}

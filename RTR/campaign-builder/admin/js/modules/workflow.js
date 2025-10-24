@@ -1,19 +1,20 @@
 /**
- * Workflow Module
- * Manages 3-step workflow navigation and validation
+ * Workflow Module - COMPLETE WITH CONTENT LINKS
+ * Manages 4-step workflow navigation and validation
  * 
  * @package DirectReach_Campaign_Builder
  * @since 2.0.0
  */
 
 export default class WorkflowManager {
-    constructor(config, stateManager, clientManager, campaignManager, templateManager) {
+    constructor(config, stateManager, clientManager, campaignManager, contentLinksManager, templateManager) {
         this.config = config;
         this.stateManager = stateManager;
         this.clientManager = clientManager;
         this.campaignManager = campaignManager;
+        this.contentLinksManager = contentLinksManager;
         this.templateManager = templateManager;
-        this.steps = ['client', 'campaign', 'templates'];
+        this.steps = ['client', 'campaign', 'content-links', 'templates'];
         this.currentStep = 'client';
         this.listeners = {};
     }
@@ -75,6 +76,18 @@ export default class WorkflowManager {
                 await this.stateManager.updateState({ currentStep: 'client' });
             }
             
+            if (this.currentStep === 'content-links' && !state.campaignId) {
+                console.warn('On content-links step but no campaign selected, going back to campaign step');
+                this.currentStep = 'campaign';
+                await this.stateManager.updateState({ currentStep: 'campaign' });
+            }
+            
+            if (this.currentStep === 'templates' && !state.campaignId) {
+                console.warn('On templates step but no campaign selected, going back to campaign step');
+                this.currentStep = 'campaign';
+                await this.stateManager.updateState({ currentStep: 'campaign' });
+            }
+            
             this.emit('state:loaded', state);
         } catch (error) {
             console.error('Error loading workflow state:', error);
@@ -126,7 +139,7 @@ export default class WorkflowManager {
      * Update breadcrumb classes based on current step
      */
     updateBreadcrumbClasses() {
-        const steps = ['client', 'campaign', 'templates'];
+        const steps = ['client', 'campaign', 'content-links', 'templates'];
         const currentIndex = steps.indexOf(this.currentStep);
         
         steps.forEach((step, index) => {
@@ -148,19 +161,46 @@ export default class WorkflowManager {
     /**
      * Update breadcrumb text display
      */
-    updateBreadcrumbText() {
-        const state = this.stateManager.getState();
-        
-        // Update Client step status
-        const clientStep = document.querySelector('.breadcrumb-item[data-step="client"] .step-status');
-        if (clientStep && state.clientName) {
-            clientStep.textContent = state.clientName;
+    updateBreadcrumbText(step, text) {
+        const breadcrumbStatus = document.querySelector(`.breadcrumb-item[data-step="${step}"] .step-status`);
+        if (breadcrumbStatus) {
+            breadcrumbStatus.textContent = text;
         }
         
-        // Update Campaign step status
-        const campaignStep = document.querySelector('.breadcrumb-item[data-step="campaign"] .step-status');
-        if (campaignStep && state.campaignName) {
-            campaignStep.textContent = state.campaignName;
+        // If no step specified, update all from state
+        if (arguments.length === 0) {
+            const state = this.stateManager.getState();
+            
+            // Update Client step status
+            if (state.clientName) {
+                const clientStatus = document.querySelector('.breadcrumb-item[data-step="client"] .step-status');
+                if (clientStatus) {
+                    clientStatus.textContent = state.clientName;
+                }
+            }
+            
+            // Update Campaign step status
+            const campaignStatus = document.querySelector('.breadcrumb-item[data-step="campaign"] .step-status');
+            if (campaignStatus) {
+                if (state.campaignName) {
+                    campaignStatus.textContent = state.campaignName;
+                } else {
+                    campaignStatus.textContent = 'Configure Campaign';
+                }
+            }
+            
+            // Update Content Links step status
+            const contentLinksStatus = document.querySelector('.breadcrumb-item[data-step="content-links"] .step-status');
+            if (contentLinksStatus && state.contentLinks) {
+                const total = (state.contentLinks.problem || 0) + 
+                              (state.contentLinks.solution || 0) + 
+                              (state.contentLinks.offer || 0);
+                if (total > 0) {
+                    contentLinksStatus.textContent = `${total} Links Added`;
+                } else {
+                    contentLinksStatus.textContent = 'Add Content';
+                }
+            }
         }
     }
 
@@ -252,17 +292,30 @@ export default class WorkflowManager {
         
         console.log('Rendering step:', this.currentStep);
         
-        // Hide all step contents
-        document.querySelectorAll('.step-content').forEach(content => {
-            content.style.display = 'none';
+        // Map steps to their container classes
+        const containerMap = {
+            'client': '.client-step-container',
+            'campaign': '.campaign-step-container',
+            'content-links': '.content-links-step-container',
+            'templates': '.templates-step-container'
+        };
+        
+        // Hide all step containers
+        Object.values(containerMap).forEach(selector => {
+            const container = document.querySelector(selector);
+            if (container) {
+                container.style.display = 'none';
+            }
         });
         
-        // Show current step content
-        const currentContent = document.querySelector(`[data-step-content="${this.currentStep}"]`);
+        // Show current step container
+        const currentSelector = containerMap[this.currentStep];
+        const currentContent = document.querySelector(currentSelector);
+        
         if (currentContent) {
             currentContent.style.display = 'block';
         } else {
-            console.error('Step content not found for:', this.currentStep);
+            console.error('Step content not found for:', this.currentStep, 'Selector:', currentSelector);
         }
         
         // Update step title
@@ -276,6 +329,9 @@ export default class WorkflowManager {
         
         // Update breadcrumb text (client name, campaign name)
         this.updateBreadcrumbText();
+
+        // Update navigation buttons
+        this.updateNavigationButtons();
 
         // Emit step change event
         this.emit('step:changed', this.currentStep);      
@@ -325,16 +381,49 @@ export default class WorkflowManager {
                 break;
                 
             case 'campaign':
-                if (!state.campaignName) {
+                // Get values from form if available, otherwise from state
+                const nameInput = document.getElementById('campaign_name');
+                const utmInput = document.getElementById('utm_campaign');
+                
+                const campaignName = nameInput?.value.trim() || state.campaignName;
+                const utmCampaign = utmInput?.value.trim() || state.utmCampaign;
+                
+                if (!campaignName) {
                     errors.push('Campaign name is required');
                 }
-                if (!state.utmCampaign) {
+                if (!utmCampaign) {
                     errors.push('UTM campaign parameter is required');
                 }
+                
                 // Check UTM uniqueness
-                const utmExists = await this.checkUtmExists(state.utmCampaign, state.campaignId);
-                if (utmExists) {
-                    errors.push('This UTM campaign parameter is already in use');
+                if (utmCampaign) {
+                    const utmExists = await this.checkUtmExists(utmCampaign, state.campaignId);
+                    if (utmExists) {
+                        errors.push('This UTM campaign parameter is already in use');
+                    }
+                }
+                break;
+                
+            case 'content-links':
+                if (!this.contentLinksManager) {
+                    errors.push('Content links manager not available');
+                    break;
+                }
+                
+                const links = this.contentLinksManager.getLinks();
+                const requiredRooms = ['problem', 'solution', 'offer'];
+                
+                // Check if each room has at least one active link
+                const missingRooms = requiredRooms.filter(room => {
+                    const roomLinks = links[room] || [];
+                    const activeLinks = roomLinks.filter(link => link.is_active);
+                    return activeLinks.length === 0;
+                });
+                
+                if (missingRooms.length > 0) {
+                    errors.push(`Please add at least one active link for: ${missingRooms.map(r => {
+                        return r.charAt(0).toUpperCase() + r.slice(1);
+                    }).join(', ')} Room(s)`);
                 }
                 break;
                 
@@ -345,15 +434,15 @@ export default class WorkflowManager {
                 }
                 
                 const templates = this.templateManager.getTemplates();
-                const requiredRooms = ['problem', 'solution', 'offer'];
+                const requiredTemplateRooms = ['problem', 'solution', 'offer'];
                 
-                // Updated: Check if each room has at least one template
-                const missingRooms = requiredRooms.filter(room => 
+                // Check if each room has at least one template
+                const missingTemplateRooms = requiredTemplateRooms.filter(room => 
                     !templates[room] || templates[room].length === 0
                 );
                 
-                if (missingRooms.length > 0) {
-                    errors.push(`Please create at least one template for: ${missingRooms.map(r => {
+                if (missingTemplateRooms.length > 0) {
+                    errors.push(`Please create at least one template for: ${missingTemplateRooms.map(r => {
                         return r.charAt(0).toUpperCase() + r.slice(1);
                     }).join(', ')} Room(s)`);
                 }
@@ -565,6 +654,7 @@ export default class WorkflowManager {
         const titles = {
             client: 'Select Client',
             campaign: 'Configure Campaign',
+            'content-links': 'Add Content Links',
             templates: 'Create Email Templates'
         };
         return titles[step] || step;

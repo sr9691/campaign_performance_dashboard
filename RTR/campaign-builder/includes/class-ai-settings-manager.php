@@ -80,10 +80,16 @@ class CPD_AI_Settings_Manager {
      * @return string Model name
      */
     public function get_model() {
-        return get_option(
-            self::OPTION_PREFIX . 'model',
-            'gemini-1.5-pro-latest'
-        );
+        $saved_model = get_option( self::OPTION_PREFIX . 'model' );
+        
+        // If we have a saved model, use it
+        if ( ! empty( $saved_model ) ) {
+            return $saved_model;
+        }
+        
+        // Otherwise, use the most current known stable model
+        // Update this as Gemini releases new models
+        return 'gemini-2.0-flash-exp';
     }
 
     /**
@@ -93,15 +99,19 @@ class CPD_AI_Settings_Manager {
      * @return bool Success
      */
     public function set_model( $model ) {
-        $allowed = array(
-            'gemini-1.5-pro-latest',
-            'gemini-1.5-flash-latest',
-            'gemini-1.0-pro',
-        );
-
-        if ( ! in_array( $model, $allowed, true ) ) {
+        // Validate model name format
+        if ( empty( $model ) || ! is_string( $model ) ) {
             return false;
         }
+        
+        // Must start with "gemini-" (allow models/ prefix)
+        if ( ! preg_match( '/^(models\/)?gemini-[\w\.\-]+$/', $model ) ) {
+            error_log( '[DirectReach] Invalid model name format: ' . $model );
+            return false;
+        }
+        
+        // Strip models/ prefix if present
+        $model = str_replace( 'models/', '', $model );
 
         return update_option( self::OPTION_PREFIX . 'model', $model );
     }

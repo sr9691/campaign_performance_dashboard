@@ -159,7 +159,7 @@ class DirectReach_Scoring_System {
             __('Room Thresholds', 'directreach'),
             $this->config['menu_capability'],
             'dr-room-thresholds',
-            array($this, 'render_page_fallback'), // Fallback, rarely called
+            array($this, 'render_page_fallback'),
             'dashicons-chart-line',
             27
         );
@@ -170,7 +170,7 @@ class DirectReach_Scoring_System {
             __('Scoring Rules', 'directreach'),
             $this->config['menu_capability'],
             'dr-scoring-rules',
-            array($this, 'render_page_fallback'), // Fallback, rarely called
+            array($this, 'render_page_fallback'),
             'dashicons-calculator',
             28
         );

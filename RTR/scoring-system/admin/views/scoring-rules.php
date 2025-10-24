@@ -44,69 +44,14 @@ $industries = rtr_get_industry_taxonomy();
 ?>
 
 <!-- Header -->
-<header class="admin-header">
-    <div class="header-content">
-        <div class="header-left">
-            <?php 
-            // Go from admin/views/ up to plugin root (5 levels up)
-            $plugin_root = dirname(dirname(dirname(dirname(dirname(__FILE__)))));
-            $logo_url = plugin_dir_url($plugin_root) . 'assets/MEMO_Seal.png';
-            ?>
-            <img src="<?php echo esc_url($logo_url); ?>" 
-                 alt="DirectReach" 
-                 class="header-logo">
-            <span class="admin-badge">Scoring Rules</span>
-        </div>
-        
-        <div class="header-right">
-            <!-- Back to Campaign Builder -->
-            <a href="<?php echo esc_url(admin_url('admin.php?page=dr-campaign-builder')); ?>" 
-               class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Back to Campaign Builder
-            </a>
-            
-            <!-- Settings Dropdown -->
-            <div class="settings-dropdown" id="settings-dropdown-scoring">
-                <button class="settings-toggle" id="settings-toggle-scoring">
-                    <i class="fas fa-cog"></i>
-                    <span>Settings</span>
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <div class="settings-menu">
-                    <a href="<?php echo admin_url('admin.php?page=dr-room-thresholds'); ?>" class="settings-item">
-                        <i class="fas fa-sliders-h"></i>
-                        <span>Room Thresholds</span>
-                    </a>
-                    <a href="<?php echo admin_url('admin.php?page=dr-scoring-rules'); ?>" class="settings-item active">
-                        <i class="fas fa-calculator"></i>
-                        <span>Scoring Rules</span>
-                    </a>
-                    <a href="<?php echo admin_url('admin.php?page=dr-global-templates'); ?>" class="settings-item">
-                        <i class="fas fa-robot"></i>
-                        <span>Global Email Templates</span>
-                    </a>
-                </div>
-            </div>
-            
-            <!-- User Info -->
-            <div class="admin-user-info">
-                <div class="user-avatar">
-                    <?php echo esc_html(strtoupper(substr(wp_get_current_user()->display_name, 0, 2))); ?>
-                </div>
-                <div class="user-details">
-                    <div class="user-name"><?php echo esc_html(wp_get_current_user()->display_name); ?></div>
-                    <div class="user-role">Administrator</div>
-                </div>
-            </div>
-            
-            <!-- Logout -->
-            <a href="<?php echo esc_url(wp_logout_url()); ?>" class="logout-btn">
-                <i class="fas fa-sign-out-alt"></i>
-                <span>Logout</span>
-            </a>
-        </div>
-    </div>
-</header>
+<?php 
+$args = [
+    'page_badge' => 'Scoring Rules',
+    'active_page' => 'dr-scoring-rules',
+    'show_back_btn' => true
+];
+include __DIR__ . '/../../../campaign-builder/admin/views/partials/admin-header.php';
+?>
 
 <!-- Main Content -->
 <main class="workflow-main">
@@ -350,28 +295,6 @@ $industries = rtr_get_industry_taxonomy();
     </div>
 </div>
 
-<!-- Settings dropdown toggle script -->
-<script>
-(function() {
-    'use strict';
-    const dropdown = document.getElementById('settings-dropdown-scoring');
-    const toggleBtn = document.getElementById('settings-toggle-scoring');
-    
-    if (toggleBtn && dropdown) {
-        toggleBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            dropdown.classList.toggle('active');
-        });
-        
-        document.addEventListener('click', function(e) {
-            if (!dropdown.contains(e.target)) {
-                dropdown.classList.remove('active');
-            }
-        });
-    }
-})();
-</script>
-
 <?php
 // Localize script data
 wp_localize_script('rtr-scoring-rules', 'rtrScoringConfig', [
@@ -386,3 +309,4 @@ wp_localize_script('rtr-scoring-rules', 'rtrScoringConfig', [
         'resetConfirm' => __('Reset rules to global defaults? This cannot be undone.', 'directreach'),
     ]
 ]);
+?>

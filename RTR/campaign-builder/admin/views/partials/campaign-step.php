@@ -134,31 +134,4 @@ if (!defined('ABSPATH')) {
         </form>
     </div>
 
-    <!-- Settings Preview -->
-    <div id="settings-preview-container" class="settings-preview" style="display: none;">
-        <h3>Campaign Settings</h3>
-        <div class="settings-source-info">
-            <i class="fas fa-info-circle"></i>
-            <span id="settings-source-text">Using Global Defaults</span>
-            <a href="#" id="customize-settings-link" class="customize-link" style="display: none;">
-                Customize for this client
-            </a>
-        </div>
-
-        <div class="settings-preview-content">
-            <div class="settings-section">
-                <h4>Room Thresholds</h4>
-                <div id="thresholds-preview">
-                    <p class="empty-state">No thresholds configured</p>
-                </div>
-            </div>
-
-            <div class="settings-section">
-                <h4>Scoring Rules</h4>
-                <div id="scoring-preview">
-                    <p class="empty-state">No scoring rules configured</p>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>

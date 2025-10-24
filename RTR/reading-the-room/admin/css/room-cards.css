@@ -1,0 +1,185 @@
+/* Room Cards Container */
+.room-cards-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 25px;
+    margin-bottom: 40px;
+}
+
+.room-overview-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    border-left: 5px solid;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    min-height: 140px;
+}
+
+.room-overview-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+}
+
+.room-overview-card.problem-room {
+    border-left-color: var(--problem-room-color);
+}
+
+.room-overview-card.solution-room {
+    border-left-color: var(--solution-room-color);
+}
+
+.room-overview-card.offer-room {
+    border-left-color: var(--offer-room-color);
+}
+
+.room-overview-card.sales-room {
+    border-left-color: var(--sales-room-color);
+}
+
+.room-card-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+    position: relative;
+}
+
+.room-circle {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2rem;
+}
+
+.problem-room .room-circle {
+    background: var(--problem-room-color);
+}
+
+.solution-room .room-circle {
+    background: var(--solution-room-color);
+}
+
+.offer-room .room-circle {
+    background: var(--offer-room-color);
+}
+
+.sales-room .room-circle {
+    background: var(--sales-room-color);
+}
+
+.room-info {
+    flex: 1;
+}
+
+.room-info h3 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-color-dark);
+    margin: 0 0 2px 0;
+}
+
+.room-info p {
+    color: var(--text-color-light);
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+/* Chart Button */
+.chart-btn {
+    background: none;
+    border: 2px solid var(--secondary-color);
+    color: var(--secondary-color);
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chart-btn:hover {
+    background: var(--secondary-color);
+    color: white;
+    transform: scale(1.05);
+}
+
+.chart-btn i {
+    font-size: 0.9rem;
+}
+
+/* Room Content */
+.room-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: auto;
+}
+
+.room-metrics-clean {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.room-count {
+    font-size: 2.8rem;
+    font-weight: 700;
+    color: var(--text-color-dark);
+    line-height: 1;
+    margin-bottom: 5px;
+}
+
+.room-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-color-light);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.room-stats-horizontal {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 15px;
+    border-top: 1px solid #f0f0f0;
+}
+
+.room-stats-horizontal .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    flex: 1;
+}
+
+.room-stats-horizontal .stat-number {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-color-dark);
+    line-height: 1;
+    margin-bottom: 2px;
+}
+
+.room-stats-horizontal .stat-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-color-light);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}

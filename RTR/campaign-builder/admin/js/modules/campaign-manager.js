@@ -367,6 +367,15 @@ export default class CampaignManager extends EventEmitter {
         this.renderCampaigns(); // Re-render to show selection
         this.renderSettingsPreview(campaign.settings);
         
+        // UPDATE STATE with campaign data
+        if (this.stateManager) {
+            this.stateManager.updateState({
+                campaignId: campaign.id,
+                campaignName: campaign.campaign_name,
+                utmCampaign: campaign.utm_campaign
+            });
+        }
+        
         // Emit selection event
         this.emit('campaign:selected', campaign);
         
@@ -424,6 +433,18 @@ export default class CampaignManager extends EventEmitter {
         if (this.elements.startDateInput) this.elements.startDateInput.value = campaign.start_date || '';
         if (this.elements.endDateInput) this.elements.endDateInput.value = campaign.end_date || '';
         if (this.elements.descriptionInput) this.elements.descriptionInput.value = campaign.campaign_description || '';
+        
+        // UPDATE STATE with campaign data for validation
+        if (this.stateManager) {
+            this.stateManager.updateState({
+                campaignId: campaign.id,
+                campaignName: campaign.campaign_name,
+                utmCampaign: campaign.utm_campaign,
+                campaignDescription: campaign.campaign_description,
+                startDate: campaign.start_date,
+                endDate: campaign.end_date
+            });
+        }
         
         // Show form
         if (this.elements.listContainer) {

@@ -326,6 +326,13 @@ class DR_Campaign_Builder {
                 'deps' => array('dr-cb-base'),
                 'path' => DR_CB_PLUGIN_URL . 'admin/css/',
             ),
+
+            // Content links step
+            'dr-cb-content-links-step' => array(
+                'file' => 'content-links-step.css',
+                'deps' => array('dr-cb-base'),
+                'path' => DR_CB_PLUGIN_URL . 'admin/css/',
+            ),            
             
             // Template selection and editing
             'dr-cb-templates-step' => array(
@@ -463,6 +470,7 @@ class DR_Campaign_Builder {
             'class-clients-controller.php',
             'class-workflow-controller.php',
             'class-campaigns-controller.php',
+            'class-content-links-controller.php',
             'class-templates-controller.php',
             'class-email-generation-controller.php',
         );
@@ -471,11 +479,13 @@ class DR_Campaign_Builder {
             $file = DR_CB_PLUGIN_DIR . 'includes/api/' . $controller;
             if (file_exists($file)) {
                 require_once $file;
+                error_log("DR_Campaign_Builder: Loaded controller file: {$controller}");
             } else {
-                $this->log_error('REST controller file not found: ' . $controller);
+                error_log("DR_Campaign_Builder: Controller file NOT FOUND: {$file}");
             }
         }
     }
+
     
     /**
      * Load AI-related classes (Phase 2.5)
@@ -507,10 +517,11 @@ class DR_Campaign_Builder {
             '\DirectReach\CampaignBuilder\API\Clients_Controller',
             '\DirectReach\CampaignBuilder\API\Workflow_Controller',
             '\DirectReach\CampaignBuilder\API\Campaigns_Controller',
+            '\DirectReach\CampaignBuilder\API\Content_Links_Controller',
             '\DirectReach\CampaignBuilder\API\Templates_Controller',
-            '\DirectReach\CampaignBuilder\API\Email_Generation_Controller',
         );
         
+        // Register Phase 2 controllers
         foreach ($controllers as $controller_class) {
             if (class_exists($controller_class)) {
                 $controller = new $controller_class();
@@ -519,6 +530,29 @@ class DR_Campaign_Builder {
                 }
             } else {
                 $this->log_error('REST controller class not found: ' . $controller_class);
+            }
+        }
+        
+        // Register Email Generation Controller (Phase 2.5) - separate check
+        // This might not have a namespace, so check without it first
+        $email_controller_class = 'CPD_Email_Generation_Controller';
+        if (class_exists($email_controller_class)) {
+            $email_controller = new $email_controller_class();
+            if (method_exists($email_controller, 'register_routes')) {
+                $email_controller->register_routes();
+                error_log('DR_Campaign_Builder: Email Generation Controller registered successfully');
+            }
+        } else {
+            // Try with namespace
+            $email_controller_class = '\DirectReach\CampaignBuilder\API\Email_Generation_Controller';
+            if (class_exists($email_controller_class)) {
+                $email_controller = new $email_controller_class();
+                if (method_exists($email_controller, 'register_routes')) {
+                    $email_controller->register_routes();
+                    error_log('DR_Campaign_Builder: Email Generation Controller (namespaced) registered successfully');
+                }
+            } else {
+                error_log('DR_Campaign_Builder: Email Generation Controller class not found (tried both with and without namespace)');
             }
         }
     }

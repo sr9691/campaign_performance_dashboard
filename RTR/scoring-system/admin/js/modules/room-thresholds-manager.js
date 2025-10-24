@@ -190,7 +190,6 @@ class RoomThresholdsManager {
         const icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
         
         notification.innerHTML = `
-            <i class="fas fa-${icon}"></i>
             <span>${message}</span>
             <button class="notification-close">
                 <i class="fas fa-times"></i>

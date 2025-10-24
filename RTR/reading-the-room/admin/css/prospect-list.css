@@ -1,0 +1,153 @@
+/* Action buttons */
+.prospect-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.archive-btn,
+.handoff-btn {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 14px;
+}
+
+.archive-btn {
+    background: #95a5a6;
+    color: white;
+}
+
+.archive-btn:hover {
+    background: #7f8c8d;
+}
+
+.handoff-btn {
+    background: #27ae60;
+    color: white;
+}
+
+.handoff-btn:hover {
+    background: #229954;
+}
+
+/* Action modal */
+.action-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+
+.action-modal.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.action-modal .modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.action-modal .modal-content {
+    position: relative;
+    background: white;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    transform: scale(0.9);
+    transition: transform 0.3s;
+}
+
+.action-modal.active .modal-content {
+    transform: scale(1);
+}
+
+.action-modal .modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #ecf0f1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.action-modal .modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.action-modal .modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #95a5a6;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+}
+
+.action-modal .modal-close:hover {
+    color: #7f8c8d;
+}
+
+.action-modal .modal-body {
+    padding: 20px;
+}
+
+.action-modal .form-group {
+    margin-top: 15px;
+}
+
+.action-modal .form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.action-modal textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.action-modal .modal-footer {
+    padding: 20px;
+    border-top: 1px solid #ecf0f1;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+/* Sales Room card styling */
+.room-card[data-room="sales"] {
+    border-left-color: #27ae60;
+    cursor: default;
+}
+
+.room-card[data-room="sales"]:hover {
+    transform: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}

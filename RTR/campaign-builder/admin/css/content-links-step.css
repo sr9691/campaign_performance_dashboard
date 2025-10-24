@@ -1,0 +1,633 @@
+/**
+ * Content Links Step Styles
+ * 
+ * @package DirectReach_Campaign_Builder
+ * @since 2.0.0
+ */
+
+/* Hide by default - shown by workflow.js */
+.content-links-step-container {
+    display: none;
+}
+
+/* ==========================================================================
+   Content Links Container
+   ========================================================================== */
+
+.content-links-step-container {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* ==========================================================================
+   Loading and Error States
+   ========================================================================== */
+
+#links-loading,
+#links-error {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    padding: 60px 20px;
+    text-align: center;
+}
+
+#links-error i {
+    font-size: 64px;
+    color: var(--error-color);
+    margin-bottom: 20px;
+}
+
+#links-error h3 {
+    margin: 0 0 12px 0;
+    color: var(--text-color-dark);
+    font-size: 20px;
+}
+
+#links-error .error-message {
+    color: var(--text-color-light);
+    margin-bottom: 24px;
+}
+
+/* ==========================================================================
+   Room Tabs
+   ========================================================================== */
+
+.room-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 32px;
+    border-bottom: 2px solid var(--line-color);
+}
+
+.room-tab {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 24px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--text-color-light);
+    position: relative;
+    bottom: -2px;
+}
+
+.room-tab:hover {
+    color: var(--primary-color);
+    background: rgba(44, 67, 93, 0.05);
+}
+
+.room-tab.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+    font-weight: 600;
+}
+
+.room-tab i {
+    font-size: 18px;
+}
+
+.tab-label {
+    font-size: var(--font-size-sm);
+}
+
+.tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    background: var(--line-color);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-color-light);
+}
+
+.tab-count.has-items {
+    background: var(--primary-color);
+    color: white;
+}
+
+/* ==========================================================================
+   Link List Containers
+   ========================================================================== */
+
+#links-list-view {
+    position: relative;
+    min-height: 400px;
+}
+
+.link-list-container {
+    display: none;
+}
+
+.link-list-container.active {
+    display: block;
+}
+
+/* Link List Header */
+.link-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--line-color);
+}
+
+.link-list-header h3 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-color-dark);
+}
+
+.link-list-header h3 i {
+    color: var(--primary-color);
+}
+
+/* ==========================================================================
+   Link List
+   ========================================================================== */
+
+.link-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* ==========================================================================
+   Link Card
+   ========================================================================== */
+
+.link-card {
+    display: flex;
+    gap: 16px;
+    background: white;
+    border: 2px solid var(--line-color);
+    border-radius: 8px;
+    padding: 20px;
+    transition: all var(--transition-fast);
+    cursor: move;
+}
+
+.link-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: var(--primary-color);
+}
+
+.link-card.inactive {
+    opacity: 0.6;
+    background: #f8f9fa;
+}
+
+.link-card.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+/* Drag Handle */
+.drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    color: var(--text-color-light);
+    cursor: grab;
+    flex-shrink: 0;
+}
+
+.drag-handle:hover {
+    color: var(--primary-color);
+}
+
+.drag-handle i {
+    font-size: 18px;
+}
+
+/* Link Card Content */
+.link-card-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.link-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.link-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color-dark);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.link-title i {
+    color: var(--primary-color);
+    font-size: 14px;
+}
+
+/* Link Badges */
+.link-badges {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+/* Override the circular badge from client-step.css for link badges */
+.link-badges .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    width: auto; /* Override circular width */
+    height: auto; /* Override circular height */
+}
+
+.link-badges .badge-success {
+    background: rgba(39, 174, 96, 0.1);
+    color: var(--success-color);
+}
+
+.link-badges .badge-inactive {
+    background: rgba(153, 153, 153, 0.1);
+    color: var(--text-color-muted);
+}
+
+/* Link Card Body */
+.link-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.link-url {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.link-url i {
+    color: var(--primary-color);
+    font-size: 12px;
+}
+
+.link-url a {
+    color: var(--primary-color);
+    text-decoration: none;
+    word-break: break-all;
+}
+
+.link-url a:hover {
+    text-decoration: underline;
+}
+
+.link-summary {
+    padding: 12px;
+    background: #f8f9fa;
+    border-left: 3px solid var(--primary-color);
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-color-dark);
+}
+
+.link-summary strong {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--primary-color);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.link-description {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-color-light);
+}
+
+/* Link Card Actions */
+.link-card-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    padding-top: 12px;
+    border-top: 1px solid var(--line-color);
+}
+
+/* ==========================================================================
+   Empty State
+   ========================================================================== */
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 2px dashed var(--line-color);
+}
+
+.empty-state i {
+    font-size: 64px;
+    color: var(--primary-color);
+    margin-bottom: 20px;
+    opacity: 0.3;
+}
+
+.empty-state h4 {
+    margin: 0 0 12px 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-color-dark);
+}
+
+.empty-state p {
+    margin: 0 0 24px 0;
+    color: var(--text-color-light);
+    font-size: 14px;
+}
+
+/* ==========================================================================
+   Link Form Container
+   ========================================================================== */
+
+#link-form-container {
+    display: none;
+}
+
+.btn-back-to-list {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: transparent;
+    border: none;
+    color: var(--primary-color);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    margin-bottom: 24px;
+}
+
+.btn-back-to-list:hover {
+    background: rgba(44, 67, 93, 0.1);
+    border-radius: 4px;
+}
+
+.link-form-header {
+    margin-bottom: 32px;
+}
+
+.link-form-header h3 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text-color-dark);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.link-form-header h3 i {
+    color: var(--primary-color);
+}
+
+/* ==========================================================================
+   Link Form
+   ========================================================================== */
+
+.content-link-form {
+    background: white;
+    border: 1px solid var(--line-color);
+    border-radius: 8px;
+    padding: 32px;
+}
+
+.content-link-form .form-group {
+    margin-bottom: 24px;
+}
+
+.content-link-form .form-group:last-of-type {
+    margin-bottom: 0;
+}
+
+.content-link-form label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: var(--text-color-dark);
+    font-size: 14px;
+}
+
+.content-link-form .required {
+    color: var(--error-color);
+    margin-left: 4px;
+}
+
+.content-link-form .optional-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #e9ecef;
+    color: #6c757d;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    margin-left: 8px;
+}
+
+.content-link-form .form-control {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--line-color);
+    border-radius: 4px;
+    font-size: 14px;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.content-link-form .form-control:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(44, 67, 93, 0.1);
+}
+
+.content-link-form textarea.form-control {
+    resize: vertical;
+    font-family: inherit;
+    line-height: 1.6;
+}
+
+.content-link-form .field-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-color-light);
+    line-height: 1.5;
+}
+
+.content-link-form .field-hint i {
+    color: var(--primary-color);
+    margin-right: 4px;
+}
+
+/* Checkbox Label */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-weight: normal;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+/* Form Actions */
+.content-link-form .form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding-top: 24px;
+    margin-top: 24px;
+    border-top: 1px solid var(--line-color);
+}
+
+/* ==========================================================================
+   Button Variants
+   ========================================================================== */
+
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 13px;
+}
+
+.btn-secondary {
+    background: white;
+    color: var(--text-color-dark);
+    border: 1px solid var(--line-color);
+}
+
+.btn-secondary:hover {
+    background: #f8f9fa;
+    border-color: var(--primary-color);
+}
+
+.btn-danger {
+    background: var(--error-color);
+    color: white;
+    border: none;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+}
+
+/* ==========================================================================
+   Responsive Design
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    .room-tabs {
+        flex-wrap: wrap;
+    }
+    
+    .room-tab {
+        flex: 1;
+        min-width: 150px;
+        justify-content: center;
+    }
+    
+    .link-card {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .drag-handle {
+        width: 100%;
+        height: 24px;
+        justify-content: center;
+        cursor: grab;
+    }
+    
+    .link-card-actions {
+        flex-direction: column;
+    }
+    
+    .link-card-actions button {
+        width: 100%;
+    }
+    
+    .content-link-form {
+        padding: 20px;
+    }
+    
+    .content-link-form .form-actions {
+        flex-direction: column;
+    }
+    
+    .content-link-form .form-actions button {
+        width: 100%;
+    }
+    
+    .link-list-header {
+        flex-direction: column;
+        gap: 16px;
+        align-items: flex-start;
+    }
+    
+    .link-list-header button {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .link-card-header {
+        flex-direction: column;
+        gap: 12px;
+    }
+    
+    .link-badges {
+        width: 100%;
+    }
+    
+    .badge {
+        flex: 1;
+        justify-content: center;
+    }
+}

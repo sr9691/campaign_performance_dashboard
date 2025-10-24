@@ -53,15 +53,25 @@ export default class TemplateManager extends EventEmitter {
      * Attach all event listeners
      */
     attachEventListeners() {
-        document.querySelectorAll('.room-tab').forEach(tab => {
-            tab.addEventListener('click', (e) => {
-                const room = e.currentTarget.dataset.room;
-                this.switchRoom(room);
+        // Use event delegation for tabs
+        const tabsContainer = document.querySelector('.room-tabs');
+        if (tabsContainer) {
+            tabsContainer.addEventListener('click', (e) => {
+                const tab = e.target.closest('.room-tab');
+                if (tab) {
+                    const room = tab.dataset.room;
+                    this.switchRoom(room);
+                }
             });
-        });
+        }
         
         this.attachFormListeners();
         this.attachTestListeners();
+        
+        const retryBtn = document.getElementById('retry-load-templates');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', () => this.loadTemplates());
+        }
     }
     
     /**
@@ -475,8 +485,9 @@ export default class TemplateManager extends EventEmitter {
             this.isFormVisible = true;
         }
         
+        // Hide all list containers by removing active class
         listContainers.forEach(container => {
-            container.style.display = 'none';
+            container.classList.remove('active');
         });
         
         const testSection = document.getElementById('test-results-section');
@@ -499,9 +510,12 @@ export default class TemplateManager extends EventEmitter {
             this.isFormVisible = false;
         }
         
+        // DON'T manipulate inline styles - let CSS classes handle visibility
+        // Just ensure the active class is set on the current room
         listContainers.forEach(container => {
+            container.classList.remove('active');
             if (container.dataset.room === this.currentRoom) {
-                container.style.display = 'block';
+                container.classList.add('active');
             }
         });
         
@@ -720,8 +734,21 @@ export default class TemplateManager extends EventEmitter {
         
         if (!generateBtn) return;
         
+        // Get campaign ID from state
+        const campaignId = this.isGlobal ? 0 : this.stateManager?.getState()?.campaignId;
+        
+        if (!campaignId && campaignId !== 0) {
+            this.emit('notification', {
+                type: 'error',
+                message: 'No campaign selected'
+            });
+            return;
+        }
+        
+        // Gather prompt template data
         const promptTemplate = this.gatherFormData().prompt_template;
         
+        // Validate at least one section has content
         if (!Object.values(promptTemplate).some(v => v && v.length > 0)) {
             this.emit('notification', {
                 type: 'error',
@@ -730,12 +757,16 @@ export default class TemplateManager extends EventEmitter {
             return;
         }
         
+        // Update button state
         generateBtn.disabled = true;
         generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
         
         try {
-            const response = await this.api.post('/templates/test-prompt', {
-                prompt_template: promptTemplate
+            // Call the email generation test endpoint
+            const response = await this.api.post('/emails/test-prompt', {
+                prompt_template: promptTemplate,
+                campaign_id: campaignId,
+                room_type: this.currentRoom
             });
             
             if (response.success && emailSection) {
@@ -745,7 +776,23 @@ export default class TemplateManager extends EventEmitter {
                 const stats = document.getElementById('generation-stats');
                 
                 if (output) {
+                    // Display generated email with mock prospect info
+                    let mockProspectInfo = '';
+                    if (response.data.mock_prospect) {
+                        mockProspectInfo = `
+                            <div class="mock-prospect-info">
+                                <small>
+                                    <i class="fas fa-user"></i>
+                                    Mock prospect: ${this.escapeHtml(response.data.mock_prospect.contact_name)} 
+                                    at ${this.escapeHtml(response.data.mock_prospect.company_name)}
+                                    (${this.escapeHtml(response.data.mock_prospect.job_title)})
+                                </small>
+                            </div>
+                        `;
+                    }
+                    
                     output.innerHTML = `
+                        ${mockProspectInfo}
                         <div class="email-subjects">
                             <div class="subject-line primary">
                                 <strong>Subject:</strong> ${this.escapeHtml(response.data.subject)}
@@ -758,6 +805,8 @@ export default class TemplateManager extends EventEmitter {
                 }
                 
                 if (stats) {
+                    // Display token usage and cost
+                    const cost = response.data.usage.cost;
                     stats.innerHTML = `
                         <div class="stat-item">
                             <span class="stat-label">Prompt Tokens:</span>
@@ -771,8 +820,15 @@ export default class TemplateManager extends EventEmitter {
                             <span class="stat-label">Total:</span>
                             <span class="stat-value">${response.data.usage.total_tokens}</span>
                         </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Cost:</span>
+                            <span class="stat-value">$${cost.toFixed(4)}</span>
+                        </div>
                     `;
                 }
+                
+                // Scroll to results
+                emailSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 
                 this.emit('notification', {
                     type: 'success',
@@ -780,11 +836,14 @@ export default class TemplateManager extends EventEmitter {
                 });
             }
         } catch (error) {
+            console.error('Test email generation error:', error);
+            
             this.emit('notification', {
                 type: 'error',
                 message: 'Failed to generate test email: ' + error.message
             });
         } finally {
+            // Reset button state
             generateBtn.disabled = false;
             generateBtn.innerHTML = '<i class="fas fa-magic"></i> Generate Test Email';
         }

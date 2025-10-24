@@ -306,21 +306,28 @@ add_action( 'plugins_loaded', 'cpd_dashboard_run', 5 );
                 directreach_scoring_system();
             }
             
-            error_log('CPD: ✓ Scoring System loaded and initialized');
+            error_log('CPD: Scoring System loaded and initialized');
         } else {
             error_log('CPD: ERROR - Scoring System file not found: ' . $scoring_system_file);
         }
-    }
 
-    // Load Scoring System
-    $scoring_system_file = CPD_DASHBOARD_PLUGIN_DIR . 'RTR/scoring-system/directreach-scoring-system.php';
-
-    if (file_exists($scoring_system_file)) {
-        require_once $scoring_system_file;
-        error_log('CPD: ✓ Scoring System loaded successfully');
-    } else {
-        error_log('CPD: ERROR - Scoring System file not found: ' . $scoring_system_file);
-    }    
+        // Load Reading the Room
+        $rtr_file = CPD_DASHBOARD_PLUGIN_DIR . 'RTR/reading-the-room/directreach-reading-room.php';
+        
+        if (file_exists($rtr_file)) {
+            require_once $rtr_file;
+            
+            // Initialize RTR Dashboard
+            if (function_exists('DirectReach\ReadingTheRoom\init_reading_room_dashboard')) {
+                \DirectReach\ReadingTheRoom\init_reading_room_dashboard();
+            }
+            
+            error_log('CPD: Reading the Room loaded successfully');
+        } else {
+            error_log('CPD: ERROR - Reading the Room file not found: ' . $rtr_file);
+        }        
+    
+  
 }
 
 // Load premium features after plugins are loaded
@@ -336,16 +343,17 @@ function cpd_register_tier_based_menus() {
     // v2 Reading the Room - Admin or Premium tier clients ONLY
     if ( CPD_Access_Control::is_admin_user( $current_user_id ) || 
          CPD_Access_Control::has_v2_access( $current_user_id ) ) {
-        
-        add_menu_page(
-            __( 'Reading the Room', 'cpd' ),
-            __( 'Reading the Room', 'cpd' ),
-            'read', // Lower capability, we check tier in callback
-            'cpd-reading-room',
-            'cpd_render_rtr_dashboard_page',
-            'dashicons-groups',
-            27
-        );
+
+        // add_menu_page(
+        //     'Reading the Room',
+        //    'Reading the Room',
+        //    'manage_options',
+        //    'dr-reading-room',
+        //    array($this, 'render_page_fallback'),
+        //    'dashicons-visibility',
+        //    27
+        //);            
+
     }
 }
 add_action( 'admin_menu', 'cpd_register_tier_based_menus', 20 );

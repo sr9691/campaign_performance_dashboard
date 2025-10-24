@@ -1,0 +1,278 @@
+/**
+ * Email History Modal - Read-Only Display
+ * 
+ * Styles for viewing sent email details
+ * 
+ * @package DirectReach
+ * @subpackage ReadingTheRoom
+ * @since 1.0.0
+ */
+
+/* ============================================
+   Email History Modal Container
+   ============================================ */
+
+.email-history-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10001; /* Higher than generation modal */
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    animation: fadeIn 0.2s ease;
+}
+
+.email-history-modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ============================================
+   Email History Modal Content
+   ============================================ */
+
+.email-history-modal .email-modal-content {
+    max-width: 700px;
+    width: 90%;
+    max-height: 90vh;
+}
+
+/* ============================================
+   Email Number Badge
+   ============================================ */
+
+.email-number-badge {
+    display: inline-block;
+    background: #4294cc;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 0 4px;
+}
+
+/* ============================================
+   Read-Only Email Display
+   ============================================ */
+
+.email-subject-readonly,
+.email-body-readonly {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f8f9fa;
+    color: #2c435d;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    min-height: 44px;
+}
+
+.email-subject-readonly {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.email-body-readonly {
+    min-height: 200px;
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+.email-body-readonly p {
+    margin: 0 0 12px 0;
+}
+
+.email-body-readonly p:last-child {
+    margin-bottom: 0;
+}
+
+.email-body-readonly strong {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.email-body-readonly a {
+    color: #4294cc;
+    text-decoration: underline;
+}
+
+/* ============================================
+   Email Details Section
+   ============================================ */
+
+.email-details-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 2px solid #e5e7eb;
+}
+
+.email-details-section h4 {
+    margin: 0 0 16px 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #2c435d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+}
+
+.detail-item i {
+    color: #6b7280;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.detail-label {
+    color: #6b7280;
+    font-size: 0.875rem;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.detail-value {
+    color: #2c435d;
+    font-size: 0.875rem;
+    font-weight: 600;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.detail-value a {
+    color: #4294cc;
+    text-decoration: none;
+}
+
+.detail-value a:hover {
+    text-decoration: underline;
+}
+
+/* Full width items */
+.url-item {
+    grid-column: 1 / -1;
+}
+
+/* ============================================
+   Status Badges
+   ============================================ */
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-badge i {
+    font-size: 0.875rem;
+}
+
+.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-sent {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-opened {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.status-clicked {
+    background: #e9d5ff;
+    color: #6b21a8;
+}
+
+/* ============================================
+   Template Badges
+   ============================================ */
+
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: 6px;
+}
+
+.global-badge {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.campaign-badge {
+    background: #f3e8ff;
+    color: #7c3aed;
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+
+@media (max-width: 768px) {
+    .email-history-modal .email-modal-content {
+        max-width: 95%;
+        max-height: 95vh;
+    }
+    
+    .details-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .url-item {
+        grid-column: 1;
+    }
+    
+    .email-body-readonly {
+        max-height: 250px;
+    }
+}
+
+/* ============================================
+   Loading Animation
+   ============================================ */
+
+.email-history-modal .loading-spinner i {
+    font-size: 2.5rem;
+    color: #4294cc;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}

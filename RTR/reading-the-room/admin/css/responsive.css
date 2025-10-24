@@ -1,0 +1,360 @@
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .room-cards-container {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+    }
+    
+    .room-details-section {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .prospect-metrics {
+        align-items: center;
+        text-align: center;
+    }
+    
+    .email-progress {
+        justify-content: center;
+    }
+    
+    .room-content {
+        flex-direction: row;
+    }
+    
+    .summary-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 1024px) and (min-width: 769px) {
+    .prospect-row {
+        align-items: center;
+    }
+    
+    .prospect-metrics {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+    }
+    
+    .email-icons {
+        gap: 3px;
+    }
+    
+    .email-icons i {
+        font-size: 0.85rem;
+    }
+    
+    .content-area {
+        padding: 25px;
+    }
+    
+    .room-count {
+        font-size: 2.5rem;
+    }
+
+    .room-stats-horizontal {
+        gap: 12px;
+        padding-top: 14px;
+    }
+
+    .room-stats-horizontal .stat-number {
+        font-size: 1.05rem;
+    }
+
+    .room-stats-horizontal .stat-label {
+        font-size: 0.68rem;
+    }
+    
+    .room-content {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .chart-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .room-cards-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .content-header {
+        flex-direction: column;
+        gap: 15px;
+        align-items: flex-start;
+        padding: 15px 20px;
+    }
+    
+    .header-title {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .header-title h1 {
+        margin-left: 0;
+        font-size: 1.5rem;
+    }
+    
+    .header-controls {
+        width: 100%;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+    
+    .user-info {
+        margin-left: 0;
+        padding-left: 0;
+        border-left: none;
+        padding-top: 10px;
+        border-top: 1px solid var(--line-color);
+        width: 100%;
+    }
+    
+    .content-area {
+        padding: 20px;
+    }
+    
+    .pipeline-header {
+        flex-direction: column;
+        gap: 15px;
+        align-items: flex-start;
+    }
+    
+    .room-count {
+        font-size: 2.2rem;
+    }
+
+    .room-stats-horizontal {
+        flex-direction: column;
+        gap: 8px;
+        padding-top: 12px;
+    }
+
+    .room-stats-horizontal .stat-item {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        padding: 5px 0;
+    }
+
+    .room-stats-horizontal .stat-number {
+        font-size: 1rem;
+    }
+
+    .room-stats-horizontal .stat-label {
+        font-size: 0.65rem;
+        text-align: right;
+    }
+    
+    .prospect-row {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    
+    .prospect-name {
+        flex-basis: 100%;
+        margin-bottom: 5px;
+    }
+    
+    .prospect-metrics {
+        flex-basis: 100%;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .lead-score {
+        text-align: left;
+    }
+    
+    .email-progress {
+        justify-content: flex-end;
+    }
+    
+    .email-icons {
+        gap: 6px;
+    }
+    
+    .prospect-actions {
+        flex-wrap: wrap;
+        gap: 5px;
+        justify-content: center;
+        margin-top: 8px;
+    }
+    
+    .handoff-btn, .archive-btn {
+        min-width: 36px;
+        padding: 6px 8px;
+        font-size: 0.8rem;
+    }
+
+    .room-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .room-detail-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .campaign-dropdown {
+        min-width: 100%;
+        width: 100%;
+    }
+    
+    .campaign-tag {
+        font-size: 0.7rem;
+        padding: 1px 6px;
+    }
+    
+    .chart-btn {
+        position: static;
+        margin-left: auto;
+        margin-top: 10px;
+    }
+    
+    /* Modal responsive adjustments */
+    .modal-content {
+        width: 95%;
+        max-height: 90vh;
+    }
+    
+    .chart-modal-content {
+        max-width: 95%;
+    }
+    
+    .chart-controls {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .chart-container {
+        height: 300px;
+    }
+    
+    .summary-stats {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .prospect-detail-view > div:first-child {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .content-header {
+        padding: 10px 15px;
+    }
+    
+    .header-title h1 {
+        font-size: 1.3rem;
+    }
+    
+    .content-area {
+        padding: 15px;
+    }
+    
+    .room-cards-container {
+        gap: 15px;
+    }
+    
+    .room-overview-card {
+        padding: 15px;
+        min-height: 120px;
+    }
+    
+    .room-count {
+        font-size: 2rem;
+    }
+    
+    .room-detail-container {
+        border-radius: 8px;
+    }
+    
+    .prospect-list {
+        padding: 15px;
+    }
+    
+    .modal-content {
+        padding: 15px;
+        border-radius: 8px;
+    }
+    
+    .modal-header {
+        padding: 15px;
+    }
+    
+    .modal-body {
+        padding: 15px;
+    }
+    
+    .chart-container {
+        height: 250px;
+    }
+}
+
+/* Print styles */
+@media print {
+    .content-header,
+    .header-controls,
+    .chart-btn,
+    .prospect-actions,
+    .modal {
+        display: none !important;
+    }
+    
+    .room-cards-container,
+    .room-details-section {
+        grid-template-columns: 1fr;
+    }
+    
+    .room-overview-card,
+    .room-detail-container {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+    .room-overview-card,
+    .room-detail-container,
+    .modal-content {
+        border: 2px solid #000;
+    }
+    
+    .prospect-row:hover {
+        background: #e0e0e0;
+    }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .handoff-btn.handoff-ready {
+        animation: none;
+    }
+    
+    .email-due-today {
+        animation: none;
+    }
+}
