@@ -1,302 +1,307 @@
 <?php
 /**
- * Reading the Room Dashboard Bootstrap
- * 
- * Handles initialization, menu registration, and asset loading for RTR Dashboard
- * 
- * @package DirectReach
- * @subpackage ReadingTheRoom
- * @since 1.0.0
+ * Plugin Name: DirectReach - Reading the Room
+ * Description: RTR Dashboard and REST APIs for the Reading the Room module.
+ * Version: 2.0.0
+ * Author: Your Team
+ * Text Domain: directreach
  */
 
-namespace DirectReach\ReadingTheRoom;
+declare(strict_types=1);
 
-// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
-class ReadingRoomDashboard {
+/**
+ * Constants
+ */
+define('DR_RTR_VERSION', '2.0.0');
+define('DR_RTR_PLUGIN_FILE', __FILE__);
+define('DR_RTR_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('DR_RTR_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('DR_RTR_ADMIN_DIR', DR_RTR_PLUGIN_DIR . 'admin/');
+define('DR_RTR_ADMIN_VIEWS', DR_RTR_ADMIN_DIR . 'views/');
+define('DR_RTR_ASSETS_URL', DR_RTR_PLUGIN_URL . 'assets/');
+
+/**
+ * Load all required files
+ */
+function dr_rtr_require_files(): void
+{
+    static $loaded = false;
     
-    /**
-     * Singleton instance
-     */
-    private static $instance = null;
+    if ($loaded) {
+        return;
+    }
     
-    /**
-     * Database manager
-     */
-    private $database;
+    $includes_dir = DR_RTR_PLUGIN_DIR . 'includes/';
+    $api_dir = $includes_dir . 'api/';
     
-    /**
-     * REST controllers
-     */
-    private $rest_controller;
-    private $jobs_controller;
+    $files = [
+        $includes_dir . 'class-reading-room-database.php',
+        $includes_dir . 'class-campaign-matcher.php',
+        
+    ];
     
-    /**
-     * Get singleton instance
-     */
-    public static function get_instance() {
-        if (null === self::$instance) {
-            self::$instance = new self();
+    $api_files = [
+        $api_dir . 'class-reading-room-controller.php',
+        $api_dir . 'class-jobs-controller.php',
+    ];
+    
+    foreach (array_merge($files, $api_files) as $file) {
+        if (file_exists($file)) {
+            require_once $file;
+        } else {
+            error_log('[RTR] ERROR: File not found: ' . $file);
         }
-        return self::$instance;
     }
     
-    /**
-     * Constructor
-     */
-    private function __construct() {
-        $this->load_dependencies();
-        $this->init_hooks();
-    }
+    $loaded = true;
+}
+
+/**
+ * Activation hook
+ */
+register_activation_hook(DR_RTR_PLUGIN_FILE, function (): void {
+    global $wpdb;
     
-    /**
-     * Load required files
-     */
-    private function load_dependencies() {
-        $base_path = dirname(__FILE__);
+    dr_rtr_require_files();
+    dr_rtr_register_rewrite();
+    flush_rewrite_rules(false);
+
+    if (class_exists('DirectReach\\ReadingTheRoom\\Reading_Room_Database')) {
+        $db = new \DirectReach\ReadingTheRoom\Reading_Room_Database($wpdb);
+        $result = $db->install_schema();
         
-        // Database
-        require_once $base_path . '/includes/class-reading-room-database.php';
-        
-        // API Controllers
-        require_once $base_path . '/includes/api/class-reading-room-controller.php';
-        require_once $base_path . '/includes/api/class-jobs-controller.php';
-        
-        
-        // Phase 3: Campaign Attribution Classes
-        require_once $base_path . '/includes/class-campaign-matcher.php';
-        require_once $base_path . '/includes/class-visitor-campaign-manager.php';
-        
-        // Initialize
-        $this->database = new Reading_Room_Database();
-        $this->rest_controller = new API\Reading_Room_Controller();
-        $this->jobs_controller = new API\Jobs_Controller();
-        error_log('RTR: Dependencies loaded');
-    }
-    
-    /**
-     * Initialize WordPress hooks
-     */
-    private function init_hooks() {
-        // Admin menu
-        add_action('admin_menu', array($this, 'register_menu'));
-        
-        // REST API
-        add_action('rest_api_init', array($this, 'register_rest_routes'), 10);
-        
-        // Custom page rendering
-        add_action('admin_init', array($this, 'maybe_render_custom_page'), 10);
-        
-        // Assets
-        add_action('admin_enqueue_scripts', array($this, 'enqueue_assets'));
-    }
-    
-    /**
-     * Register admin menu
-     */
-    public function register_menu() {
-        add_menu_page(
-            'Reading the Room',
-            'Reading the Room',
-            'manage_options',
-            'dr-reading-room',
-            array($this, 'render_page_fallback'),
-            'dashicons-visibility',
-            28
-        );
-    }
-    
-    /**
-     * Fallback render (should be intercepted)
-     */
-    public function render_page_fallback() {
-        echo '<div class="wrap"><h1>Reading the Room Dashboard</h1></div>';
-    }
-    
-    /**
-     * Intercept page rendering for custom HTML
-     */
-    public function maybe_render_custom_page() {
-        if (!isset($_GET['page']) || $_GET['page'] !== 'dr-reading-room') {
-            return;
+        if ($result) {
+            error_log('[RTR Activation] Successfully installed database schema');
+        } else {
+            error_log('[RTR Activation] ERROR: Failed to install database schema');
         }
+    } else {
+        error_log('[RTR Activation] ERROR: Reading_Room_Database class not found');
+    }
+});
+
+/**
+ * Admin action to force schema installation
+ * Access via: /wp-admin/admin.php?page=dr-rtr-force-schema
+ */
+add_action('admin_menu', function() {
+    add_submenu_page(
+        null, // Hidden from menu
+        'RTR Force Schema',
+        'RTR Force Schema',
+        'manage_options',
+        'dr-rtr-force-schema',
+        'dr_rtr_force_schema_page'
+    );
+});
+
+function dr_rtr_force_schema_page(): void {
+    if (!current_user_can('manage_options')) {
+        wp_die('You do not have permission to access this page.');
+    }
+    
+    global $wpdb;
+    dr_rtr_require_files();
+    
+    echo '<div class="wrap">';
+    echo '<h1>DirectReach RTR - Force Schema Installation</h1>';
+    
+    if (class_exists('DirectReach\\ReadingTheRoom\\Reading_Room_Database')) {
+        $db = new \DirectReach\ReadingTheRoom\Reading_Room_Database($wpdb);
         
-        // Check permissions
-        if (!current_user_can('manage_options')) {
-            wp_die(__('You do not have sufficient permissions to access this page.'));
+        // Delete the version option to force reinstall
+        delete_option('rtr_db_version');
+        
+        $result = $db->install_schema();
+        
+        if ($result) {
+            echo '<div class="notice notice-success"><p><strong>SUCCESS:</strong> Schema installed successfully!</p></div>';
+            
+            // Verify tables
+            $tables = $db->tables();
+            echo '<h2>Table Verification:</h2><ul>';
+            
+            foreach ($tables as $name => $table_name) {
+                $exists = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_name));
+                $status = ($exists === $table_name) ? '✓' : '✗';
+                $class = ($exists === $table_name) ? 'notice-success' : 'notice-error';
+                echo "<li>$status <code>$table_name</code></li>";
+            }
+            
+            echo '</ul>';
+        } else {
+            echo '<div class="notice notice-error"><p><strong>ERROR:</strong> Schema installation failed. Check debug log.</p></div>';
         }
-        
-        // Check premium access
-        if (!$this->check_premium_access()) {
-            $this->render_upgrade_notice();
+    } else {
+        echo '<div class="notice notice-error"><p><strong>ERROR:</strong> Database class not found.</p></div>';
+    }
+    
+    echo '<p><a href="' . admin_url('admin.php?page=dr-reading-room') . '" class="button">← Back to RTR Dashboard</a></p>';
+    echo '</div>';
+}
+
+/**
+ * Init lifecycle
+ */
+add_action('plugins_loaded', 'dr_rtr_init', 5);
+function dr_rtr_init() {
+    dr_rtr_require_files();
+
+}
+
+/**
+ * Register REST routes
+ */
+add_action('rest_api_init', function() {
+    dr_rtr_require_files();
+    
+    global $wpdb;
+    
+    if (!class_exists('DirectReach\\ReadingTheRoom\\Reading_Room_Database')) {
+        error_log('[RTR] ERROR: Reading_Room_Database class not found');
+        return;
+    }
+    
+    $db = new \DirectReach\ReadingTheRoom\Reading_Room_Database($wpdb);
+    
+    // Reading Room Controller
+    if (class_exists('DirectReach\\ReadingTheRoom\\API\\Reading_Room_Controller')) {
+        try {
+            $controller = new \DirectReach\ReadingTheRoom\API\Reading_Room_Controller($db);
+            $controller->register_routes();
+            error_log('[RTR] Reading_Room_Controller routes registered successfully');
+        } catch (\Exception $e) {
+            error_log('[RTR] ERROR registering Reading_Room_Controller: ' . $e->getMessage());
+        }
+    } else {
+        error_log('[RTR] ERROR: Reading_Room_Controller class not found');
+    }
+    
+    // Jobs Controller
+    if (class_exists('DirectReach\\ReadingTheRoom\\API\\Jobs_Controller')) {
+        try {
+            $controller = new \DirectReach\ReadingTheRoom\API\Jobs_Controller();
+            $controller->register_routes();
+            error_log('[RTR] Jobs_Controller routes registered successfully');
+        } catch (\Exception $e) {
+            error_log('[RTR] ERROR registering Jobs_Controller: ' . $e->getMessage());
+        }
+    }
+}, 10);
+
+/**
+ * Rewrite rules
+ */
+function dr_rtr_register_rewrite(): void
+{
+    add_rewrite_rule('^reading-the-room/?$', 'index.php?dr_rtr_dashboard=1', 'top');
+}
+add_action('init', 'dr_rtr_register_rewrite');
+
+add_filter('query_vars', function($vars) {
+    return array_merge($vars, ['dr_rtr_dashboard']);
+});
+
+add_action('template_redirect', function (): void {
+    if ((int) get_query_var('dr_rtr_dashboard') === 1) {
+        if (!is_user_logged_in()) {
+            $return_url = home_url('/reading-the-room/');
+            wp_redirect(wp_login_url($return_url));
             exit;
         }
-        
-        // Enqueue assets before rendering
-        $this->enqueue_custom_assets();
-        
-        // Render custom page
-        require_once dirname(__FILE__) . '/admin/views/reading-room-dashboard.php';
+        dr_rtr_render_dashboard();
         exit;
     }
-    
-    /**
-     * Check if user has premium access
-     */
-    private function check_premium_access() {
-        global $wpdb;
-        
-        $user_id = get_current_user_id();
-        
-        // Admins always have access
-        if (current_user_can('administrator')) {
-            return true;
-        }
-        
-        // Check if user is associated with premium client
-        $client = $wpdb->get_row($wpdb->prepare(
-            "SELECT subscription_tier, rtr_enabled 
-             FROM {$wpdb->prefix}cpd_clients 
-             WHERE id IN (
-                 SELECT client_id FROM {$wpdb->prefix}cpd_client_users 
-                 WHERE user_id = %d
-             ) 
-             AND subscription_tier = 'premium' 
-             AND rtr_enabled = 1
-             LIMIT 1",
-            $user_id
-        ));
-        
-        return !empty($client);
-    }
-    
-    /**
-     * Render upgrade notice for non-premium users
-     */
-    private function render_upgrade_notice() {
-        ?>
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Reading the Room - Premium Required</title>
-            <style>
-                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f0f1; }
-                .upgrade-notice { max-width: 600px; margin: 100px auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
-                .upgrade-notice h1 { color: #2c435d; margin-bottom: 20px; }
-                .upgrade-notice p { color: #666; line-height: 1.6; margin-bottom: 30px; }
-                .upgrade-btn { display: inline-block; padding: 12px 30px; background: #4294cc; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; }
-                .upgrade-btn:hover { background: #357abd; }
-            </style>
-        </head>
-        <body>
-            <div class="upgrade-notice">
-                <h1>🚀 Premium Feature</h1>
-                <p>Reading the Room Dashboard is a premium feature that requires an active DirectReach Premium subscription.</p>
-                <p>Upgrade to access:</p>
-                <ul style="text-align: left; display: inline-block; margin-bottom: 30px;">
-                    <li>AI-powered email generation</li>
-                    <li>Multi-room prospect management</li>
-                    <li>Advanced engagement tracking</li>
-                    <li>Campaign analytics</li>
-                </ul>
-                <br>
-            </div>
-        </body>
-        </html>
-        <?php
-    }
-    
-    /**
-     * Enqueue custom assets for custom page
-     */
-    private function enqueue_custom_assets() {
-        $base_url = plugins_url('', __FILE__);
-        $version = '1.0.0';
-        
-        // CSS Files (in order)
-        wp_enqueue_style('rtr-variables', $base_url . '/admin/css/variables.css', array(), $version);
-        wp_enqueue_style('rtr-base', $base_url . '/admin/css/base.css', array('rtr-variables'), $version);
-        wp_enqueue_style('rtr-header', $base_url . '/admin/css/header.css', array('rtr-base'), $version);
-        wp_enqueue_style('rtr-room-cards', $base_url . '/admin/css/room-cards.css', array('rtr-base'), $version);
-        wp_enqueue_style('rtr-room-details', $base_url . '/admin/css/room-details.css', array('rtr-base'), $version);
-        wp_enqueue_style('rtr-modals', $base_url . '/admin/css/modals.css', array('rtr-base'), $version);
-        wp_enqueue_style('rtr-email-modal', $base_url . '/admin/css/email-modal.css', array('rtr-modals'), $version);
-        wp_enqueue_style('rtr-email-history', $base_url . '/admin/css/email-history-modal.css', array('rtr-modals'), $version);
-        wp_enqueue_style('rtr-responsive', $base_url . '/admin/css/responsive.css', array('rtr-base'), $version);
+});
 
-        
-        // External dependencies
-        wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css', array(), '6.0.0');
-        wp_enqueue_style('google-fonts', 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap', array(), null);
-        
-        // Chart.js
-        wp_enqueue_script('chartjs', 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js', array(), '3.9.1', true);
-        
-        // JavaScript Modules
-        wp_enqueue_script('rtr-main', $base_url . '/admin/js/main.js', array('jquery'), $version, true);
-        
-        // Configuration
-        wp_add_inline_script('rtr-main', $this->get_js_config(), 'before');
+/**
+ * Admin menu
+ */
+add_action('admin_menu', function () {
+    add_menu_page(
+        __('Reading the Room', 'directreach'),
+        __('Reading the Room', 'directreach'),
+        'read',
+        'dr-reading-room',
+        'dr_rtr_admin_redirect',
+        'dashicons-chart-area',
+        3
+    );
+});
+
+function dr_rtr_admin_redirect(): void
+{
+    if (!headers_sent()) {
+        wp_safe_redirect(esc_url_raw(home_url('/reading-the-room/')));
+        exit;
     }
-    
-    /**
-     * Standard WordPress asset enqueuing
-     */
-    public function enqueue_assets($hook) {
-        // Only load on our page
-        if ($hook !== 'toplevel_page_dr-reading-room') {
-            return;
-        }
-        
-        // Assets already loaded via custom rendering
-    }
-    
-    /**
-     * Get JavaScript configuration
-     */
-    private function get_js_config() {
-        $config = array(
-            'apiUrl' => rest_url('directreach/rtr/v1'),
-            'siteUrl' => get_site_url(), // NEW
-            'nonce' => wp_create_nonce('wp_rest'),
-            'userId' => get_current_user_id(),
-            'userIsAdmin' => current_user_can('administrator'),
-            'ajaxUrl' => admin_url('admin-ajax.php')
+    echo '<script>window.location.href="' . esc_url(home_url('/reading-the-room/')) . '";</script>';
+    exit;
+}
+
+/**
+ * Render dashboard
+ */
+function dr_rtr_render_dashboard(): void
+{
+    $view = DR_RTR_ADMIN_VIEWS . 'reading-room-dashboard.php';
+    if (!file_exists($view)) {
+        wp_die(
+            esc_html__('Reading Room dashboard view not found.', 'directreach'),
+            esc_html__('DirectReach', 'directreach'),
+            ['response' => 500]
         );
-        
-        return 'const RTR_CONFIG = ' . wp_json_encode($config) . ';';
     }
     
-    /**
-     * Register REST API routes
-     */
-    public function register_rest_routes() {
-        error_log('RTR: Registering REST routes');
+    // Output complete HTML with inline scripts
+    ?>
+    <!DOCTYPE html>
+    <html <?php language_attributes(); ?>>
+    <head>
+        <meta charset="<?php bloginfo('charset'); ?>">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title><?php echo esc_html(get_bloginfo('name')); ?> - Reading the Room</title>
         
-        // Register Reading Room Controller routes
-        if ($this->rest_controller) {
-            $this->rest_controller->register_routes();
-            error_log('RTR: Reading Room controller routes registered');
-        } else {
-            error_log('RTR: ERROR - rest_controller is null');
+        <?php
+        // Enqueue CSS
+        $css_url = DR_RTR_PLUGIN_URL . 'admin/css/main.css';
+        if (file_exists(DR_RTR_ADMIN_DIR . 'css/main.css')) {
+            echo '<link rel="stylesheet" href="' . esc_url($css_url) . '?ver=' . DR_RTR_VERSION . '">';
         }
         
-        // Register Jobs Controller routes (MISSING!)
-        if ($this->jobs_controller) {
-            $this->jobs_controller->register_routes();
-            error_log('RTR: Jobs controller routes registered');
-        } else {
-            error_log('RTR: ERROR - jobs_controller is null');
-        }
-    }
+        // Config object
+        $config = [
+            'siteUrl' => get_site_url(),
+            'nonce'   => wp_create_nonce('wp_rest'),
+            'restUrl' => esc_url_raw(rest_url('directreach/v1/reading-room')),
+            'apiUrl'  => esc_url_raw(rest_url('directreach/v1/reading-room')),
+            'showWelcome' => true,
+            'trackingEnabled' => false,
+            'assets'  => [
+                'logo' => esc_url_raw(DR_RTR_PLUGIN_URL . 'assets/images/MEMO_Logo.png'),
+                'seal' => esc_url_raw(DR_RTR_PLUGIN_URL . 'assets/images/MEMO_Seal.png'),
+            ],
+        ];
+        ?>
+        
+        <script type="text/javascript">
+        window.rtrDashboardConfig = <?php echo wp_json_encode($config); ?>;
+        console.log('✅ RTR Config loaded:', window.rtrDashboardConfig);
+        </script>
+        
+        <?php wp_head(); ?>
+    </head>
+    <body class="rtr-dashboard-page">
+        <?php include $view; ?>
+        
+        <script type="module" src="<?php echo esc_url(DR_RTR_PLUGIN_URL . 'admin/js/main.js?ver=' . DR_RTR_VERSION); ?>"></script>
+        
+        <?php wp_footer(); ?>
+    </body>
+    </html>
+    <?php
 }
-
-// Initialize
-function init_reading_room_dashboard() {
-    return ReadingRoomDashboard::get_instance();
-}
-
-add_action('plugins_loaded', __NAMESPACE__ . '\init_reading_room_dashboard');

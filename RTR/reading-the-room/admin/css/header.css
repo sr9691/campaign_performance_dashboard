@@ -1,18 +1,26 @@
-/* Header Styles */
+/* --------------------------------------------------
+   Header Styles – Reading the Room Dashboard
+   -------------------------------------------------- */
+
 .content-header {
-    background: white;
-    padding: 20px 30px;
+    background: var(--card-bg);
     border-bottom: 1px solid var(--line-color);
+    box-shadow: var(--shadow-sm);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: var(--space-lg) var(--space-xl);
+    position: relative;
+    z-index: 5;
 }
 
+/* -------------------------------------------
+   Left Side – Title & Branding
+------------------------------------------- */
 .header-title {
     display: flex;
     align-items: center;
-    gap: 15px;
+    gap: var(--space-md);
 }
 
 .header-title img {
@@ -20,36 +28,116 @@
     height: auto;
 }
 
-.header-title .premium-badge {
+.header-title h1 {
+    font-size: 1.75rem;
+    font-weight: var(--font-weight-bold);
+    color: var(--primary-color);
+}
+
+.premium-badge {
     background: linear-gradient(45deg, #ffd700, #ffed4a);
     color: var(--primary-color);
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 12px;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-bold);
+    padding: 2px 8px;
+    border-radius: var(--radius-lg);
     text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.header-title h1 {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: var(--primary-color);
-    margin-left: 20px;
-}
-
+/* -------------------------------------------
+   Right Side – Controls
+------------------------------------------- */
 .header-controls {
     display: flex;
-    gap: 15px;
     align-items: center;
+    gap: var(--space-lg);
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
+.client-selector {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.client-selector label {
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-color-medium);
+}
+
+.client-dropdown {
+    padding: 6px 12px;
+    border: 1px solid var(--line-color);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
+    background: var(--card-bg);
+    color: var(--text-color-dark);
+    min-width: 180px;
+    cursor: pointer;
+}
+
+.client-dropdown:focus-visible,
+.date-filter:focus-visible,
+.refresh-btn:focus-visible {
+    outline: 2px solid var(--secondary-color);
+    outline-offset: 2px;
+}
+
+/* -------------------------------------------
+   Date Filter
+------------------------------------------- */
+.date-filter {
+    padding: 6px 12px;
+    border: 1px solid var(--line-color);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-family);
+    color: var(--text-color-dark);
+    background: var(--card-bg);
+    cursor: pointer;
+}
+
+/* -------------------------------------------
+   Refresh Button
+------------------------------------------- */
+.refresh-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: 8px 14px;
+    background: var(--secondary-color);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: var(--transition-normal);
+    box-shadow: var(--shadow-sm);
+}
+
+.refresh-btn:hover {
+    background: #357abd;
+    box-shadow: var(--shadow-md);
+}
+
+.refresh-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* -------------------------------------------
+   User Info (Avatar & Name)
+------------------------------------------- */
 .user-info {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-left: 15px;
-    padding-left: 15px;
+    gap: var(--space-md);
     border-left: 1px solid var(--line-color);
+    padding-left: var(--space-md);
 }
 
 .user-avatar {
@@ -60,46 +148,52 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 600;
-    color: white;
+    color: #fff;
+    font-weight: var(--font-weight-bold);
 }
 
-.date-filter {
-    padding: 8px 15px;
-    border: 1px solid var(--line-color);
-    border-radius: 6px;
-    font-family: var(--font-family);
-    font-size: 0.9rem;
+.user-info span {
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-color-medium);
 }
 
-.refresh-btn {
-    background: var(--secondary-color);
-    color: white;
-    border: none;
-    padding: 10px 15px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 600;
-    transition: background 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.user-info small {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-color-light);
 }
 
-.refresh-btn:hover {
-    background: #357abd;
-}
+/* -------------------------------------------
+   Responsive
+------------------------------------------- */
+@media (max-width: 768px) {
+    .content-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-md);
+        padding: var(--space-md) var(--space-lg);
+    }
 
-.refresh-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
+    .header-title {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 
-.refresh-btn.loading {
-    pointer-events: none;
-}
+    .header-title h1 {
+        font-size: 1.5rem;
+    }
 
-.refresh-btn i {
-    font-size: 0.9rem;
+    .header-controls {
+        width: 100%;
+        justify-content: space-between;
+        gap: var(--space-md);
+    }
+
+    .user-info {
+        border-left: none;
+        border-top: 1px solid var(--line-color);
+        padding-left: 0;
+        padding-top: var(--space-sm);
+        width: 100%;
+    }
 }

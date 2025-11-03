@@ -2,6 +2,7 @@
 /**
  * Enhanced CPD_Database class with AI Intelligence support
  * Phase 2.5: Added wp_rtr_prospects table for email generation
+ * Iteration 6: Added visitor scoring columns for RTR scoring system
  *
  * @package CPD_Dashboard
  */
@@ -198,109 +199,94 @@ class CPD_Database {
 
     /**
      * Handle database migrations for existing installations
-     * Supports migrations from v1.0.0 through v2.0.0
+     * Supports migrations from v1.0.0 through v2.1.0
      */
     public function migrate_database() {
         $current_version = get_option('cpd_database_version', '1.0.0');
         
+        error_log("CPD Database: Starting migration from version {$current_version}");
+        
         // Migration for AI Intelligence features (1.0.0 -> 1.1.0)
         if (version_compare($current_version, '1.1.0', '<')) {
+            error_log('CPD: Running migration to v1.1.0 (AI Intelligence)');
             $this->migrate_to_1_1_0();
             update_option('cpd_database_version', '1.1.0');
             $current_version = '1.1.0';
         }
-
-        // Migration for Hot List features (1.1.0 -> 1.2.0)
+        
+        // Migration for Hot List settings (1.1.0 -> 1.2.0)
         if (version_compare($current_version, '1.2.0', '<')) {
+            error_log('CPD: Running migration to v1.2.0 (Hot List)');
             $this->migrate_to_1_2_0();
             update_option('cpd_database_version', '1.2.0');
             $current_version = '1.2.0';
         }
         
-        // Migration to v2.0.0 (Premium features)
+        // Migration for DirectReach v2 Premium (1.2.0 -> 2.0.0)
         if (version_compare($current_version, '2.0.0', '<')) {
-            error_log('CPD: Starting migration to v2.0.0');
-            
-            if ($this->migrate_to_2_0_0()) {
-                update_option('cpd_database_version', '2.0.0');
-                error_log('CPD: Successfully migrated to v2.0.0');
-            } else {
-                error_log('CPD: Migration to v2.0.0 FAILED');
-                return false;
-            }
+            error_log('CPD: Running migration to v2.0.0 (DirectReach Premium)');
+            $this->migrate_to_2_0_0();
+            update_option('cpd_database_version', '2.0.0');
+            $current_version = '2.0.0';
         }
         
-        return true;
+        // NEW: Migration for RTR Scoring System (2.0.0 -> 2.1.0)
+        if (version_compare($current_version, '2.1.0', '<')) {
+            error_log('CPD: Running migration to v2.1.0 (RTR Scoring System - Iteration 6)');
+            $this->migrate_to_2_1_0();
+            update_option('cpd_database_version', '2.1.0');
+            $current_version = '2.1.0';
+        }
+        
+        error_log("CPD Database: Migration completed. Current version: {$current_version}");
     }
-    
+
     /**
-     * Migration to add AI Intelligence features to existing installations
+     * Migration to v1.1.0: Add AI Intelligence fields
      */
     private function migrate_to_1_1_0() {
-        $table_name_clients = $this->wpdb->prefix . 'cpd_clients';
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cpd_clients';
         
-        // Check if AI intelligence columns already exist
-        $ai_enabled_column_exists = $this->column_exists( $table_name_clients, 'ai_intelligence_enabled' );
+        $columns_to_add = array(
+            array(
+                'name' => 'ai_intelligence_enabled',
+                'definition' => 'tinyint(1) DEFAULT 0 NOT NULL'
+            ),
+            array(
+                'name' => 'client_context_info',
+                'definition' => 'text NULL'
+            ),
+            array(
+                'name' => 'ai_settings_updated_at',
+                'definition' => 'timestamp NULL'
+            ),
+            array(
+                'name' => 'ai_settings_updated_by',
+                'definition' => 'bigint(20) NULL'
+            )
+        );
         
-        if ( ! $ai_enabled_column_exists ) {
-            // Add AI Intelligence columns to clients table
-            $sql_add_columns = "
-                ALTER TABLE $table_name_clients 
-                ADD COLUMN ai_intelligence_enabled tinyint(1) DEFAULT 0 NOT NULL,
-                ADD COLUMN client_context_info text NULL,
-                ADD COLUMN ai_settings_updated_at timestamp NULL,
-                ADD COLUMN ai_settings_updated_by bigint(20) NULL,
-                ADD INDEX idx_ai_enabled (ai_intelligence_enabled),
-                ADD INDEX idx_ai_settings_updated (ai_settings_updated_at)
-            ";
-            
-            $this->wpdb->query( $sql_add_columns );
-            
-            if ( $this->wpdb->last_error ) {
-                error_log( 'CPD Database Migration Error: ' . $this->wpdb->last_error );
-            } else {
-                error_log( 'CPD Database: Added AI intelligence columns to clients table' );
+        foreach ($columns_to_add as $column) {
+            if (!$this->column_exists($table_name, $column['name'])) {
+                $sql = "ALTER TABLE {$table_name} ADD COLUMN {$column['name']} {$column['definition']}";
+                $wpdb->query($sql);
+                error_log("CPD: Added column {$column['name']} to {$table_name}");
             }
         }
-
-        // Create the visitor intelligence table if it doesn't exist
-        $table_name_intelligence = $this->wpdb->prefix . 'cpd_visitor_intelligence';
         
-        if ( $this->wpdb->get_var( "SHOW TABLES LIKE '$table_name_intelligence'" ) != $table_name_intelligence ) {
-            $sql_intelligence = "CREATE TABLE $table_name_intelligence (
-                id bigint(20) NOT NULL AUTO_INCREMENT,
-                visitor_id mediumint(9) NOT NULL,
-                client_id mediumint(9) NOT NULL,
-                user_id bigint(20) NOT NULL,
-                request_data longtext NOT NULL,
-                response_data longtext NULL,
-                client_context text NULL,
-                status enum('pending', 'processing', 'completed', 'failed') DEFAULT 'pending' NOT NULL,
-                api_request_id varchar(255) NULL,
-                error_message text NULL,
-                processing_time int(11) NULL,
-                created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                updated_at timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
-                PRIMARY KEY (id),
-                INDEX idx_visitor_client (visitor_id, client_id),
-                INDEX idx_status (status),
-                INDEX idx_created_at (created_at),
-                INDEX idx_api_request (api_request_id)
-            ) $this->charset_collate;";
-            
-            require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
-            dbDelta( $sql_intelligence );
-            
-            if ( $this->wpdb->last_error ) {
-                error_log( 'CPD Database Migration Error creating intelligence table: ' . $this->wpdb->last_error );
-            } else {
-                error_log( 'CPD Database: Created visitor intelligence table' );
-            }
-        }
+        // Add indexes
+        $wpdb->query("CREATE INDEX IF NOT EXISTS idx_ai_enabled ON {$table_name} (ai_intelligence_enabled)");
+        $wpdb->query("CREATE INDEX IF NOT EXISTS idx_ai_settings_updated ON {$table_name} (ai_settings_updated_at)");
+        
+        // Create intelligence table
+        $this->create_intelligence_table();
+        
+        error_log('CPD: Migration to v1.1.0 completed');
     }
 
     /**
-     * Migration to add Hot List features
+     * Migration to v1.2.0: Add Hot List settings
      */
     private function migrate_to_1_2_0() {
         if (!class_exists('CPD_Hot_List_Database')) {
@@ -308,277 +294,225 @@ class CPD_Database {
         }
         
         $hot_list_db = new CPD_Hot_List_Database();
+        $hot_list_db->create_table();
         
-        if (!$hot_list_db->table_exists()) {
-            $hot_list_db->create_table();
-        }
+        error_log('CPD: Migration to v1.2.0 completed (Hot List table created)');
     }
 
     /**
-     * V2: Add premium fields to wp_cpd_clients and create all v2 tables
+     * Migration to v2.0.0: DirectReach Premium features
      */
     private function migrate_to_2_0_0() {
         global $wpdb;
         $table_name = $wpdb->prefix . 'cpd_clients';
         
-        try {
-            // Check if columns already exist
-            $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table_name}");
-            $existing_columns = array_column($columns, 'Field');
-            
-            // Add subscription_tier column
-            if (!in_array('subscription_tier', $existing_columns)) {
-                $wpdb->query(
-                    "ALTER TABLE {$table_name} 
-                    ADD COLUMN subscription_tier ENUM('basic', 'premium') DEFAULT 'basic' 
-                    AFTER ai_settings_updated_by"
-                );
-                error_log('CPD: Added subscription_tier column');
+        error_log('CPD: Starting v2.0.0 migration (DirectReach Premium)');
+        
+        // Add premium tier columns
+        $columns_to_add = array(
+            array(
+                'name' => 'subscription_tier',
+                'definition' => "ENUM('basic', 'premium') DEFAULT 'basic' NOT NULL"
+            ),
+            array(
+                'name' => 'rtr_enabled',
+                'definition' => 'TINYINT(1) DEFAULT 0 NOT NULL'
+            ),
+            array(
+                'name' => 'rtr_activated_at',
+                'definition' => 'DATETIME NULL'
+            ),
+            array(
+                'name' => 'subscription_expires_at',
+                'definition' => 'DATETIME NULL'
+            )
+        );
+        
+        foreach ($columns_to_add as $column) {
+            if (!$this->column_exists($table_name, $column['name'])) {
+                $sql = "ALTER TABLE {$table_name} ADD COLUMN {$column['name']} {$column['definition']}";
+                $result = $wpdb->query($sql);
+                
+                if ($result === false) {
+                    error_log("CPD: ERROR adding column {$column['name']}: " . $wpdb->last_error);
+                } else {
+                    error_log("CPD: Successfully added column {$column['name']}");
+                }
+            } else {
+                error_log("CPD: Column {$column['name']} already exists");
             }
+        }
+        
+        // Add indexes - Check before creating
+        if (!$this->index_exists($table_name, 'idx_subscription_tier')) {
+            $wpdb->query("CREATE INDEX idx_subscription_tier ON {$table_name} (subscription_tier)");
+        }
+
+        if (!$this->index_exists($table_name, 'idx_subscription_expires')) {
+            $wpdb->query("CREATE INDEX idx_subscription_expires ON {$table_name} (subscription_expires_at)");
+        }
+        
+        // Create all v2 tables
+        $this->create_all_v2_tables();
+        
+        error_log('CPD: Migration to v2.0.0 completed');
+    }
+
+    /**
+     * Check if an index exists on a table
+     */
+    private function index_exists($table_name, $index_name) {
+        $index = $this->wpdb->get_results(
+            $this->wpdb->prepare(
+                "SHOW INDEX FROM `{$table_name}` WHERE Key_name = %s",
+                $index_name
+            )
+        );
+        return !empty($index);
+    }    
+
+    /**
+     * NEW: Migration to v2.1.0: RTR Scoring System (Iteration 6)
+     * 
+     * Adds lead scoring columns to wp_cpd_visitors table to support
+     * the Reading the Room scoring system.
+     * 
+     * @since 2.1.0
+     */
+    private function migrate_to_2_1_0() {
+        error_log('CPD: Starting v2.1.0 migration (RTR Scoring System - Iteration 6)');
+        
+        $success = $this->add_visitor_scoring_columns();
+        
+        if ($success) {
+            error_log('CPD: Migration to v2.1.0 completed successfully');
+        } else {
+            error_log('CPD: Migration to v2.1.0 completed with warnings (check logs)');
+        }
+    }
+
+    /**
+     * NEW: Add scoring columns to visitors table (Iteration 6)
+     * 
+     * Adds lead_score, current_room, and score_calculated_at columns
+     * to support RTR scoring system. Safe to run multiple times.
+     * 
+     * @since 2.1.0
+     * @return bool Success status
+     */
+    public function add_visitor_scoring_columns() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'cpd_visitors';
+        
+        error_log('CPD: Checking for visitor scoring columns in ' . $table);
+        
+        // Check if columns already exist
+        $columns = $wpdb->get_results("SHOW COLUMNS FROM {$table}");
+        if ($columns === false) {
+            error_log('CPD: ERROR - Failed to query columns from ' . $table . ': ' . $wpdb->last_error);
+            return false;
+        }
+        
+        $column_names = wp_list_pluck($columns, 'Field');
+        
+        $needs_update = false;
+        $alter_statements = array();
+        
+        // Check each required column
+        if (!in_array('lead_score', $column_names)) {
+            $alter_statements[] = "ADD COLUMN lead_score INT DEFAULT 0 NOT NULL";
+            $needs_update = true;
+            error_log('CPD: Column lead_score needs to be added');
+        } else {
+            error_log('CPD: Column lead_score already exists');
+        }
+        
+        if (!in_array('current_room', $column_names)) {
+            $alter_statements[] = "ADD COLUMN current_room ENUM('none', 'problem', 'solution', 'offer') DEFAULT 'none' NOT NULL";
+            $needs_update = true;
+            error_log('CPD: Column current_room needs to be added');
+        } else {
+            error_log('CPD: Column current_room already exists');
+        }
+        
+        if (!in_array('score_calculated_at', $column_names)) {
+            $alter_statements[] = "ADD COLUMN score_calculated_at DATETIME NULL";
+            $needs_update = true;
+            error_log('CPD: Column score_calculated_at needs to be added');
+        } else {
+            error_log('CPD: Column score_calculated_at already exists');
+        }
+        
+        // Execute ALTER TABLE if needed
+        if ($needs_update) {
+            $sql = "ALTER TABLE {$table} " . implode(', ', $alter_statements);
+            error_log('CPD: Executing SQL: ' . $sql);
             
-            // Add rtr_enabled column
-            if (!in_array('rtr_enabled', $existing_columns)) {
-                $wpdb->query(
-                    "ALTER TABLE {$table_name} 
-                    ADD COLUMN rtr_enabled TINYINT(1) DEFAULT 0 
-                    AFTER subscription_tier"
-                );
-                error_log('CPD: Added rtr_enabled column');
-            }
+            $result = $wpdb->query($sql);
             
-            // Add rtr_activated_at column
-            if (!in_array('rtr_activated_at', $existing_columns)) {
-                $wpdb->query(
-                    "ALTER TABLE {$table_name} 
-                    ADD COLUMN rtr_activated_at DATETIME NULL 
-                    AFTER rtr_enabled"
-                );
-                error_log('CPD: Added rtr_activated_at column');
-            }
-            
-            // Add subscription_expires_at column
-            if (!in_array('subscription_expires_at', $existing_columns)) {
-                $wpdb->query(
-                    "ALTER TABLE {$table_name} 
-                    ADD COLUMN subscription_expires_at DATETIME NULL 
-                    AFTER rtr_activated_at"
-                );
-                error_log('CPD: Added subscription_expires_at column');
+            if ($result === false) {
+                error_log('CPD: ERROR - Failed to add scoring columns: ' . $wpdb->last_error);
+                return false;
             }
             
             // Add indexes
-            $this->add_premium_indexes($table_name);
+            error_log('CPD: Adding indexes for scoring columns');
             
-            // Create all v2 tables
-            $this->create_all_v2_tables();
+            $wpdb->query("CREATE INDEX idx_lead_score ON {$table} (lead_score)");
+            if ($wpdb->last_error) {
+                error_log('CPD: Warning - Index idx_lead_score may already exist or failed: ' . $wpdb->last_error);
+            }
             
-            return true;
+            $wpdb->query("CREATE INDEX idx_current_room ON {$table} (current_room)");
+            if ($wpdb->last_error) {
+                error_log('CPD: Warning - Index idx_current_room may already exist or failed: ' . $wpdb->last_error);
+            }
             
-        } catch (Exception $e) {
-            error_log('CPD Migration Error: ' . $e->getMessage());
-            return false;
-        }
-    }
-    
-    /**
-     * V2: Add indexes for premium fields
-     */
-    private function add_premium_indexes($table_name) {
-        global $wpdb;
-        
-        // Check if indexes exist
-        $indexes = $wpdb->get_results("SHOW INDEX FROM {$table_name}");
-        $existing_indexes = array_column($indexes, 'Key_name');
-        
-        // Add subscription_tier index
-        if (!in_array('idx_subscription_tier', $existing_indexes)) {
-            $wpdb->query(
-                "CREATE INDEX idx_subscription_tier 
-                ON {$table_name}(subscription_tier, rtr_enabled)"
-            );
-            error_log('CPD: Added idx_subscription_tier index');
-        }
-        
-        // Add subscription_expires index
-        if (!in_array('idx_subscription_expires', $existing_indexes)) {
-            $wpdb->query(
-                "CREATE INDEX idx_subscription_expires 
-                ON {$table_name}(subscription_expires_at)"
-            );
-            error_log('CPD: Added idx_subscription_expires index');
-        }
-    }
-    
-    /**
-     * V2: Create wp_cpd_visitor_campaigns table
-     */
-    public function create_visitor_campaigns_table() {
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'cpd_visitor_campaigns';
-        $charset_collate = $wpdb->get_charset_collate();
-        
-        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
-            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            visitor_id mediumint(9) NOT NULL,
-            campaign_id VARCHAR(255) NOT NULL,
-            account_id VARCHAR(255) NOT NULL,
-            
-            -- Engagement Tracking
-            first_visit_at DATETIME NOT NULL,
-            last_visit_at DATETIME NOT NULL,
-            total_page_views INT DEFAULT 0,
-            unique_pages_count INT DEFAULT 0,
-            page_urls TEXT,
-            entry_page VARCHAR(2048),
-            most_recent_page VARCHAR(2048),
-            
-            -- UTM Tracking
-            utm_source VARCHAR(255),
-            utm_medium VARCHAR(255),
-            utm_campaign VARCHAR(255),
-            utm_content VARCHAR(255),
-            utm_term VARCHAR(255),
-            
-            -- RTR Prospect Fields
-            is_prospect TINYINT(1) DEFAULT 0,
-            current_room ENUM('none', 'problem', 'solution', 'offer') DEFAULT 'none',
-            room_entered_at DATETIME NULL,
-            days_in_room INT DEFAULT 0,
-            lead_score INT DEFAULT 0,
-            email_sequence_position INT DEFAULT 0,
-            last_email_sent DATETIME NULL,
-            next_email_due DATE NULL,
-            
-            -- Timestamps
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            
-            -- Constraints
-            UNIQUE KEY unique_visitor_campaign (visitor_id, campaign_id),
-            INDEX idx_visitor (visitor_id),
-            INDEX idx_campaign (campaign_id),
-            INDEX idx_account (account_id),
-            INDEX idx_prospect (is_prospect, current_room),
-            INDEX idx_email_due (next_email_due),
-            INDEX idx_last_visit (last_visit_at),
-            INDEX idx_lead_score (lead_score),
-            
-            FOREIGN KEY (visitor_id) 
-                REFERENCES {$wpdb->prefix}cpd_visitors(id) 
-                ON DELETE CASCADE
-        ) {$charset_collate};";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-        
-        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
-            error_log('CPD: Successfully created wp_cpd_visitor_campaigns table');
-            return true;
+            error_log('CPD: Successfully added scoring columns to visitors table');
         } else {
-            error_log('CPD: FAILED to create wp_cpd_visitor_campaigns table');
-            return false;
-        }
-    }
-    
-    /**
-     * V2: Create wp_rtr_email_tracking table (AI-enhanced)
-     */
-    public function create_email_tracking_table() {
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'rtr_email_tracking';
-        $charset_collate = $wpdb->get_charset_collate();
-        
-        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
-            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            prospect_id BIGINT UNSIGNED NOT NULL COMMENT 'FK to rtr_prospects',
-            email_number INT NOT NULL COMMENT 'Email sequence position (1-5)',
-            room_type ENUM('problem', 'solution', 'offer') NOT NULL,
-            
-            subject VARCHAR(500) NULL,
-            body_html LONGTEXT NULL,
-            body_text LONGTEXT NULL,
-            
-            generated_by_ai TINYINT(1) DEFAULT 0 COMMENT 'Was this generated by AI?',
-            template_used BIGINT UNSIGNED NULL COMMENT 'FK to rtr_email_templates',
-            ai_prompt_tokens INT NULL COMMENT 'Tokens used in prompt',
-            ai_completion_tokens INT NULL COMMENT 'Tokens used in completion',
-            url_included VARCHAR(500) NULL COMMENT 'Content link included in email',
-            
-            copied_at DATETIME NULL COMMENT 'When user copied to clipboard',
-            sent_at DATETIME NULL COMMENT 'When email was sent',
-            opened_at DATETIME NULL COMMENT 'When email was opened (tracking pixel)',
-            clicked_at DATETIME NULL COMMENT 'When link was clicked',
-            
-            status ENUM('pending', 'copied', 'sent', 'opened', 'clicked') DEFAULT 'pending',
-            tracking_token VARCHAR(255) NULL UNIQUE COMMENT 'Token for tracking pixel',
-            
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            
-            INDEX idx_prospect_id (prospect_id),
-            INDEX idx_email_number (email_number),
-            INDEX idx_room_type (room_type),
-            INDEX idx_status (status),
-            INDEX idx_tracking_token (tracking_token),
-            INDEX idx_template_used (template_used),
-            INDEX idx_sent_at (sent_at),
-            INDEX idx_opened_at (opened_at),
-            
-            FOREIGN KEY (prospect_id) 
-                REFERENCES {$wpdb->prefix}rtr_prospects(id) 
-                ON DELETE CASCADE
-        ) {$charset_collate};";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-        
-        // Verify table was created
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name;
-        
-        if ($table_exists) {
-            error_log('CPD: Successfully created/updated wp_rtr_email_tracking table');
-        } else {
-            error_log('CPD: FAILED to create wp_rtr_email_tracking table');
+            error_log('CPD: All scoring columns already exist - no migration needed');
         }
         
-        return $table_exists;
-    }
-    
-    /**
-     * V2: Create wp_rtr_room_progression table
-     */
-    public function create_room_progression_table() {
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'rtr_room_progression';
-        $charset_collate = $wpdb->get_charset_collate();
-        
-        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
-            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            visitor_id mediumint(9) NOT NULL,
-            campaign_id VARCHAR(255) NOT NULL,
-            from_room ENUM('none', 'problem', 'solution', 'offer'),
-            to_room ENUM('problem', 'solution', 'offer') NOT NULL,
-            score_at_transition INT,
-            reason VARCHAR(255),
-            transitioned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            
-            INDEX idx_visitor_campaign (visitor_id, campaign_id),
-            INDEX idx_transition_date (transitioned_at),
-            
-            FOREIGN KEY (visitor_id) 
-                REFERENCES {$wpdb->prefix}cpd_visitors(id) 
-                ON DELETE CASCADE
-        ) {$charset_collate};";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-        
-        error_log('CPD: Created wp_rtr_room_progression table');
         return true;
     }
-    
+
     /**
-     * V2: Create wp_dr_campaign_settings table
+     * Create visitor intelligence table
+     */
+    private function create_intelligence_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cpd_visitor_intelligence';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
+            id bigint(20) NOT NULL AUTO_INCREMENT,
+            visitor_id mediumint(9) NOT NULL,
+            client_id mediumint(9) NOT NULL,
+            user_id bigint(20) NOT NULL,
+            request_data longtext NOT NULL,
+            response_data longtext NULL,
+            client_context text NULL,
+            status enum('pending', 'processing', 'completed', 'failed') DEFAULT 'pending' NOT NULL,
+            api_request_id varchar(255) NULL,
+            error_message text NULL,
+            processing_time int(11) NULL,
+            created_at timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+            updated_at timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+            PRIMARY KEY (id),
+            INDEX idx_visitor_client (visitor_id, client_id),
+            INDEX idx_status (status),
+            INDEX idx_created_at (created_at),
+            INDEX idx_api_request (api_request_id)
+        ) $charset_collate;";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        error_log('CPD: Intelligence table checked/created');
+    }
+
+    /**
+     * V2: Create campaign settings table
      */
     public function create_campaign_settings_table() {
         global $wpdb;
@@ -596,73 +530,32 @@ class CPD_Database {
             end_date DATE NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            
             UNIQUE KEY unique_campaign (campaign_id),
             UNIQUE KEY unique_utm_per_client (client_id, utm_campaign),
             INDEX idx_utm (utm_campaign),
             INDEX idx_client (client_id),
-            
-            FOREIGN KEY (client_id) 
-                REFERENCES {$wpdb->prefix}cpd_clients(id) 
-                ON DELETE CASCADE
-        ) {$charset_collate};";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-        
-        error_log('CPD: Created wp_dr_campaign_settings table');
-        return true;
-    }
-    
-    /**
-     * V2.0: Create wp_rtr_email_templates table
-     * Prompt-based template system for AI email generation
-     */
-    public function create_email_templates_table() {
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'rtr_email_templates';
-        $charset_collate = $wpdb->get_charset_collate();
-        
-        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
-            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            campaign_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
-            room_type ENUM('problem', 'solution', 'offer') NOT NULL,
-            template_name VARCHAR(255) NOT NULL,
-            prompt_template LONGTEXT NOT NULL COMMENT 'JSON: 7-component prompt structure for AI generation',
-            template_order INT DEFAULT 0,
-            is_global TINYINT(1) DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            
-            INDEX idx_campaign (campaign_id),
-            INDEX idx_room_type (room_type),
-            INDEX idx_campaign_room (campaign_id, room_type),
-            INDEX idx_template_order (template_order),
-            INDEX idx_is_global (is_global),
-            INDEX idx_global_room (is_global, room_type),
-            
-            FOREIGN KEY (campaign_id) 
-                REFERENCES {$wpdb->prefix}dr_campaign_settings(id) 
-                ON DELETE CASCADE
+            FOREIGN KEY (client_id) REFERENCES {$wpdb->prefix}cpd_clients(id) ON DELETE CASCADE
         ) {$charset_collate};";
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
         
         if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
-            error_log('CPD: Successfully created wp_rtr_email_templates table (prompt-based AI system)');
+            error_log('CPD: Successfully created/verified wp_dr_campaign_settings table');
             return true;
         } else {
-            error_log('CPD: FAILED to create wp_rtr_email_templates table');
+            error_log('CPD: FAILED to create wp_dr_campaign_settings table');
             return false;
         }
     }
 
     /**
-     * Phase 2.5: Create wp_rtr_prospects table
-     * 
+     * Create wp_rtr_prospects table
+     *
      * This table stores RTR campaign prospects and tracks sent content URLs.
-     * Prospect population is handled in future phases (Phase 4: Hot List Auto-Activation)
+     * 
+     * @since 2.5.0
+     * @return bool Success
      */
     public function create_prospects_table() {
         global $wpdb;
@@ -680,25 +573,26 @@ class CPD_Database {
             lead_score INT DEFAULT 0,
             days_in_room INT DEFAULT 0,
             email_sequence_position INT DEFAULT 0,
-            urls_sent TEXT NULL COMMENT 'JSON array of sent content URLs',
+            email_sequence_state TEXT NULL DEFAULT '[]' COMMENT 'JSON array tracking state of each email in sequence: [{position:1,states:[\"sent\",\"opened\"]},{position:2,states:[]}]',
+            urls_sent TEXT NULL DEFAULT '[]' COMMENT 'JSON array of sent content URLs',
             last_email_sent DATETIME,
             next_email_due DATE,
             engagement_data TEXT COMMENT 'JSON object with recent page visits',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             archived_at DATETIME NULL,
-            
+            sales_handoff_at DATETIME NULL,
+            handoff_notes TEXT NULL,
             INDEX idx_campaign_room (campaign_id, current_room),
             INDEX idx_visitor (visitor_id),
             INDEX idx_lead_score (lead_score),
             INDEX idx_email_due (next_email_due),
             INDEX idx_archived (archived_at),
-            
-            FOREIGN KEY (campaign_id) 
-                REFERENCES {$wpdb->prefix}dr_campaign_settings(id) 
+            FOREIGN KEY (campaign_id)
+                REFERENCES {$wpdb->prefix}dr_campaign_settings(id)
                 ON DELETE CASCADE,
-            FOREIGN KEY (visitor_id) 
-                REFERENCES {$wpdb->prefix}cpd_visitors(id) 
+            FOREIGN KEY (visitor_id)
+                REFERENCES {$wpdb->prefix}cpd_visitors(id)
                 ON DELETE CASCADE
         ) {$charset_collate};";
         
@@ -706,7 +600,7 @@ class CPD_Database {
         dbDelta($sql);
         
         if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
-            error_log('CPD: Successfully created wp_rtr_prospects table');
+            error_log('CPD: Successfully created wp_rtr_prospects table with email_sequence_state column');
             return true;
         } else {
             error_log('CPD: FAILED to create wp_rtr_prospects table');
@@ -715,16 +609,203 @@ class CPD_Database {
     }
 
     /**
-     * Room Scoring System schema updates
+     * V2: Create visitor campaigns table (Phase 3)
      */
-    public function create_scoring_rules_tables() {
+    public function create_visitor_campaigns_table() {
         global $wpdb;
-        
+        $table_name = $wpdb->prefix . 'cpd_visitor_campaigns';
         $charset_collate = $wpdb->get_charset_collate();
         
-        // 1. Create global scoring rules table
-        $table_global_scoring_rules = $wpdb->prefix . 'rtr_global_scoring_rules';
-        $sql_global_scoring_rules = "CREATE TABLE IF NOT EXISTS {$table_global_scoring_rules} (
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            visitor_id mediumint(9) NOT NULL,
+            campaign_id BIGINT UNSIGNED NOT NULL,
+            entry_page VARCHAR(2048),
+            entry_referrer VARCHAR(2048),
+            utm_source VARCHAR(255),
+            utm_medium VARCHAR(255),
+            utm_campaign VARCHAR(255),
+            utm_term VARCHAR(255),
+            utm_content VARCHAR(255),
+            first_visit_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_visit_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            page_view_count INT DEFAULT 1,
+            is_prospect TINYINT(1) DEFAULT 0,
+            UNIQUE KEY unique_visitor_campaign (visitor_id, campaign_id),
+            INDEX idx_visitor (visitor_id),
+            INDEX idx_campaign (campaign_id),
+            INDEX idx_utm_campaign (utm_campaign),
+            INDEX idx_is_prospect (is_prospect),
+            FOREIGN KEY (visitor_id) 
+                REFERENCES {$wpdb->prefix}cpd_visitors(id) 
+                ON DELETE CASCADE,
+            FOREIGN KEY (campaign_id) 
+                REFERENCES {$wpdb->prefix}dr_campaign_settings(id) 
+                ON DELETE CASCADE
+        ) {$charset_collate};";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            error_log('CPD: Successfully created/verified wp_cpd_visitor_campaigns table');
+            return true;
+        } else {
+            error_log('CPD: FAILED to create wp_cpd_visitor_campaigns table');
+            return false;
+        }
+    }
+
+    /**
+     * V2: Create email tracking table
+     */
+    public function create_email_tracking_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_email_tracking';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            prospect_id BIGINT UNSIGNED NOT NULL,
+            email_number INT NOT NULL,
+            room_type ENUM('problem', 'solution', 'offer') NOT NULL,
+            subject VARCHAR(500),
+            body_html LONGTEXT,
+            body_text LONGTEXT,
+            generated_by_ai TINYINT(1) DEFAULT 0,
+            template_used BIGINT UNSIGNED NULL,
+            ai_prompt_tokens INT NULL,
+            ai_completion_tokens INT NULL,
+            url_included VARCHAR(500) NULL,
+            copied_at DATETIME NULL,
+            sent_at DATETIME,
+            opened_at DATETIME,
+            clicked_at DATETIME,
+            status ENUM('pending', 'copied', 'sent', 'opened', 'clicked') DEFAULT 'pending',
+            tracking_token VARCHAR(255) UNIQUE,
+            INDEX idx_prospect (prospect_id),
+            INDEX idx_status (status),
+            INDEX idx_tracking (tracking_token),
+            INDEX idx_template_used (template_used)
+        ) {$charset_collate};";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            error_log('CPD: Successfully created/verified wp_rtr_email_tracking table');
+            return true;
+        } else {
+            error_log('CPD: FAILED to create wp_rtr_email_tracking table');
+            return false;
+        }
+    }
+
+    /**
+     * V2: Create room progression table
+     */
+    public function create_room_progression_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_room_progression';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            visitor_id mediumint(9) NOT NULL,
+            campaign_id BIGINT UNSIGNED NOT NULL,
+            from_room ENUM('none', 'problem', 'solution', 'offer') NOT NULL,
+            to_room ENUM('problem', 'solution', 'offer', 'sales') NOT NULL,
+            reason VARCHAR(500),
+            transitioned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_visitor (visitor_id),
+            INDEX idx_campaign (campaign_id),
+            INDEX idx_transitioned (transitioned_at)
+        ) {$charset_collate};";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            error_log('CPD: Successfully created/verified wp_rtr_room_progression table');
+            return true;
+        } else {
+            error_log('CPD: FAILED to create wp_rtr_room_progression table');
+            return false;
+        }
+    }
+
+    /**
+     * V2: Create email templates table
+     */
+    public function create_email_templates_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_email_templates';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            campaign_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+            room_type ENUM('problem', 'solution', 'offer') NOT NULL,
+            template_name VARCHAR(255) NOT NULL,
+            subject VARCHAR(500) NOT NULL,
+            body_html LONGTEXT NOT NULL,
+            body_text LONGTEXT,
+            prompt_template LONGTEXT NULL COMMENT 'JSON: 7-component AI prompt structure',
+            template_order INT DEFAULT 0,
+            is_global TINYINT(1) DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_campaign (campaign_id),
+            INDEX idx_room_type (room_type),
+            INDEX idx_campaign_room (campaign_id, room_type),
+            INDEX idx_template_order (template_order),
+            INDEX idx_is_global (is_global),
+            FOREIGN KEY (campaign_id) 
+                REFERENCES {$wpdb->prefix}dr_campaign_settings(id) 
+                ON DELETE CASCADE
+        ) {$charset_collate};";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            error_log('CPD: Successfully created/verified wp_rtr_email_templates table');
+            return true;
+        } else {
+            error_log('CPD: FAILED to create wp_rtr_email_templates table');
+            return false;
+        }
+    }
+
+    /**
+     * V2: Create scoring rules tables
+     */
+    public function create_scoring_rules_tables() {
+        $success = true;
+        
+        $success = $success && $this->create_global_scoring_rules_table();
+        $success = $success && $this->create_client_scoring_rules_table();
+        $success = $success && $this->create_room_thresholds_table();
+        $success = $success && $this->create_campaign_target_pages_table();
+        
+        if ($success) {
+            // Initialize default values
+            $this->initialize_global_scoring_rules();
+            $this->initialize_global_room_thresholds();
+        }
+        
+        return $success;
+    }
+
+    /**
+     * Create global scoring rules table
+     */
+    private function create_global_scoring_rules_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_global_scoring_rules';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
             id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             room_type ENUM('problem', 'solution', 'offer') NOT NULL,
             rules_config LONGTEXT NOT NULL COMMENT 'JSON: all rules for this room',
@@ -733,9 +814,86 @@ class CPD_Database {
             UNIQUE KEY unique_room (room_type)
         ) {$charset_collate};";
         
-        // 2. Create client scoring rules table
-        $table_client_scoring_rules = $wpdb->prefix . 'rtr_client_scoring_rules';
-        $sql_client_scoring_rules = "CREATE TABLE IF NOT EXISTS {$table_client_scoring_rules} (
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            error_log('CPD: Successfully created/verified wp_rtr_global_scoring_rules table');
+            return true;
+        } else {
+            error_log('CPD: FAILED to create wp_rtr_global_scoring_rules table');
+            return false;
+        }
+    }
+
+    /**
+     * Create visitor activity tracking table
+     * 
+     * @since 2.1.0
+     * @return bool
+     */
+    public function create_visitor_activity_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cpd_visitor_activity';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            visitor_id mediumint(9) NOT NULL,
+            activity_type ENUM('page_visit', 'email_open', 'email_click') NOT NULL,
+            page_url VARCHAR(2048) NULL,
+            utm_source VARCHAR(255) NULL,
+            utm_medium VARCHAR(255) NULL,
+            utm_campaign VARCHAR(255) NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_visitor (visitor_id),
+            INDEX idx_activity_type (activity_type),
+            INDEX idx_visitor_activity (visitor_id, activity_type),
+            INDEX idx_utm_source (utm_source),
+            FOREIGN KEY (visitor_id) 
+                REFERENCES {$wpdb->prefix}cpd_visitors(id) 
+                ON DELETE CASCADE
+        ) {$charset_collate};";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        return ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name);
+    }    
+
+    public function create_rtr_jobs_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_jobs';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            type VARCHAR(100) NOT NULL,
+            status VARCHAR(50) NOT NULL DEFAULT 'pending',
+            params LONGTEXT NULL,
+            result LONGTEXT NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY status (status)
+            ) {$this->charset_collate};
+            ";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        return ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name);
+    }  
+
+    /**
+     * Create client scoring rules table
+     */
+    private function create_client_scoring_rules_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_client_scoring_rules';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
             id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             client_id mediumint(9) NOT NULL,
             room_type ENUM('problem', 'solution', 'offer') NOT NULL,
@@ -744,12 +902,32 @@ class CPD_Database {
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY unique_client_room (client_id, room_type),
             INDEX idx_client (client_id),
-            FOREIGN KEY (client_id) REFERENCES {$wpdb->prefix}cpd_clients(id) ON DELETE CASCADE
+            FOREIGN KEY (client_id) 
+                REFERENCES {$wpdb->prefix}cpd_clients(id) 
+                ON DELETE CASCADE
         ) {$charset_collate};";
         
-        // 3. Create room thresholds table
-        $table_room_thresholds = $wpdb->prefix . 'rtr_room_thresholds';
-        $sql_room_thresholds = "CREATE TABLE IF NOT EXISTS {$table_room_thresholds} (
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            error_log('CPD: Successfully created/verified wp_rtr_client_scoring_rules table');
+            return true;
+        } else {
+            error_log('CPD: FAILED to create wp_rtr_client_scoring_rules table');
+            return false;
+        }
+    }
+
+    /**
+     * Create room thresholds table
+     */
+    private function create_room_thresholds_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_room_thresholds';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
             id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             client_id mediumint(9) NULL DEFAULT NULL COMMENT 'NULL = global default',
             problem_max INT DEFAULT 40,
@@ -761,9 +939,27 @@ class CPD_Database {
             INDEX idx_client (client_id)
         ) {$charset_collate};";
         
-        // 4. Create campaign target pages table
-        $table_campaign_target_pages = $wpdb->prefix . 'rtr_campaign_target_pages';
-        $sql_campaign_target_pages = "CREATE TABLE IF NOT EXISTS {$table_campaign_target_pages} (
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            error_log('CPD: Successfully created/verified wp_rtr_room_thresholds table');
+            return true;
+        } else {
+            error_log('CPD: FAILED to create wp_rtr_room_thresholds table');
+            return false;
+        }
+    }
+
+    /**
+     * Create campaign target pages table
+     */
+    private function create_campaign_target_pages_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_campaign_target_pages';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
             id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             campaign_id BIGINT UNSIGNED NOT NULL,
             page_url VARCHAR(2048) NOT NULL,
@@ -779,93 +975,52 @@ class CPD_Database {
                 ON DELETE CASCADE
         ) {$charset_collate};";
         
-        // Execute table creation
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql_global_scoring_rules);
-        dbDelta($sql_client_scoring_rules);
-        dbDelta($sql_room_thresholds);
-        dbDelta($sql_campaign_target_pages);
+        dbDelta($sql);
         
-        // 5. Modify wp_cpd_visitors table - add scoring columns
-        $table_visitors = $wpdb->prefix . 'cpd_visitors';
-        
-        // Check if columns exist before adding
-        $lead_score_exists = $wpdb->get_results(
-            "SHOW COLUMNS FROM {$table_visitors} LIKE 'lead_score'"
-        );
-        
-        if (empty($lead_score_exists)) {
-            $wpdb->query("ALTER TABLE {$table_visitors} 
-                ADD COLUMN lead_score INT DEFAULT 0 AFTER last_seen_at");
-            $wpdb->query("ALTER TABLE {$table_visitors} 
-                ADD INDEX idx_lead_score (lead_score)");
+        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
+            error_log('CPD: Successfully created/verified wp_rtr_campaign_target_pages table');
+            return true;
+        } else {
+            error_log('CPD: FAILED to create wp_rtr_campaign_target_pages table');
+            return false;
         }
-        
-        $current_room_exists = $wpdb->get_results(
-            "SHOW COLUMNS FROM {$table_visitors} LIKE 'current_room'"
-        );
-        
-        if (empty($current_room_exists)) {
-            $wpdb->query("ALTER TABLE {$table_visitors} 
-                ADD COLUMN current_room ENUM('none', 'problem', 'solution', 'offer') DEFAULT 'none' 
-                AFTER lead_score");
-            $wpdb->query("ALTER TABLE {$table_visitors} 
-                ADD INDEX idx_current_room (current_room)");
-        }
-        
-        $score_calculated_exists = $wpdb->get_results(
-            "SHOW COLUMNS FROM {$table_visitors} LIKE 'score_calculated_at'"
-        );
-        
-        if (empty($score_calculated_exists)) {
-            $wpdb->query("ALTER TABLE {$table_visitors} 
-                ADD COLUMN score_calculated_at DATETIME NULL AFTER current_room");
-        }
-        
-        // 6. Initialize global defaults
-        $this->initialize_global_scoring_defaults();
-        $this->initialize_global_room_thresholds();
-        
-        // Log the upgrade
-        error_log('DirectReach: Database upgraded to v2.1.0 (Room Scoring System)');
     }
 
     /**
-     * Initialize global scoring rule defaults
+     * Initialize global scoring rules with defaults
      */
-    private function initialize_global_scoring_defaults() {
+    private function initialize_global_scoring_rules() {
         global $wpdb;
         
         $table = $wpdb->prefix . 'rtr_global_scoring_rules';
         
-        // Check if defaults already exist
+        // Check if already initialized
         $existing = $wpdb->get_var("SELECT COUNT(*) FROM {$table}");
+        
         if ($existing > 0) {
             return; // Already initialized
         }
         
-        // Problem Room Default Rules
+        // Problem Room default rules
         $problem_rules = json_encode([
             'revenue' => [
-                'enabled' => false,
+                'enabled' => true,
                 'points' => 10,
-                'values' => ['$1M - $5M', '$5M - $10M', '$10M - $50M', '$50M - $100M', '$100M+']
+                'values' => []
             ],
             'company_size' => [
                 'enabled' => true,
                 'points' => 10,
-                'values' => ['11-50', '51-200', '201-500', '501-1000', '1000+']
+                'values' => []
             ],
             'industry_alignment' => [
                 'enabled' => true,
                 'points' => 15,
-                'values' => [
-                    'Information Technology|Computer Software',
-                    'Marketing & Advertising|Marketing & Advertising'
-                ]
+                'values' => []
             ],
             'target_states' => [
-                'enabled' => false,
+                'enabled' => true,
                 'points' => 5,
                 'values' => []
             ],
@@ -884,9 +1039,9 @@ class CPD_Database {
                 'points' => 5,
                 'target_roles' => [
                     'decision_makers' => ['CEO', 'President', 'Director', 'VP', 'Chief'],
-                    'technical' => ['Engineer', 'Developer', 'CTO', 'Architect'],
-                    'marketing' => ['Marketing', 'CMO', 'Brand', 'Content'],
-                    'sales' => ['Sales', 'Business Development', 'Account']
+                    'technical' => ['Engineer', 'Developer', 'CTO'],
+                    'marketing' => ['Marketing', 'CMO', 'Brand'],
+                    'sales' => ['Sales', 'Business Development']
                 ],
                 'match_type' => 'contains'
             ],
@@ -896,7 +1051,7 @@ class CPD_Database {
             ]
         ]);
         
-        // Solution Room Default Rules
+        // Solution Room default rules
         $solution_rules = json_encode([
             'email_open' => [
                 'enabled' => true,
@@ -919,22 +1074,22 @@ class CPD_Database {
             'key_page_visit' => [
                 'enabled' => true,
                 'points' => 10,
-                'key_pages' => ['/pricing', '/demo', '/contact', '/products']
+                'key_pages' => ['/pricing', '/demo', '/contact']
             ],
             'ad_engagement' => [
                 'enabled' => true,
                 'points' => 5,
-                'utm_sources' => ['google', 'linkedin', 'facebook', 'twitter']
+                'utm_sources' => ['google', 'linkedin', 'facebook']
             ]
         ]);
         
-        // Offer Room Default Rules
+        // Offer Room default rules
         $offer_rules = json_encode([
             'demo_request' => [
                 'enabled' => true,
                 'points' => 25,
                 'detection_method' => 'url_pattern',
-                'patterns' => ['/demo/requested', '/demo/confirmation', '/schedule-demo']
+                'patterns' => ['/demo/requested', '/demo/confirmation']
             ],
             'contact_form' => [
                 'enabled' => true,
@@ -945,7 +1100,7 @@ class CPD_Database {
             'pricing_page' => [
                 'enabled' => true,
                 'points' => 15,
-                'page_urls' => ['/pricing', '/plans', '/buy']
+                'page_urls' => ['/pricing', '/plans']
             ],
             'pricing_question' => [
                 'enabled' => true,
@@ -1021,12 +1176,14 @@ class CPD_Database {
         $success = true;
         
         $success = $success && $this->create_campaign_settings_table();
-        $success = $success && $this->create_prospects_table(); // Phase 2.5: NEW
+        $success = $success && $this->create_prospects_table();
         $success = $success && $this->create_visitor_campaigns_table();
         $success = $success && $this->create_email_tracking_table();
         $success = $success && $this->create_room_progression_table();
         $success = $success && $this->create_email_templates_table();
         $success = $success && $this->create_scoring_rules_tables();
+        $success = $success && $this->create_visitor_activity_table();
+        $success = $success && $this->create_rtr_jobs_table();
         
         if ($success) {
             error_log('CPD: All v2 tables created successfully (including wp_rtr_prospects)');

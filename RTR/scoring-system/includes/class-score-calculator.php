@@ -164,55 +164,90 @@ class RTR_Score_Calculator {
      */
     private function calculate_problem_score($visitor, $rules) {
         $score = 0;
+        $details = [];
         
         // Revenue
-        if (isset($rules['revenue']['enabled']) && $rules['revenue']['enabled']) {
-            if ($this->matches_value($visitor->revenue, $rules['revenue']['values'])) {
-                $score += (int)$rules['revenue']['points'];
+        if ($rules['revenue']['enabled'] && !empty($rules['revenue']['values'])) {
+            $visitor_revenue = isset($visitor->revenue) ? $visitor->revenue : '';
+            if (!empty($visitor_revenue) && in_array($visitor_revenue, $rules['revenue']['values'])) {
+                $score += intval($rules['revenue']['points']);
+                $details['revenue'] = intval($rules['revenue']['points']);
+            } else {
+                $details['revenue'] = 0;
             }
         }
         
         // Company Size
-        if (isset($rules['company_size']['enabled']) && $rules['company_size']['enabled']) {
-            if ($this->matches_value($visitor->company_size, $rules['company_size']['values'])) {
-                $score += (int)$rules['company_size']['points'];
+        if ($rules['company_size']['enabled'] && !empty($rules['company_size']['values'])) {
+            $visitor_size = isset($visitor->company_size) ? $visitor->company_size : '';
+            if (!empty($visitor_size) && in_array($visitor_size, $rules['company_size']['values'])) {
+                $score += intval($rules['company_size']['points']);
+                $details['company_size'] = intval($rules['company_size']['points']);
+            } else {
+                $details['company_size'] = 0;
             }
         }
         
         // Industry Alignment
-        if (isset($rules['industry_alignment']['enabled']) && $rules['industry_alignment']['enabled']) {
-            if ($this->matches_industry($visitor->industry, $rules['industry_alignment']['values'])) {
-                $score += (int)$rules['industry_alignment']['points'];
+        if ($rules['industry_alignment']['enabled'] && !empty($rules['industry_alignment']['values'])) {
+            $visitor_industry = isset($visitor->industry) ? $visitor->industry : '';
+            if (!empty($visitor_industry) && in_array($visitor_industry, $rules['industry_alignment']['values'])) {
+                $score += intval($rules['industry_alignment']['points']);
+                $details['industry_alignment'] = intval($rules['industry_alignment']['points']);
+            } else {
+                $details['industry_alignment'] = 0;
             }
         }
         
         // Target States
-        if (isset($rules['target_states']['enabled']) && $rules['target_states']['enabled']) {
-            if ($this->matches_value($visitor->state, $rules['target_states']['values'])) {
-                $score += (int)$rules['target_states']['points'];
+        if ($rules['target_states']['enabled'] && !empty($rules['target_states']['values'])) {
+            $visitor_state = isset($visitor->state) ? $visitor->state : '';
+            if (!empty($visitor_state) && in_array($visitor_state, $rules['target_states']['values'])) {
+                $score += intval($rules['target_states']['points']);
+                $details['target_states'] = intval($rules['target_states']['points']);
+            } else {
+                $details['target_states'] = 0;
             }
+        }
+        
+        // Visited Target Pages
+        if ($rules['visited_target_pages']['enabled']) {
+            // TODO: Implement when target pages feature is ready
+            $details['visited_target_pages'] = 0;
         }
         
         // Multiple Visits
-        if (isset($rules['multiple_visits']['enabled']) && $rules['multiple_visits']['enabled']) {
+        if ($rules['multiple_visits']['enabled']) {
             $visit_count = $this->get_visitor_visit_count($visitor->id);
-            $minimum_visits = (int)$rules['multiple_visits']['minimum_visits'];
-            if ($visit_count >= $minimum_visits) {
-                $score += (int)$rules['multiple_visits']['points'];
+            $min_visits = intval($rules['multiple_visits']['minimum_visits']);
+            if ($visit_count >= $min_visits) {
+                $score += intval($rules['multiple_visits']['points']);
+                $details['multiple_visits'] = intval($rules['multiple_visits']['points']);
+            } else {
+                $details['multiple_visits'] = 0;
             }
         }
         
-        // Role/Job Title Match
-        if (isset($rules['role_match']['enabled']) && $rules['role_match']['enabled']) {
-            if ($this->matches_role($visitor->job_title, $rules['role_match'])) {
-                $score += (int)$rules['role_match']['points'];
+        // Role Match
+        if ($rules['role_match']['enabled']) {
+            $visitor_title = isset($visitor->job_title) ? strtolower($visitor->job_title) : '';
+            if (!empty($visitor_title) && isset($rules['role_match']['target_roles'])) {
+                foreach ($rules['role_match']['target_roles'] as $role_group) {
+                    foreach ($role_group as $keyword) {
+                        if (stripos($visitor_title, strtolower($keyword)) !== false) {
+                            $score += intval($rules['role_match']['points']);
+                            $details['role_match'] = intval($rules['role_match']['points']);
+                            break 2;
+                        }
+                    }
+                }
+            }
+            if (!isset($details['role_match'])) {
+                $details['role_match'] = 0;
             }
         }
         
-        // Visited Target Pages (future implementation)
-        // This requires wp_rtr_campaign_target_pages table (deferred to Iteration 7)
-        
-        return $score;
+        return ['score' => $score, 'details' => $details];
     }
     
     // ===========================================

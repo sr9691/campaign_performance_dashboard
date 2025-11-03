@@ -2,7 +2,8 @@
 /**
  * Email Tracking Manager
  *
- * Manages email tracking records in the database.
+ * Manages email tracking records for the RTR dashboard.
+ * Handles creation, updates, and queries for email tracking data.
  *
  * @package DirectReach
  * @subpackage RTR
@@ -23,7 +24,7 @@ class CPD_Email_Tracking_Manager {
     private $wpdb;
 
     /**
-     * Table name
+     * Tracking table name
      *
      * @var string
      */
@@ -41,332 +42,377 @@ class CPD_Email_Tracking_Manager {
     /**
      * Create tracking record
      *
-     * @param array $data Tracking data
-     * @return int|WP_Error Tracking ID or error
+     * UPDATED: Now accepts an array of data instead of positional parameters.
+     * This matches the new calling pattern from Email_Generation_Controller.
+     *
+     * @param array $data {
+     *     Tracking data array
+     *
+     *     @type int    $prospect_id           Prospect ID (required)
+     *     @type string $room_type             Room type: problem, solution, offer (required)
+     *     @type int    $email_number          Email sequence number (required)
+     *     @type string $subject               Email subject (required)
+     *     @type string $body_html             Email body HTML (required)
+     *     @type string $body_text             Email body plain text (required)
+     *     @type string $tracking_token        Unique tracking token (required)
+     *     @type string $status                Status: generated, copied, sent, opened (required)
+     *     @type int    $generated_by_ai       1 if AI generated, 0 otherwise (default: 0)
+     *     @type string $url_included          URL included in email (optional)
+     *     @type int    $template_used         Template ID used (optional)
+     *     @type int    $ai_prompt_tokens      Number of prompt tokens used (optional)
+     *     @type int    $ai_completion_tokens  Number of completion tokens used (optional)
+     * }
+     * @return int|false Insert ID on success, false on failure
      */
     public function create_tracking_record( $data ) {
         // Validate required fields
-        $required = array( 'prospect_id', 'email_number', 'room_type' );
-        foreach ( $required as $field ) {
-            if ( ! isset( $data[ $field ] ) ) {
-                return new WP_Error(
-                    'missing_field',
-                    sprintf( 'Missing required field: %s', $field )
-                );
+        $required_fields = array(
+            'prospect_id',
+            'visitor_id',
+            'room_type',
+            'email_number',
+            'subject',
+            'body_html',
+            'body_text',
+            'tracking_token',
+            'status',
+        );
+
+        foreach ( $required_fields as $field ) {
+            if ( ! isset( $data[ $field ] ) || $data[ $field ] === '' ) {
+                error_log( sprintf(
+                    '[DirectReach] Tracking creation failed: Missing required field "%s"',
+                    $field
+                ) );
+                return false;
             }
         }
 
-        // Prepare data for insertion
+        // Validate room_type
+        if ( ! in_array( $data['room_type'], array( 'problem', 'solution', 'offer' ), true ) ) {
+            error_log( sprintf(
+                '[DirectReach] Tracking creation failed: Invalid room_type "%s"',
+                $data['room_type']
+            ) );
+            return false;
+        }
+
+        // Prepare insert data with defaults
         $insert_data = array(
-            'prospect_id' => (int) $data['prospect_id'],
-            'email_number' => (int) $data['email_number'],
-            'room_type' => sanitize_text_field( $data['room_type'] ),
-            'subject' => isset( $data['subject'] ) ? sanitize_text_field( $data['subject'] ) : null,
-            'body_html' => isset( $data['body_html'] ) ? wp_kses_post( $data['body_html'] ) : null,
-            'body_text' => isset( $data['body_text'] ) ? sanitize_textarea_field( $data['body_text'] ) : null,
-            'generated_by_ai' => isset( $data['generated_by_ai'] ) ? (int) $data['generated_by_ai'] : 0,
-            'template_used' => isset( $data['template_used'] ) ? (int) $data['template_used'] : null,
-            'ai_prompt_tokens' => isset( $data['ai_prompt_tokens'] ) ? (int) $data['ai_prompt_tokens'] : null,
-            'ai_completion_tokens' => isset( $data['ai_completion_tokens'] ) ? (int) $data['ai_completion_tokens'] : null,
-            'url_included' => isset( $data['url_included'] ) ? esc_url_raw( $data['url_included'] ) : null,
-            'tracking_token' => isset( $data['tracking_token'] ) ? sanitize_text_field( $data['tracking_token'] ) : null,
-            'status' => isset( $data['status'] ) ? sanitize_text_field( $data['status'] ) : 'pending',
-            'sent_at' => current_time( 'mysql' ),
+            'prospect_id'           => absint( $data['prospect_id'] ),
+            'visitor_id'            => absint( $data['visitor_id'] ),
+            'room_type'             => sanitize_text_field( $data['room_type'] ),
+            'email_number'          => absint( $data['email_number'] ),
+            'subject'               => sanitize_text_field( $data['subject'] ),
+            'body_html'             => wp_kses_post( $data['body_html'] ),
+            'body_text'             => sanitize_textarea_field( $data['body_text'] ),
+            'tracking_token'        => sanitize_text_field( $data['tracking_token'] ),
+            'status'                => sanitize_text_field( $data['status'] ),
+            'generated_by_ai'       => isset( $data['generated_by_ai'] ) ? absint( $data['generated_by_ai'] ) : 0,
+            'url_included'          => isset( $data['url_included'] ) ? esc_url_raw( $data['url_included'] ) : null,
+            'template_used'         => isset( $data['template_used'] ) ? absint( $data['template_used'] ) : null,
+            'ai_prompt_tokens'      => isset( $data['ai_prompt_tokens'] ) ? absint( $data['ai_prompt_tokens'] ) : 0,
+            'ai_completion_tokens'  => isset( $data['ai_completion_tokens'] ) ? absint( $data['ai_completion_tokens'] ) : 0,
+            'created_at'            => current_time( 'mysql' ),
         );
 
-        // Format for wpdb
-        $format = array(
+        // Define data types for wpdb->insert
+        $data_types = array(
             '%d', // prospect_id
-            '%d', // email_number
+            '%d', // visitor_id
             '%s', // room_type
+            '%d', // email_number
             '%s', // subject
             '%s', // body_html
             '%s', // body_text
+            '%s', // tracking_token
+            '%s', // status
             '%d', // generated_by_ai
+            '%s', // url_included
             '%d', // template_used
             '%d', // ai_prompt_tokens
             '%d', // ai_completion_tokens
-            '%s', // url_included
-            '%s', // tracking_token
-            '%s', // status
-            '%s', // sent_at
+            '%s', // created_at
         );
 
-        // Insert record
+        // Insert the record
         $result = $this->wpdb->insert(
             $this->table_name,
             $insert_data,
-            $format
+            $data_types
         );
 
-        if ( false === $result ) {
-            error_log( '[DirectReach] Failed to create tracking record: ' . $this->wpdb->last_error );
-            return new WP_Error(
-                'database_error',
-                'Failed to create tracking record: ' . $this->wpdb->last_error
-            );
+        if ( $result === false ) {
+            error_log( sprintf(
+                '[DirectReach] Tracking insert failed. DB Error: %s. Data: %s',
+                $this->wpdb->last_error,
+                wp_json_encode( $insert_data )
+            ) );
+            return false;
         }
 
-        $tracking_id = $this->wpdb->insert_id;
+        $insert_id = $this->wpdb->insert_id;
 
         error_log( sprintf(
-            '[DirectReach] Tracking record created: id=%d, prospect=%d, ai=%d',
-            $tracking_id,
-            $insert_data['prospect_id'],
-            $insert_data['generated_by_ai']
-        ));
+            '[DirectReach] Created tracking record ID %d for prospect %d, email %d',
+            $insert_id,
+            $data['prospect_id'],
+            $data['email_number']
+        ) );
 
-        return $tracking_id;
+        return $insert_id;
     }
 
     /**
-     * Update tracking status
+     * Update tracking record status
      *
-     * @param int    $tracking_id Tracking ID
+     * @param int    $tracking_id Tracking record ID
      * @param string $status New status
-     * @param array  $additional_data Additional data to update
-     * @return bool|WP_Error Success or error
+     * @param array  $additional_data Optional additional fields to update
+     * @return bool True on success, false on failure
      */
-    public function update_tracking_status( $tracking_id, $status, $additional_data = array() ) {
-        // Validate status
-        $valid_statuses = array( 'pending', 'copied', 'sent', 'opened', 'clicked' );
-        if ( ! in_array( $status, $valid_statuses, true ) ) {
-            return new WP_Error(
-                'invalid_status',
-                sprintf( 'Invalid status: %s', $status )
-            );
-        }
-
-        // Build update data
+    public function update_status( $tracking_id, $status, $additional_data = array() ) {
         $update_data = array_merge(
-            array( 'status' => $status ),
+            array( 'status' => sanitize_text_field( $status ) ),
             $additional_data
         );
 
-        // Update record
         $result = $this->wpdb->update(
             $this->table_name,
             $update_data,
-            array( 'id' => (int) $tracking_id ),
-            null, // Let wpdb determine format
+            array( 'id' => absint( $tracking_id ) ),
+            array_fill( 0, count( $update_data ), '%s' ),
             array( '%d' )
         );
 
-        if ( false === $result ) {
-            error_log( '[DirectReach] Failed to update tracking status: ' . $this->wpdb->last_error );
-            return new WP_Error(
-                'database_error',
-                'Failed to update tracking status: ' . $this->wpdb->last_error
-            );
+        if ( $result === false ) {
+            error_log( sprintf(
+                '[DirectReach] Failed to update tracking record %d. DB Error: %s',
+                $tracking_id,
+                $this->wpdb->last_error
+            ) );
+            return false;
         }
 
         return true;
     }
 
     /**
-     * Record email open via tracking token
+     * Mark email as copied
      *
-     * @param string $token Tracking token
-     * @return bool Success
+     * @param int    $tracking_id Tracking record ID
+     * @param string $url_included URL that was included in email (optional)
+     * @return bool True on success, false on failure
      */
-    public function record_open( $token ) {
-        if ( empty( $token ) ) {
-            return false;
+    public function mark_as_copied( $tracking_id, $url_included = null ) {
+        $update_data = array(
+            'status' => 'copied',
+            'copied_at' => current_time( 'mysql' ),
+        );
+
+        if ( $url_included ) {
+            $update_data['url_included'] = esc_url_raw( $url_included );
         }
 
-        $token = sanitize_text_field( $token );
+        return $this->update_status( $tracking_id, 'copied', $update_data );
+    }
 
-        // Check if already opened
-        $opened_at = $this->wpdb->get_var(
+    /**
+     * Mark email as opened
+     *
+     * @param string $tracking_token Tracking token from pixel
+     * @return bool True on success, false on failure
+     */
+    public function mark_as_opened( $tracking_token ) {
+        // Find the tracking record
+        $tracking = $this->wpdb->get_row(
             $this->wpdb->prepare(
-                "SELECT opened_at FROM {$this->table_name} WHERE tracking_token = %s",
-                $token
+                "SELECT id, status FROM {$this->table_name} WHERE tracking_token = %s LIMIT 1",
+                $tracking_token
             )
         );
 
-        // Only record first open
-        if ( ! empty( $opened_at ) ) {
-            return true;
+        if ( ! $tracking ) {
+            error_log( sprintf(
+                '[DirectReach] Tracking token not found: %s',
+                $tracking_token
+            ) );
+            return false;
         }
 
-        // Update record
-        $result = $this->wpdb->update(
-            $this->table_name,
-            array(
-                'opened_at' => current_time( 'mysql' ),
-                'status' => 'opened',
-            ),
-            array( 'tracking_token' => $token ),
-            array( '%s', '%s' ),
-            array( '%s' )
-        );
+        // Only update if not already opened
+        if ( $tracking->status !== 'opened' ) {
+            $result = $this->wpdb->update(
+                $this->table_name,
+                array(
+                    'status' => 'opened',
+                    'opened_at' => current_time( 'mysql' ),
+                ),
+                array( 'id' => $tracking->id ),
+                array( '%s', '%s' ),
+                array( '%d' )
+            );
 
-        if ( false !== $result && $result > 0 ) {
-            error_log( sprintf( '[DirectReach] Email opened: token=%s', $token ) );
+            if ( $result === false ) {
+                error_log( sprintf(
+                    '[DirectReach] Failed to mark tracking %d as opened. DB Error: %s',
+                    $tracking->id,
+                    $this->wpdb->last_error
+                ) );
+                return false;
+            }
+
+            error_log( sprintf(
+                '[DirectReach] Marked tracking record %d as opened',
+                $tracking->id
+            ) );
         }
 
-        return false !== $result;
+        return true;
     }
 
     /**
      * Get tracking record by ID
      *
-     * @param int $tracking_id Tracking ID
-     * @return array|null Tracking record or null
+     * @param int $tracking_id Tracking record ID
+     * @return object|null Tracking record or null if not found
      */
-    public function get_tracking_record( $tracking_id ) {
-        $record = $this->wpdb->get_row(
+    public function get_by_id( $tracking_id ) {
+        return $this->wpdb->get_row(
             $this->wpdb->prepare(
                 "SELECT * FROM {$this->table_name} WHERE id = %d",
-                (int) $tracking_id
-            ),
-            ARRAY_A
+                $tracking_id
+            )
         );
-
-        return $record ?: null;
     }
 
     /**
-     * Get tracking records for prospect
+     * Get tracking record by prospect and email number
      *
-     * @param int   $prospect_id Prospect ID
-     * @param array $args Query arguments
-     * @return array Tracking records
+     * @param int $prospect_id Prospect ID
+     * @param int $email_number Email sequence number
+     * @return object|null Most recent tracking record or null
      */
-    public function get_prospect_tracking( $prospect_id, $args = array() ) {
-        $defaults = array(
-            'limit' => 50,
-            'offset' => 0,
-            'order_by' => 'sent_at',
-            'order' => 'DESC',
+    public function get_by_prospect_email( $prospect_id, $email_number ) {
+        return $this->wpdb->get_row(
+            $this->wpdb->prepare(
+                "SELECT * FROM {$this->table_name} 
+                WHERE prospect_id = %d 
+                AND email_number = %d 
+                ORDER BY created_at DESC 
+                LIMIT 1",
+                $prospect_id,
+                $email_number
+            )
         );
+    }
 
-        $args = wp_parse_args( $args, $defaults );
-
-        $query = $this->wpdb->prepare(
-            "SELECT * FROM {$this->table_name}
-            WHERE prospect_id = %d
-            ORDER BY {$args['order_by']} {$args['order']}
-            LIMIT %d OFFSET %d",
-            (int) $prospect_id,
-            (int) $args['limit'],
-            (int) $args['offset']
+    /**
+     * Get all tracking records for a prospect
+     *
+     * @param int $prospect_id Prospect ID
+     * @return array Array of tracking records
+     */
+    public function get_by_prospect( $prospect_id ) {
+        return $this->wpdb->get_results(
+            $this->wpdb->prepare(
+                "SELECT * FROM {$this->table_name} 
+                WHERE prospect_id = %d 
+                ORDER BY email_number ASC, created_at DESC",
+                $prospect_id
+            )
         );
-
-        $records = $this->wpdb->get_results( $query, ARRAY_A );
-
-        return $records ?: array();
     }
 
     /**
      * Get tracking statistics
      *
-     * @param array $filters Optional filters (campaign_id, room_type, date_from, date_to)
-     * @return array Statistics
+     * @param array $filters Optional filters (prospect_id, campaign_id, date_range)
+     * @return array Statistics array
      */
-    public function get_tracking_stats( $filters = array() ) {
-        $where = array( '1=1' );
-        $prepare_args = array();
+    public function get_stats( $filters = array() ) {
+        $where_clauses = array( '1=1' );
+        $where_values = array();
 
-        // Build WHERE clause
-        if ( ! empty( $filters['campaign_id'] ) ) {
-            $where[] = 'p.campaign_id = %d';
-            $prepare_args[] = (int) $filters['campaign_id'];
-        }
-
-        if ( ! empty( $filters['room_type'] ) ) {
-            $where[] = 't.room_type = %s';
-            $prepare_args[] = sanitize_text_field( $filters['room_type'] );
+        if ( ! empty( $filters['prospect_id'] ) ) {
+            $where_clauses[] = 'prospect_id = %d';
+            $where_values[] = absint( $filters['prospect_id'] );
         }
 
         if ( ! empty( $filters['date_from'] ) ) {
-            $where[] = 't.sent_at >= %s';
-            $prepare_args[] = sanitize_text_field( $filters['date_from'] );
+            $where_clauses[] = 'created_at >= %s';
+            $where_values[] = sanitize_text_field( $filters['date_from'] );
         }
 
         if ( ! empty( $filters['date_to'] ) ) {
-            $where[] = 't.sent_at <= %s';
-            $prepare_args[] = sanitize_text_field( $filters['date_to'] );
+            $where_clauses[] = 'created_at <= %s';
+            $where_values[] = sanitize_text_field( $filters['date_to'] );
         }
 
-        $where_clause = implode( ' AND ', $where );
+        $where_sql = implode( ' AND ', $where_clauses );
 
-        // Get statistics
-        $query = "
-            SELECT 
+        if ( ! empty( $where_values ) ) {
+            $where_sql = $this->wpdb->prepare( $where_sql, $where_values );
+        }
+
+        $stats = $this->wpdb->get_row(
+            "SELECT 
                 COUNT(*) as total_emails,
-                SUM(CASE WHEN t.generated_by_ai = 1 THEN 1 ELSE 0 END) as ai_generated,
-                SUM(CASE WHEN t.status = 'copied' OR t.status = 'sent' THEN 1 ELSE 0 END) as sent_count,
-                SUM(CASE WHEN t.opened_at IS NOT NULL THEN 1 ELSE 0 END) as opened_count,
-                SUM(CASE WHEN t.clicked_at IS NOT NULL THEN 1 ELSE 0 END) as clicked_count,
-                SUM(COALESCE(t.ai_prompt_tokens, 0)) as total_prompt_tokens,
-                SUM(COALESCE(t.ai_completion_tokens, 0)) as total_completion_tokens
-            FROM {$this->table_name} t
-            LEFT JOIN {$this->wpdb->prefix}rtr_prospects p ON t.prospect_id = p.id
-            WHERE {$where_clause}
-        ";
+                SUM(CASE WHEN generated_by_ai = 1 THEN 1 ELSE 0 END) as ai_generated,
+                SUM(CASE WHEN status = 'copied' OR status = 'opened' THEN 1 ELSE 0 END) as copied_count,
+                SUM(CASE WHEN status = 'opened' THEN 1 ELSE 0 END) as opened_count,
+                SUM(ai_prompt_tokens) as total_prompt_tokens,
+                SUM(ai_completion_tokens) as total_completion_tokens
+            FROM {$this->table_name}
+            WHERE {$where_sql}",
+            ARRAY_A
+        );
 
-        if ( ! empty( $prepare_args ) ) {
-            $query = $this->wpdb->prepare( $query, $prepare_args );
-        }
-
-        $stats = $this->wpdb->get_row( $query, ARRAY_A );
-
-        if ( ! $stats ) {
-            return array();
-        }
+        // Calculate costs (Gemini 1.5 Pro pricing)
+        $input_cost = ( $stats['total_prompt_tokens'] / 1000 ) * 0.00125;
+        $output_cost = ( $stats['total_completion_tokens'] / 1000 ) * 0.005;
+        $stats['total_cost'] = round( $input_cost + $output_cost, 6 );
 
         // Calculate rates
-        $total = (int) $stats['total_emails'];
-        $sent = (int) $stats['sent_count'];
-
-        $stats['open_rate'] = $sent > 0 ? round( ( (int) $stats['opened_count'] / $sent ) * 100, 2 ) : 0;
-        $stats['click_rate'] = $sent > 0 ? round( ( (int) $stats['clicked_count'] / $sent ) * 100, 2 ) : 0;
-        $stats['ai_percentage'] = $total > 0 ? round( ( (int) $stats['ai_generated'] / $total ) * 100, 2 ) : 0;
+        if ( $stats['copied_count'] > 0 ) {
+            $stats['open_rate'] = round( ( $stats['opened_count'] / $stats['copied_count'] ) * 100, 2 );
+        } else {
+            $stats['open_rate'] = 0;
+        }
 
         return $stats;
     }
 
     /**
-     * Delete tracking records for prospect
-     *
-     * @param int $prospect_id Prospect ID
-     * @return bool Success
-     */
-    public function delete_prospect_tracking( $prospect_id ) {
-        $result = $this->wpdb->delete(
-            $this->table_name,
-            array( 'prospect_id' => (int) $prospect_id ),
-            array( '%d' )
-        );
-
-        return false !== $result;
-    }
-
-    /**
-     * Clean up old tracking records
+     * Delete old tracking records
      *
      * @param int $days_old Delete records older than this many days
      * @return int Number of records deleted
      */
-    public function cleanup_old_records( $days_old = 180 ) {
-        $cutoff_date = date( 'Y-m-d H:i:s', strtotime( "-{$days_old} days" ) );
+    public function cleanup_old_records( $days_old = 90 ) {
+        $date_threshold = date( 'Y-m-d H:i:s', strtotime( "-{$days_old} days" ) );
 
-        $deleted = $this->wpdb->query(
+        $result = $this->wpdb->query(
             $this->wpdb->prepare(
-                "DELETE FROM {$this->table_name} WHERE sent_at < %s",
-                $cutoff_date
+                "DELETE FROM {$this->table_name} WHERE created_at < %s",
+                $date_threshold
             )
         );
 
-        if ( $deleted > 0 ) {
+        if ( $result === false ) {
             error_log( sprintf(
-                '[DirectReach] Cleaned up %d old tracking records (older than %d days)',
-                $deleted,
-                $days_old
-            ));
+                '[DirectReach] Failed to cleanup old tracking records. DB Error: %s',
+                $this->wpdb->last_error
+            ) );
+            return 0;
         }
 
-        return $deleted;
+        error_log( sprintf(
+            '[DirectReach] Cleaned up %d tracking records older than %d days',
+            $result,
+            $days_old
+        ) );
+
+        return $result;
     }
 }

@@ -1,869 +1,1245 @@
 <?php
 /**
- * Jobs Controller for Nightly Processing
- * 
- * Handles endpoints for Make.com webhook processing
- * 
+ * Jobs Controller
+ *
+ * REST API controller for automated job operations.
+ * Handles nightly jobs, campaign matching, prospect creation, and room assignments.
+ *
  * @package DirectReach
  * @subpackage ReadingTheRoom
- * @since 1.0.0
+ * @since 2.0.0
+ * @version 2.4.0 - FIXED VERSION
  */
 
 namespace DirectReach\ReadingTheRoom\API;
 
-// Prevent direct access
+// FIXED: Added proper namespace imports
+use DirectReach\ReadingTheRoom\Campaign_Matcher;
+use DirectReach\ReadingTheRoom\Reading_Room_Database;
+use WP_REST_Controller;
+use WP_REST_Server;
+use WP_REST_Request;
+use WP_REST_Response;
+use WP_Error;
+
 if (!defined('ABSPATH')) {
     exit;
 }
 
-class Jobs_Controller extends \WP_REST_Controller {
+/**
+ * Jobs REST API Controller
+ * FIXED: Added type declarations, constants, and improved structure
+ */
+class Jobs_Controller extends WP_REST_Controller {
+
+    // FIXED: Added class constants for magic values
+    private const LOG_PREFIX = '[RTR]';
+    private const LOG_PREFIX_JOB = '[RTR JOB';
+    
+    private const MODE_INCREMENTAL = 'incremental';
+    private const MODE_FULL = 'full';
+    
+    private const ROOM_HIERARCHY = [
+        'none'     => 0,
+        'problem'  => 1,
+        'solution' => 2,
+        'offer'    => 3,
+    ];
+    
+    private const CACHE_TTL = 300; // 5 minutes
     
     /**
-     * Namespace
+     * Namespace for REST routes
+     *
+     * @var string
      */
-    protected $namespace = 'directreach/rtr/v1';
+    protected $namespace = 'directreach/v2';
 
     /**
-     * Constructor
+     * Database instance
+     * FIXED: Added proper type declaration
+     *
+     * @var Reading_Room_Database
      */
-    public function __construct() {
-        // Load score calculator if not already loaded
-        if (!class_exists('DirectReach\CampaignBuilder\Score_Calculator')) {
-            $score_calc_path = CPD_DASHBOARD_PLUGIN_DIR . 'RTR/scoring-system/includes/class-score-calculator.php';
-            if (file_exists($score_calc_path)) {
-                require_once $score_calc_path;
+    private Reading_Room_Database $db;
+
+    /**
+     * Campaign matcher instance
+     * FIXED: Added proper type declaration
+     *
+     * @var Campaign_Matcher|null
+     */
+    private ?Campaign_Matcher $campaign_matcher = null;
+
+    /**
+     * Job start time
+     *
+     * @var float
+     */
+    private float $job_start_time;
+
+    /**
+     * Job statistics
+     *
+     * @var array<string,int>
+     */
+    private array $job_stats = [
+        'campaigns_matched'   => 0,
+        'prospects_created'   => 0,
+        'prospects_updated'   => 0,
+        'prospects_skipped'   => 0,
+        'room_transitions'    => 0,
+        'room_transitions_delayed' => 0,
+        'scores_calculated'   => 0,
+        'errors'              => 0,
+        'visitors_processed'  => 0,
+    ];
+
+    /**
+     * Scoring rules cache
+     *
+     * @var array<int,array>
+     */
+    private array $scoring_rules_cache = [];
+
+    /**
+     * Room thresholds cache with timestamps
+     * FIXED: Added cache timestamps for TTL
+     *
+     * @var array<int,array>
+     */
+    private array $thresholds_cache = [];
+    
+    /**
+     * Cache timestamps for TTL management
+     *
+     * @var array<int,int>
+     */
+    private array $cache_timestamps = [];
+
+    /**
+     * Constructor with dependency injection
+     * FIXED: Removed global $dr_rtr_db usage, using dependency injection
+     * 
+     * @param Reading_Room_Database|null $db Database instance (required)
+     * @throws \RuntimeException If database instance is invalid
+     */
+    public function __construct(?Reading_Room_Database $db = null) {
+        // FIXED: Proper dependency injection instead of global variable
+        if (!$db instanceof Reading_Room_Database) {
+            // Fallback: try to instantiate with global $wpdb
+            global $wpdb;
+            if (isset($wpdb) && $wpdb instanceof \wpdb) {
+                $db = new Reading_Room_Database($wpdb);
+            } else {
+                throw new \RuntimeException('Database instance required for Jobs_Controller');
             }
         }
-    }
-
-    /**
-     * Register routes
-     */
-    public function register_routes() {
-        // Single orchestrator endpoint
-        register_rest_route($this->namespace, '/jobs/run-nightly', array(
-            'methods' => 'POST',
-            'callback' => array($this, 'run_nightly_job'),
-            'permission_callback' => array($this, 'check_permission'),
-            'args' => array(
-                'mode' => array(
-                    'required' => false,
-                    'default' => 'incremental',
-                    'enum' => array('incremental', 'full'),
-                    'sanitize_callback' => 'sanitize_text_field'
-                ),
-                'force_full' => array(
-                    'required' => false,
-                    'default' => false,
-                    'type' => 'boolean'
-                )
-            )
-        ));
         
-        // Campaign attribution matching endpoint (Phase 3)
-        register_rest_route($this->namespace, '/jobs/match-campaigns', array(
-            'methods' => 'POST',
-            'callback' => array($this, 'match_campaigns'),
-            'permission_callback' => array($this, 'check_permission'),
-            'args' => array(
-                'client_id' => array(
-                    'required' => true,
-                    'type' => 'integer',
-                    'sanitize_callback' => 'absint'
-                ),
-                'mode' => array(
-                    'required' => false,
-                    'default' => 'incremental',
-                    'enum' => array('incremental', 'full'),
-                    'sanitize_callback' => 'sanitize_text_field'
-                )
-            )
-        ));
-    }
-
-    /**
-     * Check permissions - uses existing cpd_api_key
-     */
-    public function check_permission() {
-        $stored_key = get_option('cpd_api_key', '');
-        $provided_key = isset($_SERVER['HTTP_X_API_KEY']) ? $_SERVER['HTTP_X_API_KEY'] : '';
+        $this->db = $db;
         
-        if (empty($stored_key)) {
-            $this->log_action('API_KEY_MISSING', 'Jobs API key not configured');
-            return new \WP_Error('unauthorized', 'API key not configured', array('status' => 401));
+        // Initialize campaign matcher if available
+        if (class_exists(Campaign_Matcher::class)) {
+            $this->campaign_matcher = new Campaign_Matcher($this->db);
         }
         
-        if (!$provided_key || $provided_key !== $stored_key) {
-            $this->log_action('API_AUTH_FAILED', 'Invalid API key for jobs endpoint. IP: ' . ($_SERVER['REMOTE_ADDR'] ?? 'N/A'));
-            return new \WP_Error('unauthorized', 'Invalid API key', array('status' => 401));
-        }
-        
-        return true;
+        error_log(self::LOG_PREFIX . ' Jobs_Controller instantiated');
     }
 
     /**
-     * Main nightly job orchestrator
+     * Register REST API routes
      * 
-     * Executes in sequence:
-     * 1. Calculate scores for all/changed visitors
-     * 2. Assign rooms based on scores
-     * 3. Create/update prospect records
+     * @return void
      */
-    public function run_nightly_job($request) {
-        global $wpdb;
+    public function register_routes(): void {
+        error_log(self::LOG_PREFIX . ' Registering Jobs_Controller routes...');
+
+        // POST /jobs/run-nightly - Main nightly job (all operations)
+        register_rest_route($this->namespace, '/jobs/run-nightly', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'run_nightly_job'],
+                'permission_callback' => [$this, 'check_api_key'],
+                'args'                => [
+                    'mode' => [
+                        'required'          => false,
+                        'type'              => 'string',
+                        'enum'              => [self::MODE_INCREMENTAL, self::MODE_FULL],
+                        'default'           => self::MODE_INCREMENTAL,
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                    'force_full' => [
+                        'required'          => false,
+                        'type'              => 'boolean',
+                        'default'           => false,
+                    ],
+                ],
+            ],
+        ]);
+
+        // POST /jobs/match-campaigns - Campaign attribution (Phase 3)
+        register_rest_route($this->namespace, '/jobs/match-campaigns', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'match_campaigns'],
+                'permission_callback' => [$this, 'check_api_key'],
+                'args'                => [
+                    'mode' => [
+                        'required'          => false,
+                        'type'              => 'string',
+                        'enum'              => [self::MODE_INCREMENTAL, self::MODE_FULL],
+                        'default'           => self::MODE_INCREMENTAL,
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                ],
+            ],
+        ]);
+
+        // POST /jobs/create-prospects - Create prospect records
+        register_rest_route($this->namespace, '/jobs/create-prospects', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'create_prospects'],
+                'permission_callback' => [$this, 'check_api_key'],
+                'args'                => [
+                    'client_id' => [
+                        'required'          => false,
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                    ],
+                ],
+            ],
+        ]);
+
+        // POST /jobs/calculate-scores - Calculate visitor scores
+        register_rest_route($this->namespace, '/jobs/calculate-scores', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'calculate_scores'],
+                'permission_callback' => [$this, 'check_api_key'],
+            ],
+        ]);
+
+        // POST /jobs/assign-rooms - Assign rooms based on scores
+        register_rest_route($this->namespace, '/jobs/assign-rooms', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'assign_rooms'],
+                'permission_callback' => [$this, 'check_api_key'],
+            ],
+        ]);
+
+        error_log(self::LOG_PREFIX . ' Jobs_Controller routes registered successfully');
+    }
+
+    /**
+     * Run nightly job (all operations in sequence)
+     * ENHANCED: Comprehensive logging with system state
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response|WP_Error Response with stats or error
+     */
+    public function run_nightly_job($request): WP_REST_Response|WP_Error {
+        $this->job_start_time = microtime(true);
         
-        $start_time = microtime(true);
-        $mode = $request->get_param('mode');
+        // Get mode from request, check force_full parameter
+        $mode = $request->get_param('mode') ?: self::MODE_INCREMENTAL;
         $force_full = $request->get_param('force_full');
         
-        // Override mode if forced
-        if ($force_full) {
-            $mode = 'full';
+        // Override mode if force_full is true
+        if ($force_full === true || $force_full === 'true' || $force_full === '1') {
+            $mode = self::MODE_FULL;
         }
         
-        $this->log_job_start('nightly_job', $mode);
+        // ENHANCEMENT: Log comprehensive job start with system state
+        global $wpdb;
+        $system_stats = [
+            'total_visitors' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}cpd_visitors"),
+            'visitors_with_campaigns' => $wpdb->get_var("SELECT COUNT(DISTINCT visitor_id) FROM {$wpdb->prefix}cpd_visitor_campaigns"),
+            'visitors_with_scores' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}cpd_visitors WHERE lead_score > 0"),
+            'existing_prospects' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}rtr_prospects WHERE archived_at IS NULL"),
+            'active_campaigns' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}dr_campaign_settings WHERE end_date > CURDATE()"),
+        ];
         
+        $this->log_job('nightly_job_start', sprintf(
+            'Starting nightly job in %s mode at %s. System state: %s. Parameters: %s',
+            $mode,
+            current_time('mysql'),
+            json_encode($system_stats),
+            json_encode($request->get_params())
+        ));
+
         try {
-            // Initialize stats
-            $stats = array(
-                'mode' => $mode,
-                'visitors_processed' => 0,
-                'scores_calculated' => 0,
-                'prospects_created' => 0,
-                'prospects_updated' => 0,
-                'room_transitions' => 0,
-                'errors' => array()
+            // Step 1: Match campaigns (Phase 3)
+            $this->log_job('step_1_start', 'Starting campaign matching...');
+            $match_result = $this->match_campaigns_internal($mode);
+            $this->job_stats['campaigns_matched'] = $match_result['matched'] ?? 0;
+            $this->log_job('step_1_complete', sprintf(
+                'Campaign matching complete. Matched: %d visitors to campaigns, Skipped: %d',
+                $match_result['matched'] ?? 0,
+                $match_result['skipped'] ?? 0
+            ));
+
+            // Step 2: Calculate scores (Scoring System)
+            $this->log_job('step_2_start', 'Starting score calculation...');
+            $score_result = $this->calculate_scores_internal();
+            $this->job_stats['scores_calculated'] = $score_result['calculated'] ?? 0;
+            $this->log_job('step_2_complete', sprintf(
+                'Score calculation complete. Calculated: %d scores out of %d visitors',
+                $score_result['calculated'] ?? 0,
+                $score_result['total'] ?? 0
+            ));
+
+            // Step 3: Create/update prospects
+            $this->log_job('step_3_start', 'Starting prospect creation/update...');
+            $prospect_result = $this->create_prospects_internal();
+            $this->job_stats['prospects_created'] = $prospect_result['created'] ?? 0;
+            $this->job_stats['prospects_updated'] = $prospect_result['updated'] ?? 0;
+            $this->job_stats['prospects_skipped'] = $prospect_result['skipped'] ?? 0;
+            $this->log_job('step_3_complete', sprintf(
+                'Prospect creation/update complete. Created: %d, Updated: %d, Skipped: %d',
+                $prospect_result['created'] ?? 0,
+                $prospect_result['updated'] ?? 0,
+                $prospect_result['skipped'] ?? 0
+            ));
+
+            // Step 4: Assign rooms
+            $this->log_job('step_4_start', 'Starting room assignments...');
+            $room_result = $this->assign_rooms_internal();
+            $this->job_stats['room_transitions'] = $room_result['transitions'] ?? 0;
+            $this->job_stats['room_transitions_delayed'] = $room_result['delayed'] ?? 0;
+            $this->log_job('step_4_complete', sprintf(
+                'Room assignment complete. Transitions: %d, Delayed: %d, Total: %d',
+                $room_result['transitions'] ?? 0,
+                $room_result['delayed'] ?? 0,
+                $room_result['total'] ?? 0
+            ));
+
+            // Calculate job duration
+            $duration = round(microtime(true) - $this->job_start_time, 2);
+
+            // ENHANCEMENT: Add final system state snapshot
+            $final_stats = [
+                'total_visitors' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}cpd_visitors"),
+                'visitors_with_campaigns' => $wpdb->get_var("SELECT COUNT(DISTINCT visitor_id) FROM {$wpdb->prefix}cpd_visitor_campaigns"),
+                'visitors_with_scores' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}cpd_visitors WHERE lead_score > 0"),
+                'existing_prospects' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}rtr_prospects WHERE archived_at IS NULL"),
+            ];
+
+            $this->log_job('nightly_job_complete', sprintf(
+                'Nightly job completed in %s seconds. Final state: %s. Stats: %s',
+                $duration,
+                json_encode($final_stats),
+                json_encode($this->job_stats)
+            ));
+
+            return new WP_REST_Response([
+                'success'  => true,
+                'duration' => $duration,
+                'stats'    => $this->job_stats,
+                'mode'     => $mode,
+            ], 200);
+
+        } catch (\Exception $e) {
+            $this->job_stats['errors']++;
+            
+            $this->log_job('nightly_job_error', sprintf(
+                'Fatal error in nightly job: %s. Stack trace: %s',
+                $e->getMessage(),
+                $e->getTraceAsString()
+            ), 'error');
+
+            return new WP_Error(
+                'job_failed',
+                'Nightly job failed: ' . $e->getMessage(),
+                ['status' => 500, 'stats' => $this->job_stats]
             );
-            
-            // Get visitors to process
-            $visitors = $this->get_visitors_to_process($mode);
-            $stats['visitors_processed'] = count($visitors);
-            
-            if (empty($visitors)) {
-                $duration = round(microtime(true) - $start_time, 2);
-                
-                $this->log_job_complete('nightly_job', array_merge($stats, array(
-                    'duration_seconds' => $duration
-                )));
-                
-                return rest_ensure_response(array(
-                    'success' => true,
-                    'message' => 'No visitors to process',
-                    'stats' => array_merge($stats, array('duration_seconds' => $duration))
-                ));
+        }
+    }
+
+    /**
+     * Match campaigns to visitors
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response|WP_Error Response with match stats or error
+     */
+    public function match_campaigns($request): WP_REST_Response|WP_Error {
+        $mode = $request->get_param('mode') ?: self::MODE_INCREMENTAL;
+
+        try {
+            $result = $this->match_campaigns_internal($mode);
+
+            return new WP_REST_Response([
+                'success' => true,
+                'mode'    => $mode,
+                'matched' => $result['matched'] ?? 0,
+                'skipped' => $result['skipped'] ?? 0,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return new WP_Error(
+                'campaign_match_failed',
+                'Campaign matching failed: ' . $e->getMessage(),
+                ['status' => 500]
+            );
+        }
+    }
+
+    /**
+     * Create prospects from visitors
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response|WP_Error Response with creation stats or error
+     */
+    public function create_prospects($request): WP_REST_Response|WP_Error {
+        $client_id = $request->get_param('client_id');
+
+        try {
+            $result = $this->create_prospects_internal($client_id);
+
+            return new WP_REST_Response([
+                'success' => true,
+                'created' => $result['created'] ?? 0,
+                'updated' => $result['updated'] ?? 0,
+                'skipped' => $result['skipped'] ?? 0,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return new WP_Error(
+                'prospect_creation_failed',
+                'Prospect creation failed: ' . $e->getMessage(),
+                ['status' => 500]
+            );
+        }
+    }
+
+    /**
+     * Calculate visitor scores
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response|WP_Error Response with calculation stats or error
+     */
+    public function calculate_scores($request): WP_REST_Response|WP_Error {
+        try {
+            $result = $this->calculate_scores_internal();
+
+            return new WP_REST_Response([
+                'success'    => true,
+                'calculated' => $result['calculated'] ?? 0,
+                'total'      => $result['total'] ?? 0,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return new WP_Error(
+                'score_calculation_failed',
+                'Score calculation failed: ' . $e->getMessage(),
+                ['status' => 500]
+            );
+        }
+    }
+
+    /**
+     * Assign rooms based on scores
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response|WP_Error Response with assignment stats or error
+     */
+    public function assign_rooms($request): WP_REST_Response|WP_Error {
+        try {
+            $result = $this->assign_rooms_internal();
+
+            return new WP_REST_Response([
+                'success'     => true,
+                'transitions' => $result['transitions'] ?? 0,
+                'delayed'     => $result['delayed'] ?? 0,
+                'total'       => $result['total'] ?? 0,
+            ], 200);
+
+        } catch (\Exception $e) {
+            return new WP_Error(
+                'room_assignment_failed',
+                'Room assignment failed: ' . $e->getMessage(),
+                ['status' => 500]
+            );
+        }
+    }
+
+    /* =========================================================================
+     * INTERNAL JOB METHODS
+     * ======================================================================= */
+
+    /**
+     * Internal campaign matching logic
+     * ENHANCED: Better logging and error context
+     *
+     * @param string $mode Processing mode (incremental or full).
+     * @return array{matched: int, skipped: int, total: int} Results.
+     */
+    private function match_campaigns_internal(string $mode = self::MODE_INCREMENTAL): array {
+        if (!$this->campaign_matcher) {
+            $this->log_job('campaign_match_error', 'Campaign matcher not initialized', 'error');
+            throw new \Exception('Campaign matcher not available');
+        }
+
+        $matched = 0;
+        $skipped = 0;
+
+        global $wpdb;
+
+        // Get unmatched visitors (those without campaign assignments)
+        $where_clause = $mode === self::MODE_FULL
+            ? "" 
+            : "WHERE v.visitor_id NOT IN (SELECT visitor_id FROM {$wpdb->prefix}cpd_visitor_campaigns)";
+
+        $visitors = $wpdb->get_results("
+            SELECT v.* 
+            FROM {$wpdb->prefix}cpd_visitors v
+            {$where_clause}
+            ORDER BY v.last_seen_at DESC
+        ");
+
+        $this->log_job('campaign_match_batch_start', sprintf(
+            'Starting %s campaign matching for %d visitors',
+            $mode,
+            count($visitors)
+        ));
+
+        foreach ($visitors as $visitor) {
+            try {
+                // Use the campaign matcher to find matching campaigns
+                $match = $this->campaign_matcher->match(['visitor_id' => (int) $visitor->id]);
+
+                if ($match !== null) {
+                    $wpdb->query($wpdb->prepare(
+                        "INSERT IGNORE INTO {$wpdb->prefix}cpd_visitor_campaigns 
+                        (visitor_id, campaign_id) VALUES (%d, %d)",
+                        $visitor->id,
+                        $match['id']
+                    ));
+                    $matched++;
+                } else {
+                    $skipped++;
+                }
+
+            } catch (\Exception $e) {
+                $this->job_stats['errors']++;
+                $this->log_job('campaign_match_visitor_error', sprintf(
+                    'Campaign matching failed for visitor %d: %s',
+                    $visitor->id,
+                    $e->getMessage()
+                ), 'error');
             }
-            
-            // STEP 1: Calculate scores for all visitors
-            $score_calculator_available = class_exists('DirectReach\CampaignBuilder\Score_Calculator');
-            
-            foreach ($visitors as $visitor) {
-                try {
-                    if ($score_calculator_available) {
-                        // Use actual score calculator
-                        $score_calculator = new \DirectReach\CampaignBuilder\Score_Calculator();
-                        $score_result = $score_calculator->calculate_visitor_score(
-                            $visitor->id,
-                            $visitor->account_id
-                        );
-                        
-                        if ($score_result['success']) {
-                            $stats['scores_calculated']++;
-                            $visitor->lead_score = $score_result['total_score'];
-                            $visitor->current_room_from_score = $score_result['current_room'];
-                        }
-                    } else {
-                        // Fallback: Use existing lead_score
-                        $visitor->lead_score = $visitor->lead_score ?? 0;
-                        $stats['scores_calculated']++;
+        }
+
+        return [
+            'matched' => $matched,
+            'skipped' => $skipped,
+            'total'   => count($visitors),
+        ];
+    }
+
+    /**
+     * Internal score calculation logic
+     * PHASE 2.1: Database-driven scoring using rtr_client_scoring_rules
+     *
+     * @return array{calculated: int, total: int} Results.
+     */
+    private function calculate_scores_internal(): array {
+        global $wpdb;
+
+        $calculated = 0;
+        $total = 0;
+
+        // Get visitors with campaign assignments
+        $visitors = $wpdb->get_results("
+            SELECT DISTINCT v.*, vc.campaign_id, cs.client_id
+            FROM {$wpdb->prefix}cpd_visitors v
+            INNER JOIN {$wpdb->prefix}cpd_visitor_campaigns vc ON v.id = vc.visitor_id
+            INNER JOIN {$wpdb->prefix}dr_campaign_settings cs ON vc.campaign_id = cs.id
+            WHERE v.lead_score IS NULL OR v.lead_score = 0
+        ");
+
+        $total = count($visitors);
+
+        $this->log_job('score_calculation_start', sprintf(
+            'Starting score calculation for %d visitors',
+            $total
+        ));
+
+        foreach ($visitors as $visitor) {
+            try {
+                $client_id = $visitor->client_id;
+                
+                // Get scoring rules for this client (cached)
+                $rules = $this->get_scoring_rules($client_id);
+                
+                if (empty($rules)) {
+                    $this->log_job('score_calculation_no_rules', sprintf(
+                        'No scoring rules found for client %d (visitor %d)',
+                        $client_id,
+                        $visitor->id
+                    ), 'warning');
+                    continue;
+                }
+
+                // Calculate base score from visitor data
+                $score = $this->calculate_visitor_score($visitor, $rules);
+
+                // Update visitor with calculated score
+                $wpdb->update(
+                    $wpdb->prefix . 'cpd_visitors',
+                    [
+                        'lead_score' => $score,
+                        'updated_at' => current_time('mysql'),
+                    ],
+                    ['id' => $visitor->id],
+                    ['%d', '%s'],
+                    ['%d']
+                );
+
+                $calculated++;
+
+            } catch (\Exception $e) {
+                $this->job_stats['errors']++;
+                $this->log_job('score_calculation_visitor_error', sprintf(
+                    'Score calculation failed for visitor %d: %s',
+                    $visitor->id,
+                    $e->getMessage()
+                ), 'error');
+            }
+        }
+
+        return [
+            'calculated' => $calculated,
+            'total'      => $total,
+        ];
+    }
+
+    /**
+     * Get scoring rules for a client
+     * PHASE 2.1: Query rtr_client_scoring_rules table
+     * FIXED: Added return type
+     *
+     * @param int $client_id Client ID.
+     * @return array<int,array> Scoring rules.
+     */
+    private function get_scoring_rules(int $client_id): array {
+        // FIXED: Check cache with TTL
+        if (isset($this->scoring_rules_cache[$client_id])) {
+            $cached_at = $this->cache_timestamps['rules_' . $client_id] ?? 0;
+            if (time() - $cached_at < self::CACHE_TTL) {
+                return $this->scoring_rules_cache[$client_id];
+            }
+        }
+
+        global $wpdb;
+
+        // Query scoring rules for this client
+        $rules = $wpdb->get_results($wpdb->prepare("
+            SELECT *
+            FROM {$wpdb->prefix}rtr_client_scoring_rules
+            WHERE client_id = %d
+            ORDER BY priority ASC
+        ", $client_id), ARRAY_A);
+
+        // Cache the rules with timestamp
+        $this->scoring_rules_cache[$client_id] = $rules;
+        $this->cache_timestamps['rules_' . $client_id] = time();
+
+        return $rules;
+    }
+
+    /**
+     * Calculate visitor score based on rules
+     * PHASE 2.1: Apply database-driven scoring rules
+     * FIXED: Added return type and parameter types
+     *
+     * @param object $visitor Visitor data.
+     * @param array<int,array>  $rules   Scoring rules.
+     * @return int Calculated score.
+     */
+    private function calculate_visitor_score(object $visitor, array $rules): int {
+        $score = 0;
+
+        foreach ($rules as $rule) {
+            $rule_type = $rule['rule_type'];
+            $points = (int) $rule['points'];
+
+            switch ($rule_type) {
+                case 'page_visit':
+                    // Award points for page visits
+                    $visit_count = (int) ($visitor->visit_count ?? 0);
+                    $score += $visit_count * $points;
+                    break;
+
+                case 'email_open':
+                    // Award points for email opens
+                    if (!empty($visitor->email_opened)) {
+                        $score += $points;
                     }
-                    
-                } catch (\Exception $e) {
-                    $stats['errors'][] = "Score calculation failed for visitor {$visitor->id}: {$e->getMessage()}";
-                    error_log("RTR Jobs: Score calc error for visitor {$visitor->id}: {$e->getMessage()}");
-                }
-            }
-            
-            // STEP 2 & 3: For each visitor, assign room and create/update prospect
-            foreach ($visitors as $visitor) {
-                if (!isset($visitor->lead_score)) {
-                    continue; // Skip if score calculation failed
-                }
-                
-                try {
-                    // Get client thresholds
-                    $client_id = $this->get_client_id_for_account($visitor->account_id);
-                    $thresholds = $this->get_room_thresholds($client_id);
-                    
-                    // Determine room based on score
-                    $assigned_room = $this->assign_room($visitor->lead_score, $thresholds);
-                    
-                    // Only create prospect if they qualify (not 'none')
-                    if ($assigned_room !== 'none') {
-                        // Check if prospect exists
-                        $existing_prospect = $this->get_existing_prospect($visitor->id);
+                    break;
+
+                case 'email_click':
+                    // Award points for email clicks
+                    if (!empty($visitor->email_clicked)) {
+                        $score += $points;
+                    }
+                    break;
+
+                case 'form_submission':
+                    // Award points for form submissions
+                    if (!empty($visitor->form_submitted)) {
+                        $score += $points;
+                    }
+                    break;
+
+                case 'recency':
+                    // Recency decay - recent visits score higher
+                    if (!empty($visitor->last_visit)) {
+                        $days_ago = (strtotime('now') - strtotime($visitor->last_visit)) / DAY_IN_SECONDS;
                         
-                        if ($existing_prospect) {
-                            // Update existing prospect
-                            $update_result = $this->update_prospect(
-                                $existing_prospect,
-                                $visitor,
-                                $assigned_room
+                        if ($days_ago <= 7) {
+                            $score += $points;
+                        } elseif ($days_ago <= 30) {
+                            $score += floor($points * 0.5);
+                        }
+                    }
+                    break;
+
+                case 'engagement_multiplier':
+                    // Apply multiplier based on engagement level
+                    $engagement_level = $visitor->engagement_level ?? 0;
+                    $multiplier = (float) ($rule['multiplier'] ?? 1);
+                    
+                    if ($engagement_level > 0) {
+                        $score = floor($score * $multiplier);
+                    }
+                    break;
+
+                default:
+                    // Unknown rule type - log warning
+                    error_log(self::LOG_PREFIX . " Unknown scoring rule type: {$rule_type}");
+                    break;
+            }
+        }
+
+        return max(0, $score); // Ensure score is never negative
+    }
+
+    /**
+     * Internal prospect creation logic
+     * PHASE 2.2: Clean pipeline for cpd_visitors -> rtr_prospects
+     * FIXED: Added return type and parameter type
+     *
+     * @param int|null $client_id Optional client filter.
+     * @return array{created: int, updated: int, skipped: int, total: int} Results.
+     */
+    private function create_prospects_internal(?int $client_id = null): array {
+        global $wpdb;
+
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+
+        // Build WHERE clause for client filtering
+        $where_client = '';
+        if ($client_id) {
+            $where_client = $wpdb->prepare('AND cs.client_id = %d', $client_id);
+        }
+
+        // Get eligible visitors
+        $visitors = $wpdb->get_results("
+            SELECT v.*, vc.campaign_id, cs.client_id
+            FROM {$wpdb->prefix}cpd_visitors v
+            INNER JOIN {$wpdb->prefix}cpd_visitor_campaigns vc ON v.id = vc.visitor_id
+            INNER JOIN {$wpdb->prefix}dr_campaign_settings cs ON vc.campaign_id = cs.id
+            WHERE v.email IS NOT NULL
+            AND v.email != ''
+            AND v.lead_score > 0
+            {$where_client}
+            ORDER BY v.lead_score DESC, v.last_seen_at DESC
+        ");
+
+        $this->log_job('prospect_creation_batch_start', sprintf(
+            'Starting prospect creation/update for %d eligible visitors',
+            count($visitors)
+        ));
+
+        foreach ($visitors as $visitor) {
+            try {
+                // Check if prospect already exists
+                $existing = $wpdb->get_row($wpdb->prepare("
+                    SELECT *
+                    FROM {$wpdb->prefix}rtr_prospects
+                    WHERE visitor_id = %d
+                    AND campaign_id = %d
+                    AND archived_at IS NULL
+                    LIMIT 1
+                ", $visitor->id, $visitor->campaign_id));
+
+                if (!$existing) {
+                    // Create new prospect
+                    $thresholds = $this->get_room_thresholds($visitor->campaign_id);
+                    $initial_room = $this->calculate_room_assignment($visitor->lead_score ?? 0, $thresholds);
+
+                    $wpdb->insert(
+                        $wpdb->prefix . 'rtr_prospects',
+                        [
+                            'visitor_id'              => $visitor->id,
+                            'campaign_id'             => $visitor->campaign_id,
+                            'client_id'               => $visitor->client_id,
+                            'email'                   => $visitor->email,
+                            'company'                 => $visitor->company ?? '',
+                            'lead_score'              => $visitor->lead_score ?? 0,
+                            'current_room'            => $initial_room,
+                            'room_entered_at'         => current_time('mysql'),
+                            'email_sequence_position' => 0,
+                            'is_hot_list'             => 0,
+                            'created_at'              => current_time('mysql'),
+                            'updated_at'              => current_time('mysql'),
+                        ],
+                        ['%d', '%d', '%d', '%s', '%s', '%d', '%s', '%s', '%d', '%d', '%s', '%s']
+                    );
+
+                    $created++;
+
+                    $this->log_job('prospect_created', sprintf(
+                        'Created prospect for visitor %d (campaign: %d, room: %s, score: %d)',
+                        $visitor->id,
+                        $visitor->campaign_id,
+                        $initial_room,
+                        $visitor->lead_score ?? 0
+                    ));
+
+                } else {
+                    // Update existing prospect if score changed significantly
+                    $score_diff = abs(($visitor->lead_score ?? 0) - ($existing->lead_score ?? 0));
+                    
+                    if ($score_diff >= 5) {
+                        $update_fields = [
+                            'lead_score' => $visitor->lead_score ?? 0,
+                        ];
+
+                        // Calculate new room but don't apply yet - that's done by assign_rooms_internal()
+                        $thresholds = $this->get_room_thresholds($visitor->campaign_id);
+                        $new_room = $this->calculate_room_assignment(
+                            $visitor->lead_score ?? 0,
+                            $thresholds
+                        );
+
+                        $needs_update = ($new_room !== $existing->current_room);
+
+                        if ($needs_update) {
+                            $update_fields['updated_at'] = current_time('mysql');
+                            
+                            $wpdb->update(
+                                $wpdb->prefix . 'rtr_prospects',
+                                $update_fields,
+                                ['id' => $existing->id],
+                                array_fill(0, count($update_fields), '%s'),
+                                ['%d']
                             );
                             
-                            if ($update_result['updated']) {
-                                $stats['prospects_updated']++;
-                            }
+                            $updated++;
                             
-                            if ($update_result['room_changed']) {
-                                $stats['room_transitions']++;
-                            }
-                            
-                        } else {
-                            // Create new prospect (default campaign_id = 1 for now)
-                            $created = $this->create_prospect($visitor, $assigned_room, 1);
-                            
-                            if ($created) {
-                                $stats['prospects_created']++;
-                            }
+                            $this->log_job(
+                                'prospect_updated',
+                                sprintf(
+                                    'Updated prospect %d (visitor: %d, new score: %d)',
+                                    $existing->id,
+                                    $visitor->id,
+                                    $visitor->lead_score
+                                )
+                            );
                         }
+                    } else {
+                        $skipped++;
                     }
-                    
-                } catch (\Exception $e) {
-                    $stats['errors'][] = "Prospect processing failed for visitor {$visitor->id}: {$e->getMessage()}";
-                    error_log("RTR Jobs: Prospect error for visitor {$visitor->id}: {$e->getMessage()}");
                 }
+
+            } catch (\Exception $e) {
+                $this->job_stats['errors']++;
+                $this->log_job('prospect_creation_error', sprintf(
+                    'Prospect creation failed for visitor %d: %s',
+                    $visitor->id,
+                    $e->getMessage()
+                ), 'error');
             }
-            
-            // Update last run tracking
-            $duration = round(microtime(true) - $start_time, 2);
-            $this->update_last_run($mode, 'success', array_merge($stats, array(
-                'duration_seconds' => $duration
-            )));
-            
-            $this->log_job_complete('nightly_job', array_merge($stats, array(
-                'duration_seconds' => $duration
-            )));
-            
-            // Determine overall status
-            $status = 'success';
-            if (!empty($stats['errors'])) {
-                $status = 'partial_success';
-            }
-            
-            return rest_ensure_response(array(
-                'success' => true,
-                'status' => $status,
-                'message' => sprintf('Nightly job completed in %.2fs', $duration),
-                'stats' => array_merge($stats, array('duration_seconds' => $duration))
-            ));
-            
-        } catch (\Exception $e) {
-            $duration = round(microtime(true) - $start_time, 2);
-            
-            $this->log_job_error('nightly_job', $e->getMessage());
-            $this->update_last_run($mode, 'failed', array(
-                'error' => $e->getMessage(),
-                'duration_seconds' => $duration
-            ));
-            
-            return new \WP_Error('job_failed', $e->getMessage(), array('status' => 500));
         }
+
+        return [
+            'created' => $created,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'total'   => count($visitors),
+        ];
     }
 
     /**
-     * Get visitors to process based on mode
+     * Internal room assignment logic
+     * PHASE 5.7: Immediate transitions, no delays
+     * FIXED: Added return type
+     *
+     * @return array{transitions: int, delayed: int, total: int} Results.
      */
-    private function get_visitors_to_process($mode) {
+    private function assign_rooms_internal(): array {
         global $wpdb;
-        
-        $visitors_table = $wpdb->prefix . 'cpd_visitors';
-        
-        if ($mode === 'full') {
-            // Get all active visitors
-            return $wpdb->get_results(
-                "SELECT * FROM {$visitors_table}
-                WHERE is_archived = 0
-                AND is_crm_added = 0
-                ORDER BY last_seen_at DESC"
-            );
-        } else {
-            // Incremental: Get visitors updated since last run
-            $last_run = get_option('dr_jobs_last_run_timestamp');
-            
-            if (empty($last_run)) {
-                // First run, process last 7 days
-                $last_run = date('Y-m-d H:i:s', strtotime('-7 days'));
+
+        $transitions = 0;
+        $delayed = 0;
+
+        // Get all active prospects
+        $prospects = $wpdb->get_results("
+            SELECT p.*, v.lead_score
+            FROM {$wpdb->prefix}rtr_prospects p
+            INNER JOIN {$wpdb->prefix}cpd_visitors v ON p.visitor_id = v.id
+            WHERE p.archived_at IS NULL
+            AND p.sales_handoff_at IS NULL
+        ");
+
+        $this->log_job('room_assignment_start', sprintf(
+            'Starting room assignment for %d active prospects',
+            count($prospects)
+        ));
+
+        foreach ($prospects as $prospect) {
+            try {
+                // Get thresholds for this campaign
+                $thresholds = $this->get_room_thresholds($prospect->campaign_id);
+
+                // Calculate what room they should be in
+                $calculated_room = $this->calculate_room_assignment(
+                    $prospect->lead_score ?? 0,
+                    $thresholds
+                );
+
+                // Check if room needs to change
+                $should_change = false;
+                if ($prospect->current_room !== $calculated_room) {
+                    // Phase 5.7: NO delays - allow all transitions immediately
+                    $should_change = true;
+                }
+
+                // Apply room change if approved
+                if ($should_change) {
+                    $wpdb->update(
+                        $wpdb->prefix . 'rtr_prospects',
+                        [
+                            'current_room'     => $calculated_room,
+                            'room_entered_at'  => current_time('mysql'), // Reset entry time
+                            'updated_at'       => current_time('mysql'),
+                        ],
+                        [
+                            'id' => $prospect->id,
+                        ],
+                        ['%s', '%s', '%s'],
+                        ['%d']
+                    );
+
+                    $this->log_room_transition(
+                        $prospect->visitor_id,
+                        $prospect->campaign_id,
+                        $prospect->current_room,
+                        $calculated_room,
+                        'Automatic room assignment based on score'
+                    );
+
+                    $transitions++;
+                }
+
+            } catch (\Exception $e) {
+                $this->job_stats['errors']++;
+                
+                // ENHANCEMENT: Better error context
+                $this->log_job('room_assignment_prospect_error', sprintf(
+                    'Room assignment failed for prospect %d: %s',
+                    $prospect->id,
+                    $e->getMessage()
+                ), 'error');
             }
-            
-            return $wpdb->get_results($wpdb->prepare(
-                "SELECT * FROM {$visitors_table}
-                WHERE is_archived = 0
-                AND is_crm_added = 0
-                AND last_seen_at >= %s
-                ORDER BY last_seen_at DESC",
-                $last_run
-            ));
         }
+
+        return [
+            'transitions' => $transitions,
+            'delayed'     => $delayed,
+            'total'       => count($prospects),
+        ];
     }
 
     /**
-     * Assign room based on lead score and thresholds
+     * Check if room change is downward movement (score dropped)
+     * FIXED: Uses class constant and added return type
+     *
+     * @param string $from_room Current room.
+     * @param string $to_room   Target room.
+     * @return bool True if downward movement.
      */
-    private function assign_room($lead_score, $thresholds) {
+    private function is_downward_movement(string $from_room, string $to_room): bool {
+        $from_level = self::ROOM_HIERARCHY[$from_room] ?? 0;
+        $to_level = self::ROOM_HIERARCHY[$to_room] ?? 0;
+        
+        return $to_level < $from_level;
+    }
+
+    /**
+     * Get room thresholds for a campaign
+     * PHASE 2.3: Enhanced with validation, caching with TTL
+     * FIXED: Added cache expiration and return type
+     *
+     * @param int $campaign_id Campaign ID.
+     * @return array{problem_max: int, solution_max: int, offer_min: int} Thresholds.
+     */
+    private function get_room_thresholds(int $campaign_id): array {
+        global $wpdb;
+
+        // Get client_id from campaign
+        $client_id = $wpdb->get_var($wpdb->prepare(
+            "SELECT client_id FROM {$wpdb->prefix}dr_campaign_settings WHERE id = %d",
+            $campaign_id
+        ));
+
+        // FIXED: Check cache with TTL
+        if (isset($this->thresholds_cache[$client_id])) {
+            $cached_at = $this->cache_timestamps['threshold_' . $client_id] ?? 0;
+            if (time() - $cached_at < self::CACHE_TTL) {
+                return $this->thresholds_cache[$client_id];
+            }
+        }
+
+        // Try to get client-specific thresholds
+        $thresholds = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}rtr_room_thresholds WHERE client_id = %d LIMIT 1",
+            $client_id
+        ));
+
+        // Fall back to global defaults (client_id IS NULL)
+        if (!$thresholds) {
+            $thresholds = $wpdb->get_row(
+                "SELECT * FROM {$wpdb->prefix}rtr_room_thresholds WHERE client_id IS NULL LIMIT 1"
+            );
+        }
+
+        // Final fallback to hardcoded defaults
+        if (!$thresholds) {
+            $result = [
+                'problem_max'  => 40,
+                'solution_max' => 60,
+                'offer_min'    => 61,
+            ];
+            
+            // Cache and return hardcoded defaults
+            $this->thresholds_cache[$client_id] = $result;
+            $this->cache_timestamps['threshold_' . $client_id] = time();
+            return $result;
+        }
+
+        // Extract threshold values
+        $result = [
+            'problem_max'  => (int) ($thresholds->problem_max ?? 40),
+            'solution_max' => (int) ($thresholds->solution_max ?? 60),
+            'offer_min'    => (int) ($thresholds->offer_min ?? 61),
+        ];
+
+        // PHASE 2.3: Validate threshold logic with comprehensive checks
+        $validation = $this->validate_thresholds($result);
+        
+        if (!$validation['valid']) {
+            // Log warning for invalid thresholds
+            $this->log_job('threshold_validation_error', sprintf(
+                'Invalid room thresholds for client %d: %s. Using hardcoded defaults.',
+                $client_id,
+                implode(', ', $validation['errors'])
+            ), 'warning');
+
+            // Fall back to hardcoded defaults
+            $result = [
+                'problem_max'  => 40,
+                'solution_max' => 60,
+                'offer_min'    => 61,
+            ];
+        }
+
+        // Cache the result with timestamp
+        $this->thresholds_cache[$client_id] = $result;
+        $this->cache_timestamps['threshold_' . $client_id] = time();
+
+        return $result;
+    }
+
+    /**
+     * Validate room thresholds
+     * FIXED: New comprehensive validation method
+     *
+     * @param array{problem_max: int, solution_max: int, offer_min: int} $thresholds Thresholds to validate.
+     * @return array{valid: bool, errors: array<string>} Validation result.
+     */
+    private function validate_thresholds(array $thresholds): array {
+        $errors = [];
+        
+        // Check for positive values
+        foreach (['problem_max', 'solution_max', 'offer_min'] as $key) {
+            if (!isset($thresholds[$key]) || $thresholds[$key] <= 0) {
+                $errors[] = "{$key} must be positive";
+            }
+        }
+        
+        // Check proper ordering
+        if ($thresholds['problem_max'] >= $thresholds['solution_max']) {
+            $errors[] = "problem_max ({$thresholds['problem_max']}) must be less than solution_max ({$thresholds['solution_max']})";
+        }
+        
+        if ($thresholds['solution_max'] >= $thresholds['offer_min']) {
+            $errors[] = "solution_max ({$thresholds['solution_max']}) must be less than offer_min ({$thresholds['offer_min']})";
+        }
+        
+        // Check reasonable values
+        if ($thresholds['offer_min'] > 100) {
+            $errors[] = "offer_min should not exceed 100 (got {$thresholds['offer_min']})";
+        }
+        
+        // Check minimum gaps
+        if (($thresholds['solution_max'] - $thresholds['problem_max']) < 5) {
+            $errors[] = "Gap between problem and solution should be at least 5 points";
+        }
+        
+        return [
+            'valid' => empty($errors),
+            'errors' => $errors
+        ];
+    }
+
+    /**
+     * Calculate room assignment based on score
+     * PHASE 2.3: Verified correct logic
+     * FIXED: Improved edge case handling and return type
+     *
+     * @param int   $lead_score Lead score (0-100+).
+     * @param array{problem_max: int, solution_max: int, offer_min: int} $thresholds Room thresholds.
+     * @return string Room assignment: 'none', 'problem', 'solution', or 'offer'.
+     */
+    private function calculate_room_assignment(int $lead_score, array $thresholds): string {
+        // Handle negative or invalid scores
+        if ($lead_score < 0) {
+            error_log(self::LOG_PREFIX . " Invalid negative score: {$lead_score}");
+            return 'none';
+        }
+        
+        // FIXED: Improved logic to handle edge cases
+        // Offer room: score >= offer_min (default: 61+)
         if ($lead_score >= $thresholds['offer_min']) {
             return 'offer';
         }
-        
-        if ($lead_score >= ($thresholds['problem_max'] + 1)) {
+
+        // Solution room: score > problem_max and < offer_min (default: 41-60)
+        if ($lead_score > $thresholds['problem_max']) {
             return 'solution';
         }
-        
-        if ($lead_score >= 0) {
+
+        // Problem room: score between 1 and problem_max (default: 1-40)
+        if ($lead_score >= 1) {
             return 'problem';
         }
-        
+
+        // None room: score is 0
         return 'none';
     }
 
     /**
-     * Get room thresholds for client
+     * Log room transition
+     * FIXED: Added return types
+     *
+     * @param int    $visitor_id  Visitor ID.
+     * @param int    $campaign_id Campaign ID.
+     * @param string $from_room   From room.
+     * @param string $to_room     To room.
+     * @param string $reason      Reason for transition.
+     * @return void
      */
-    private function get_room_thresholds($client_id) {
+    private function log_room_transition(int $visitor_id, int $campaign_id, string $from_room, string $to_room, string $reason): void {
         global $wpdb;
-        
-        $table = $wpdb->prefix . 'rtr_room_thresholds';
-        
-        // Try client-specific first
-        if ($client_id) {
-            $client_thresholds = $wpdb->get_row($wpdb->prepare(
-                "SELECT * FROM {$table} WHERE client_id = %d",
-                $client_id
-            ), ARRAY_A);
-            
-            if ($client_thresholds) {
-                return $client_thresholds;
-            }
-        }
-        
-        // Fall back to global defaults
-        $global_thresholds = $wpdb->get_row(
-            "SELECT * FROM {$table} WHERE client_id IS NULL",
-            ARRAY_A
-        );
-        
-        if ($global_thresholds) {
-            return $global_thresholds;
-        }
-        
-        // Hard-coded fallback
-        return array(
-            'problem_max' => 40,
-            'solution_max' => 60,
-            'offer_min' => 61
-        );
-    }
 
-    /**
-     * Get client_id from account_id
-     */
-    private function get_client_id_for_account($account_id) {
-        global $wpdb;
-        
-        $table = $wpdb->prefix . 'cpd_clients';
-        
-        return $wpdb->get_var($wpdb->prepare(
-            "SELECT id FROM {$table} WHERE account_id = %s",
-            $account_id
-        ));
-    }
-
-    /**
-     * Get existing prospect record for visitor
-     */
-    private function get_existing_prospect($visitor_id) {
-        global $wpdb;
-        
-        $table = $wpdb->prefix . 'rtr_prospects';
-        
-        return $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM {$table}
-            WHERE visitor_id = %d
-            AND archived_at IS NULL
-            LIMIT 1",
-            $visitor_id
-        ));
-    }
-
-    /**
-     * Create new prospect record
-     */
-    private function create_prospect($visitor, $assigned_room, $campaign_id) {
-        global $wpdb;
-        
-        $table = $wpdb->prefix . 'rtr_prospects';
-        
-        // Build engagement data from visitor
-        $engagement_data = array(
-            'recent_pages' => json_decode($visitor->recent_page_urls, true) ?: array(),
-            'page_view_count' => $visitor->recent_page_count,
-            'all_time_page_views' => $visitor->all_time_page_views,
-            'last_seen_at' => $visitor->last_seen_at,
-            'most_recent_referrer' => $visitor->most_recent_referrer
-        );
-        
-        $result = $wpdb->insert(
-            $table,
-            array(
-                'campaign_id' => $campaign_id,
-                'visitor_id' => $visitor->id,
-                'current_room' => $assigned_room,
-                'company_name' => $visitor->company_name,
-                'contact_name' => trim($visitor->first_name . ' ' . $visitor->last_name),
-                'contact_email' => $visitor->email,
-                'lead_score' => $visitor->lead_score,
-                'days_in_room' => 0,
-                'email_sequence_position' => 0,
-                'urls_sent' => json_encode(array()),
-                'engagement_data' => json_encode($engagement_data),
-                'created_at' => current_time('mysql'),
-                'updated_at' => current_time('mysql')
-            ),
-            array('%d', '%d', '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%s', '%s', '%s', '%s')
-        );
-        
-        if ($result === false) {
-            error_log("RTR Jobs: Failed to create prospect for visitor {$visitor->id}: {$wpdb->last_error}");
-            return false;
-        }
-        
-        // Log room progression (entering room for first time)
-        $this->log_room_progression(
-            $visitor->id,
-            $campaign_id,
-            'none',
-            $assigned_room,
-            'Initial prospect creation',
-            $visitor->lead_score
-        );
-        
-        return true;
-    }
-
-    /**
-     * Update existing prospect record
-     */
-    private function update_prospect($existing_prospect, $visitor, $new_room) {
-        global $wpdb;
-        
-        $table = $wpdb->prefix . 'rtr_prospects';
-        
-        $updated = false;
-        $room_changed = false;
-        
-        // Check if score changed
-        if ($visitor->lead_score != $existing_prospect->lead_score) {
-            $updated = true;
-        }
-        
-        // Check if room changed
-        if ($new_room !== $existing_prospect->current_room) {
-            $room_changed = true;
-            $updated = true;
-            
-            // Log room transition
-            $this->log_room_progression(
-                $visitor->id,
-                $existing_prospect->campaign_id,
-                $existing_prospect->current_room,
-                $new_room,
-                'Automatic score-based transition',
-                $visitor->lead_score
-            );
-        }
-        
-        if (!$updated) {
-            return array('updated' => false, 'room_changed' => false);
-        }
-        
-        // Update engagement data
-        $engagement_data = array(
-            'recent_pages' => json_decode($visitor->recent_page_urls, true) ?: array(),
-            'page_view_count' => $visitor->recent_page_count,
-            'all_time_page_views' => $visitor->all_time_page_views,
-            'last_seen_at' => $visitor->last_seen_at,
-            'most_recent_referrer' => $visitor->most_recent_referrer
-        );
-        
-        // Update prospect
-        $result = $wpdb->update(
-            $table,
-            array(
-                'lead_score' => $visitor->lead_score,
-                'current_room' => $new_room,
-                'engagement_data' => json_encode($engagement_data),
-                'updated_at' => current_time('mysql')
-            ),
-            array('id' => $existing_prospect->id),
-            array('%d', '%s', '%s', '%s'),
-            array('%d')
-        );
-        
-        if ($result === false) {
-            error_log("RTR Jobs: Failed to update prospect {$existing_prospect->id}: {$wpdb->last_error}");
-        }
-        
-        return array(
-            'updated' => $result !== false,
-            'room_changed' => $room_changed
-        );
-    }
-
-    /**
-     * Log room progression/transition
-     */
-    private function log_room_progression($visitor_id, $campaign_id, $from_room, $to_room, $reason, $score = null) {
-        global $wpdb;
-        
-        $table = $wpdb->prefix . 'rtr_room_progression';
-        
-        // Check if campaign_id column is VARCHAR or INT
-        $campaign_id_type = $wpdb->get_var($wpdb->prepare(
-            "SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_SCHEMA = %s 
-            AND TABLE_NAME = %s 
-            AND COLUMN_NAME = 'campaign_id'",
-            DB_NAME,
-            $table
-        ));
-        
-        $campaign_format = (strtolower($campaign_id_type) === 'varchar') ? '%s' : '%d';
-        
         $wpdb->insert(
-            $table,
-            array(
-                'visitor_id' => $visitor_id,
+            $wpdb->prefix . 'rtr_room_progression',
+            [
+                'visitor_id'  => $visitor_id,
                 'campaign_id' => $campaign_id,
-                'from_room' => $from_room,
-                'to_room' => $to_room,
-                'score_at_transition' => $score,
-                'reason' => $reason,
-                'transitioned_at' => current_time('mysql')
-            ),
-            array('%d', $campaign_format, '%s', '%s', '%d', '%s', '%s')
+                'from_room'   => $from_room,
+                'to_room'     => $to_room,
+                'reason'      => $reason,
+                'created_at'  => current_time('mysql'),
+            ],
+            ['%d', '%d', '%s', '%s', '%s', '%s']
         );
     }
 
     /**
-     * Update last run tracking
+     * Log job action
+     * ENHANCED: Better formatting and context
+     * FIXED: Conditional error_log based on WP_DEBUG
+     *
+     * @param string $action_type Action type.
+     * @param string $description Description.
+     * @param string $level       Log level (info, warning, error).
+     * @return void
      */
-    private function update_last_run($mode, $status, $stats) {
-        update_option('dr_jobs_last_run_timestamp', current_time('mysql'));
-        update_option('dr_jobs_last_run_type', $mode);
-        update_option('dr_jobs_last_run_status', $status);
-        update_option('dr_jobs_last_run_stats', json_encode($stats));
-    }
-
-    /**
-     * Log job start
-     */
-    private function log_job_start($job_name, $mode = null) {
-        $description = 'RTR Nightly Job Started';
-        if ($mode) {
-            $description .= " (mode: {$mode})";
-        }
-        
-        $this->log_action('RTR_JOB_START', $description);
-    }
-
-    /**
-     * Log job completion
-     */
-    private function log_job_complete($job_name, $stats) {
-        $description = sprintf(
-            'RTR Nightly Job Complete. Visitors: %d, Scores: %d, Created: %d, Updated: %d, Transitions: %d, Duration: %.2fs',
-            $stats['visitors_processed'] ?? 0,
-            $stats['scores_calculated'] ?? 0,
-            $stats['prospects_created'] ?? 0,
-            $stats['prospects_updated'] ?? 0,
-            $stats['room_transitions'] ?? 0,
-            $stats['duration_seconds'] ?? 0
-        );
-        
-        if (!empty($stats['errors'])) {
-            $description .= sprintf(' | Errors: %d', count($stats['errors']));
-        }
-        
-        $this->log_action('RTR_JOB_COMPLETE', $description);
-    }
-
-    /**
-     * Log job error
-     */
-    private function log_job_error($job_name, $error_message) {
-        $this->log_action('RTR_JOB_ERROR', "RTR Nightly Job Failed: {$error_message}");
-    }
-
-    /**
-     * Log action to wp_cpd_action_logs
-     */
-    private function log_action($action_type, $description) {
+    private function log_job(string $action_type, string $description, string $level = 'info'): void {
         global $wpdb;
-        
-        $table = $wpdb->prefix . 'cpd_action_logs';
-        
+
+        // Log to action logs table
         $wpdb->insert(
-            $table,
-            array(
-                'user_id' => 0, // System/API
-                'action_type' => $action_type,
+            $wpdb->prefix . 'cpd_action_logs',
+            [
+                'user_id'     => 0, // System job
+                'action_type' => 'nightly_job_' . $action_type,
                 'description' => $description,
-                'timestamp' => current_time('mysql')
-            ),
-            array('%d', '%s', '%s', '%s')
+                'timestamp'   => current_time('mysql'),
+            ],
+            ['%d', '%s', '%s', '%s']
         );
+
+        // FIXED: Only log to error_log for warnings/errors or if WP_DEBUG is true
+        if ($level !== 'info' || (defined('WP_DEBUG') && WP_DEBUG)) {
+            $prefix = self::LOG_PREFIX_JOB . ' ' . strtoupper($level) . ']';
+            error_log("{$prefix} {$action_type}: {$description}");
+        }
     }
 
     /**
-     * Match visitors to campaigns based on content links
-     * 
-     * POST /jobs/match-campaigns
-     * Body: { client_id: 5, mode: "incremental" }
+     * Check API key authentication
+     * FIXED: Added return type
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return bool|WP_Error True if authenticated, WP_Error otherwise.
      */
-    public function match_campaigns($request) {
-        global $wpdb;
-        
-        $start_time = microtime(true);
-        $client_id = $request->get_param('client_id');
-        $mode = $request->get_param('mode');
-        
-        $this->log_action('CAMPAIGN_MATCH_START', sprintf(
-            'Campaign matching job started for client %d (mode: %s)',
-            $client_id,
-            $mode
-        ));
-        
-        try {
-            // Load matcher and manager classes
-            require_once CPD_DASHBOARD_PLUGIN_DIR . 'RTR/reading-the-room/includes/class-campaign-matcher.php';
-            require_once CPD_DASHBOARD_PLUGIN_DIR . 'RTR/reading-the-room/includes/class-visitor-campaign-manager.php';
-            
-            $matcher = new \DirectReach\ReadingTheRoom\Campaign_Matcher();
-            $manager = new \DirectReach\ReadingTheRoom\Visitor_Campaign_Manager();
-            
-            // Initialize stats
-            $stats = array(
-                'mode' => $mode,
-                'client_id' => $client_id,
-                'visitors_processed' => 0,
-                'campaigns_checked' => 0,
-                'attributions_created' => 0,
-                'attributions_updated' => 0,
-                'total_matches' => 0,
-                'errors' => array()
-            );
-            
-            // STEP 1: Load and cache content links for this client
-            $content_links_cache = $matcher->load_content_links_for_client($client_id);
-            
-            if (empty($content_links_cache)) {
-                $duration = round(microtime(true) - $start_time, 2);
-                
-                $this->log_action('CAMPAIGN_MATCH_COMPLETE', sprintf(
-                    'Campaign matching completed for client %d: No active campaigns with content links. Duration: %.2fs',
-                    $client_id,
-                    $duration
-                ));
-                
-                return rest_ensure_response(array(
-                    'success' => true,
-                    'message' => 'No active campaigns with content links found',
-                    'stats' => array_merge($stats, array(
-                        'duration_seconds' => $duration
-                    ))
-                ));
-            }
-            
-            $cache_stats = $matcher->get_cache_stats();
-            $stats['campaigns_checked'] = $cache_stats['campaigns'];
-            
-            // STEP 2: Get visitors to process
-            $account_id = $this->get_account_id_for_client($client_id);
-            
-            if (!$account_id) {
-                throw new \Exception('Could not find account_id for client ' . $client_id);
-            }
-            
-            // Build visitor query based on mode
-            if ($mode === 'incremental') {
-                // Process visitors active in last 3 days
-                $visitors = $wpdb->get_results($wpdb->prepare(
-                    "SELECT id, account_id, recent_page_urls, client_id
-                     FROM {$wpdb->prefix}cpd_visitors
-                     WHERE account_id = %s
-                     AND last_seen_at >= DATE_SUB(NOW(), INTERVAL 3 DAY)
-                     AND is_archived = 0
-                     ORDER BY last_seen_at DESC",
-                    $account_id
-                ));
-            } else {
-                // Process all active visitors
-                $visitors = $wpdb->get_results($wpdb->prepare(
-                    "SELECT id, account_id, recent_page_urls, client_id
-                     FROM {$wpdb->prefix}cpd_visitors
-                     WHERE account_id = %s
-                     AND is_archived = 0
-                     ORDER BY last_seen_at DESC",
-                    $account_id
-                ));
-            }
-            
-            if (empty($visitors)) {
-                $duration = round(microtime(true) - $start_time, 2);
-                
-                $this->log_action('CAMPAIGN_MATCH_COMPLETE', sprintf(
-                    'Campaign matching completed for client %d: No visitors to process. Duration: %.2fs',
-                    $client_id,
-                    $duration
-                ));
-                
-                return rest_ensure_response(array(
-                    'success' => true,
-                    'message' => 'No visitors to process',
-                    'stats' => array_merge($stats, array(
-                        'duration_seconds' => $duration
-                    ))
-                ));
-            }
-            
-            $stats['visitors_processed'] = count($visitors);
-            
-            // STEP 3: Process each visitor
-            foreach ($visitors as $visitor) {
-                try {
-                    // Skip visitors with no recent pages
-                    if (empty($visitor->recent_page_urls)) {
-                        continue;
-                    }
-                    
-                    // Parse recent_page_urls
-                    $page_urls = json_decode($visitor->recent_page_urls, true);
-                    
-                    if (!is_array($page_urls) || empty($page_urls)) {
-                        $stats['errors'][] = "Visitor {$visitor->id}: Invalid or empty recent_page_urls";
-                        continue;
-                    }
-                    
-                    // Match visitor to campaigns
-                    $matches = $matcher->match_visitor_to_campaigns($visitor);
-                    
-                    if (empty($matches)) {
-                        continue; // No matches for this visitor
-                    }
-                    
-                    // Create/update attribution for each matched campaign
-                    foreach ($matches as $campaign_id => $matched_urls) {
-                        try {
-                            // Get campaign_id string for storage
-                            $campaign = $wpdb->get_row($wpdb->prepare(
-                                "SELECT campaign_id FROM {$wpdb->prefix}dr_campaign_settings WHERE id = %d",
-                                $campaign_id
-                            ));
-                            
-                            if (!$campaign) {
-                                $stats['errors'][] = "Campaign {$campaign_id} not found in database";
-                                continue;
-                            }
-                            
-                            $campaign_id_str = $campaign->campaign_id;
-                            
-                            // Check if attribution exists
-                            $existing = $manager->attribution_exists($visitor->id, $campaign_id_str);
-                            
-                            // Create or update attribution
-                            $result = $manager->create_or_update_attribution(
-                                $visitor->id,
-                                $campaign_id,
-                                $campaign_id_str,
-                                $matched_urls,
-                                $account_id
-                            );
-                            
-                            if ($result !== false) {
-                                $stats['total_matches']++;
-                                
-                                if ($existing) {
-                                    $stats['attributions_updated']++;
-                                } else {
-                                    $stats['attributions_created']++;
-                                }
-                            }
-                            
-                        } catch (\Exception $e) {
-                            $stats['errors'][] = "Visitor {$visitor->id}, Campaign {$campaign_id}: {$e->getMessage()}";
-                            error_log("Campaign Matching: Error for visitor {$visitor->id}, campaign {$campaign_id}: {$e->getMessage()}");
-                        }
-                    }
-                    
-                } catch (\Exception $e) {
-                    $stats['errors'][] = "Visitor {$visitor->id}: {$e->getMessage()}";
-                    error_log("Campaign Matching: Error processing visitor {$visitor->id}: {$e->getMessage()}");
-                }
-            }
-            
-            // Calculate duration
-            $duration = round(microtime(true) - $start_time, 2);
-            $stats['duration_seconds'] = $duration;
-            
-            // Log completion
-            $this->log_action('CAMPAIGN_MATCH_COMPLETE', sprintf(
-                'Campaign matching completed for client %d. Visitors: %d, Campaigns: %d, Created: %d, Updated: %d, Total Matches: %d, Errors: %d, Duration: %.2fs',
-                $client_id,
-                $stats['visitors_processed'],
-                $stats['campaigns_checked'],
-                $stats['attributions_created'],
-                $stats['attributions_updated'],
-                $stats['total_matches'],
-                count($stats['errors']),
-                $duration
-            ));
-            
-            return rest_ensure_response(array(
-                'success' => true,
-                'stats' => $stats
-            ));
-            
-        } catch (\Exception $e) {
-            $duration = round(microtime(true) - $start_time, 2);
-            
-            $this->log_action('CAMPAIGN_MATCH_ERROR', sprintf(
-                'Campaign matching failed for client %d: %s (Duration: %.2fs)',
-                $client_id,
-                $e->getMessage(),
-                $duration
-            ));
-            
-            return new \WP_Error(
-                'campaign_match_failed',
-                $e->getMessage(),
-                array('status' => 500)
+    public function check_api_key($request): bool|WP_Error {
+        // Check for API key in header
+        $api_key = $request->get_header('X-API-Key');
+
+        if (empty($api_key)) {
+            return new WP_Error(
+                'missing_api_key',
+                'API key is required',
+                ['status' => 401]
             );
         }
-    }
-    
-    /**
-     * Get account_id for a client_id
-     * 
-     * @param int $client_id Client ID
-     * @return string|null Account ID or null
-     */
-    private function get_account_id_for_client($client_id) {
-        global $wpdb;
-        
-        $account_id = $wpdb->get_var($wpdb->prepare(
-            "SELECT account_id FROM {$wpdb->prefix}cpd_clients WHERE id = %d",
-            $client_id
-        ));
-        
-        return $account_id;
+
+        // Get stored API key from options
+        $stored_key = get_option('cpd_api_key');
+
+        if (empty($stored_key)) {
+            // If no API key is configured, fall back to checking if user is admin
+            return current_user_can('manage_options');
+        }
+
+        // Validate API key
+        if ($api_key !== $stored_key) {
+            return new WP_Error(
+                'invalid_api_key',
+                'Invalid API key',
+                ['status' => 403]
+            );
+        }
+
+        return true;
     }
 }

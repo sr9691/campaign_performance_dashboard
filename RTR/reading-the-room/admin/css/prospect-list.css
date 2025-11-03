@@ -1,153 +1,417 @@
-/* Action buttons */
-.prospect-actions {
+/* prospect-list.css */
+
+
+/* prospect-list.css - ADD THIS */
+
+/* Loading State */
+.rtr-loading-state {
     display: flex;
-    gap: 8px;
-    margin-left: auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+    color: #6b7280;
 }
 
-.archive-btn,
-.handoff-btn {
-    padding: 8px 12px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s;
+.rtr-loading-state i {
+    font-size: 48px;
+    color: #3b82f6;
+    margin-bottom: 16px;
+}
+
+.rtr-loading-state p {
+    margin: 0;
     font-size: 14px;
+    font-weight: 500;
+    color: #374151;
 }
 
-.archive-btn {
-    background: #95a5a6;
-    color: white;
+/* Error State */
+.rtr-error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    text-align: center;
+    color: #ef4444;
 }
 
-.archive-btn:hover {
-    background: #7f8c8d;
+.rtr-error-state i {
+    font-size: 48px;
+    color: #ef4444;
+    margin-bottom: 16px;
 }
 
-.handoff-btn {
-    background: #27ae60;
-    color: white;
+.rtr-error-state p {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #dc2626;
 }
 
-.handoff-btn:hover {
-    background: #229954;
+.rtr-error-state small {
+    font-size: 12px;
+    color: #9ca3af;
+    max-width: 400px;
+    display: block;
 }
 
-/* Action modal */
-.action-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 10000;
+
+.rtr-prospect-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0;
+}
+
+.rtr-prospect-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 14px 16px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    min-height: 120px;
+}
+
+.rtr-prospect-row:hover {
+    border-color: #d1d5db;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    transform: translateY(-1px);
+}
+
+.rtr-prospect-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-right: 16px;
+    gap: 4px;
+    min-width: 0;
+}
+
+.rtr-prospect-name {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: #111827;
+    line-height: 1.3;
+}
+
+.rtr-company {
+    font-size: 16px;
+    font-weight: 400;
+    color: #6b7280;
+    margin: 0;
+    line-height: 1.3;
+}
+
+.rtr-campaign-badges {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+    flex-wrap: wrap;
+}
+
+.rtr-campaign-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    background: #dbeafe;
+    color: #1e40af;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    border: 1px solid #93c5fd;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;  
+    transition: all 0.2s ease;
+}
+
+.rtr-campaign-badge:hover {
+    background: #93c5fd;
+    color: #1e3a8a;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+.rtr-campaign-badge:active {
+    transform: translateY(0);
+}
+
+.rtr-more-badge {
+    background: #f3f4f6;
+    color: #6b7280;
+    border-color: #d1d5db;
+}
+
+.rtr-prospect-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.rtr-lead-score-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.rtr-score-label {
+    font-size: 16px;
+    font-weight: 500;
+    color: #6b7280;
+}
+
+.rtr-score-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: #f59e0b;
+    line-height: 1;
+}
+
+.rtr-email-sequence {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.rtr-email-btn {
+    background: transparent !important;
+    border: none;
+    padding: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 26px;
+    height: 26px;
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s;
 }
 
-.action-modal.active {
-    opacity: 1;
-    pointer-events: all;
+.rtr-email-btn:not(:disabled):hover {
+    background: rgba(0, 0, 0, 0.05) !important;
+    transform: scale(1.1);
 }
 
-.action-modal .modal-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+.rtr-email-btn i {
+    font-size: 14px;
 }
 
-.action-modal .modal-content {
-    position: relative;
-    background: white;
-    border-radius: 8px;
-    width: 90%;
-    max-width: 500px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-    transform: scale(0.9);
-    transition: transform 0.3s;
+.rtr-email-pending {
+    color: #d1d5db;
 }
 
-.action-modal.active .modal-content {
-    transform: scale(1);
+.rtr-email-sent,
+.rtr-email-sent i {
+    color: #10b981;
 }
 
-.action-modal .modal-header {
-    padding: 20px;
-    border-bottom: 1px solid #ecf0f1;
+.rtr-email-opened,
+.rtr-email-opened i {
+    color: #10b981;
+}
+
+.rtr-email-ready,
+.rtr-email-ready i {
+    color: #10b981 !important;
+}
+
+.rtr-email-generating,
+.rtr-email-generating i {
+    color: #10b981 !important;
+    animation: spin 1s linear infinite;
+}
+
+.rtr-email-btn[data-email-state="ready"],
+.rtr-email-btn[data-email-state="ready"] i {
+    color: #10b981 !important;
+}
+
+.rtr-email-disabled {
+    opacity: 0.3 !important;
+    cursor: not-allowed !important;
+}
+
+.rtr-email-disabled:hover {
+    transform: none !important;
+    background: transparent !important;
+}
+
+.rtr-email-pulse {
+    animation: emailPulse 2s ease-in-out infinite;
+}
+
+.rtr-email-pulse i {
+    font-size: 16px !important;
+}
+
+@keyframes emailPulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.15);
+        opacity: 0.8;
+    }
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.rtr-prospect-actions {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
 }
 
-.action-modal .modal-header h3 {
-    margin: 0;
-    font-size: 18px;
-    display: flex;
+.rtr-action-btn {
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
-}
-
-.action-modal .modal-close {
-    background: none;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
     border: none;
-    font-size: 24px;
+    border-radius: 6px;
+    font-size: 14px;
     cursor: pointer;
-    color: #95a5a6;
-    padding: 0;
-    width: 30px;
-    height: 30px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
 }
 
-.action-modal .modal-close:hover {
-    color: #7f8c8d;
+.rtr-action-btn:hover:not(:disabled) {
+    transform: scale(1.05);
 }
 
-.action-modal .modal-body {
-    padding: 20px;
+.rtr-action-btn:active:not(:disabled) {
+    transform: scale(0.95);
 }
 
-.action-modal .form-group {
-    margin-top: 15px;
+.rtr-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
-.action-modal .form-group label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 500;
-    color: #2c3e50;
+.rtr-archive-btn {
+    background: #f3f4f6;
+    color: #9ca3af;
+    border: none;
 }
 
-.action-modal textarea {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-family: inherit;
-    resize: vertical;
+.rtr-archive-btn:hover {
+    background: #fee2e2;
+    color: #ef4444;
 }
 
-.action-modal .modal-footer {
-    padding: 20px;
-    border-top: 1px solid #ecf0f1;
+.rtr-empty-state {
     display: flex;
-    gap: 10px;
-    justify-content: flex-end;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+    color: #6b7280;
 }
 
-/* Sales Room card styling */
-.room-card[data-room="sales"] {
-    border-left-color: #27ae60;
-    cursor: default;
+.rtr-empty-icon {
+    font-size: 48px;
+    color: #d1d5db;
+    margin-bottom: 12px;
 }
 
-.room-card[data-room="sales"]:hover {
-    transform: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+.rtr-empty-state h3 {
+    margin: 0 0 6px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.rtr-empty-state p {
+    margin: 0;
+    font-size: 14px;
+    max-width: 400px;
+    line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+    .rtr-prospect-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+        min-height: auto;
+    }
+
+    .rtr-prospect-right {
+        width: 100%;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+}
+
+@media (max-width: 567px) {
+    .rtr-prospect-row {
+        padding: 10px 14px;
+    }
+
+    .rtr-prospect-name {
+        font-size: 15px;
+    }
+
+    .rtr-company {
+        font-size: 12px;
+    }
+
+    .rtr-score-label {
+        font-size: 12px;
+    }
+
+    .rtr-score-value {
+        font-size: 20px;
+    }
+
+    .rtr-campaign-badge {
+        font-size: 10px;
+        padding: 2px 8px;
+    }
+
+    .rtr-email-btn {
+        width: 24px;
+        height: 24px;
+    }
+
+    .rtr-email-btn i {
+        font-size: 12px;
+    }
+
+    .rtr-action-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 13px;
+    }
+}
+
+@media print {
+    .rtr-prospect-actions,
+    .rtr-email-sequence {
+        display: none;
+    }
+
+    .rtr-prospect-row {
+        border: 1px solid #000;
+        page-break-inside: avoid;
+    }
 }

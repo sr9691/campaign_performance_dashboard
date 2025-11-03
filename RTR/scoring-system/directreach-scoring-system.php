@@ -128,17 +128,34 @@ class DirectReach_Scoring_System {
         
         // Register API routes
         add_action('rest_api_init', function() {
+            error_log('RTR Scoring: Registering REST API routes');
+            
             // Room Thresholds Controller
-            $thresholds_controller = new RTR_Room_Thresholds_Controller();
-            $thresholds_controller->register_routes();
+            if (class_exists('RTR_Room_Thresholds_Controller')) {
+                $thresholds_controller = new RTR_Room_Thresholds_Controller();
+                $thresholds_controller->register_routes();
+                error_log('RTR Scoring: Room Thresholds routes registered');
+            } else {
+                error_log('RTR Scoring: ERROR - RTR_Room_Thresholds_Controller class not found');
+            }
             
             // Scoring Rules Controller
-            $rules_controller = new RTR_Scoring_Rules_Controller();
-            $rules_controller->register_routes();
+            if (class_exists('RTR_Scoring_Rules_Controller')) {
+                $rules_controller = new RTR_Scoring_Rules_Controller();
+                $rules_controller->register_routes();
+                error_log('RTR Scoring: Scoring Rules routes registered');
+            } else {
+                error_log('RTR Scoring: ERROR - RTR_Scoring_Rules_Controller class not found');
+            }
             
-            // Score Calculator Controller
-            $calculator_controller = new RTR_Score_Calculator_Controller();
-            $calculator_controller->register_routes();
+            // Score Calculator Controller (Iteration 6)
+            if (class_exists('RTR_Score_Calculator_Controller')) {
+                $calculator_controller = new RTR_Score_Calculator_Controller();
+                $calculator_controller->register_routes();
+                error_log('RTR Scoring: Score Calculator routes registered');
+            } else {
+                error_log('RTR Scoring: ERROR - RTR_Score_Calculator_Controller class not found');
+            }
         });
 
         // Script modifications

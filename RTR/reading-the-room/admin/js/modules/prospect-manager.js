@@ -1,756 +1,1039 @@
 /**
- * Prospect Manager Module
+ * Prospect Manager Module - Phase 3A Enhanced
  * 
- * Handles prospect list rendering, filtering, and interactions
- * 
- * @package DirectReach
- * @subpackage ReadingTheRoom
- * @since 1.0.0
+ * Manages prospect list display, filtering, and actions
+ * Now includes 5-state independent email button system
  */
 
 export default class ProspectManager {
-    constructor(api, config) {
-        this.api = api;
+    constructor(config) {
         this.config = config;
+        if (typeof config === 'string') {
+            this.apiUrl = config;
+        } else {
+            this.apiUrl = config?.restUrl || config?.apiUrl || window.rtrDashboardConfig?.restUrl || window.rtrDashboardConfig?.apiUrl || '';
+        }
+        this.nonce = config.nonce;
+        this.uiManager = null; // Will be set by main.js
+        this.currentFilters = {
+            campaign_id: '',
+            room: null
+        };
         this.prospects = {
             problem: [],
             solution: [],
-            offer: []
+            offer: [],
         };
-        this.campaigns = [];
-        this.currentFilters = {
-            problem: 'all',
-            solution: 'all',
-            offer: 'all'
-        };
+
+        this.campaigns = new Map();
+        this.isLoading = {};
+        
+        // Debounce tracking for button clicks
+        this.buttonDebounce = new Map();
+        
+        this.init();
     }
-    
-    /**
-     * Load all prospects by room
-     */
-    async loadAllProspects(clientId = null) {
-        const rooms = ['problem', 'solution', 'offer'];
-        
-        for (const room of rooms) {
-            await this.loadProspectsForRoom(room, clientId);
-        }
-    }
-    
-    /**
-     * Load prospects for specific room
-     */
-    async loadProspectsForRoom(room, clientId = null) {
-        try {
-            const params = { room, limit: 100 };
-            if (clientId) {
-                params.campaign_id = clientId;
-            }
-            
-            const response = await this.api.get('/prospects', params);
-            
-            if (response.success) {
-                this.prospects[room] = response.data;
-                this.renderRoomSection(room);
-                await this.loadCampaignsForRoom(room);
-            }
-        } catch (error) {
-            console.error(`Failed to load ${room} prospects:`, error);
-            throw error;
-        }
-    }
-    
-    /**
-     * Load campaigns for room dropdown
-     */
-    async loadCampaignsForRoom(room) {
-        const prospects = this.prospects[room];
-        const campaignIds = [...new Set(prospects.map(p => p.campaign_id))];
-        
-        // Get campaign names
-        const campaigns = [];
-        for (const id of campaignIds) {
-            try {
-                const campaign = await this.getCampaignInfo(id);
-                if (campaign) {
-                    campaigns.push(campaign);
-                }
-            } catch (error) {
-                console.error('Failed to load campaign:', error);
-            }
-        }
-        
-        this.updateCampaignDropdown(room, campaigns);
-    }
-    
-    /**
-     * Get campaign info (with caching)
-     */
-    async getCampaignInfo(campaignId) {
-        // Check cache first
-        const cached = this.campaigns.find(c => c.id === campaignId);
-        if (cached) return cached;
-        
-        try {
-            // Load from API (would be a real endpoint in production)
-            // For now, return placeholder
-            const campaign = {
-                id: campaignId,
-                name: `Campaign ${campaignId}`,
-                utm_campaign: `campaign-${campaignId}`
-            };
-            
-            this.campaigns.push(campaign);
-            return campaign;
-        } catch (error) {
-            console.error('Failed to get campaign info:', error);
-            return null;
-        }
-    }
-    
-    /**
-     * Render complete room section
-     */
-    renderRoomSection(room) {
-        const detailsSection = document.querySelector('.room-details-section');
-        if (!detailsSection) return;
-        
-        const existingContainer = detailsSection.querySelector(`[data-room="${room}"]`);
-        const container = this.createRoomDetailContainer(room);
-        
-        if (existingContainer) {
-            existingContainer.replaceWith(container);
-        } else {
-            detailsSection.appendChild(container);
-        }
-        
-        this.attachRoomEventListeners(room);
-    }
-    
-    /**
-     * Create room detail container
-     */
-    createRoomDetailContainer(room) {
-        const container = document.createElement('div');
-        container.className = 'room-detail-container';
-        container.dataset.room = room;
-        
-        const roomInfo = this.getRoomInfo(room);
-        const prospects = this.getFilteredProspects(room);
-        
-        container.innerHTML = `
-            <div class="room-detail-header">
-                <h3>${roomInfo.name} <span class="room-count-badge">${prospects.length}</span></h3>
-                <div class="campaign-filter">
-                    <select class="campaign-dropdown" data-room="${room}">
-                        <option value="all">All Campaigns</option>
-                    </select>
-                </div>
-            </div>
-            <div class="prospect-list" data-room="${room}">
-                ${this.renderProspectList(prospects, room)}
-            </div>
-        `;
-        
-        return container;
-    }
-    
-    /**
-     * Render prospect list
-     */
-    renderProspectList(prospects, room) {
-        if (prospects.length === 0) {
-            return `
-                <div style="padding: 40px; text-align: center; color: #999;">
-                    <i class="fas fa-inbox" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.3;"></i>
-                    <p>No prospects in this room</p>
-                </div>
-            `;
-        }
-        
-        return prospects.map(prospect => this.createProspectRow(prospect, room)).join('');
-    }
-    
-    /**
-     * Create single prospect row
-     */
-    createProspectRow(prospect, room) {
-        const scoreClass = `${room}-score`;
-        const showHandoff = room === 'offer';
-        const contactName = prospect.contact_name || 'Unknown Contact';
-        const companyName = prospect.company_name || 'Unknown Company';
-        
-        // Parse engagement data
-        const engagement = this.parseEngagementData(prospect);
-        
-        // Determine campaign name
-        const campaign = this.campaigns.find(c => c.id === prospect.campaign_id);
-        const campaignName = campaign ? campaign.name : `Campaign ${prospect.campaign_id}`;
-        
-        return `
-            <div class="prospect-row" data-prospect-id="${prospect.id}" data-campaign-id="${prospect.campaign_id}">
-                <div class="prospect-name">
-                    <strong>${this.escapeHtml(contactName)}</strong>
-                    <div class="company-name">${this.escapeHtml(companyName)}</div>
-                    <div class="campaign-tag">${this.escapeHtml(campaignName)}</div>
-                </div>
-                <div class="prospect-metrics">
-                    <div class="lead-score">
-                        <span>Lead Score: </span>
-                        <span class="score-value ${scoreClass}">${prospect.lead_score || 0}</span>
-                    </div>
-                    <div class="email-progress">
-                        <div class="email-icons">
-                            ${this.createEmailIcons(prospect.email_sequence_position || 0, engagement.emails)}
-                        </div>
-                    </div>
-                </div>
-                <div class="prospect-actions">
-                    ${showHandoff ? `
-                        <button class="handoff-btn ${prospect.lead_score >= 85 ? 'handoff-ready' : ''}" 
-                                title="Hand off to Sales">
-                            <i class="fas fa-handshake"></i>
-                        </button>
-                    ` : ''}
-                    <button class="archive-btn" title="Archive prospect">
-                        <i class="fas fa-archive"></i>
-                    </button>
-                </div>
-            </div>
-        `;
-    }
-    
-    /**
-     * Create email sequence icons
-     */
-    createEmailIcons(sequencePosition, emails = []) {
-        const icons = [];
-        
-        for (let i = 1; i <= 5; i++) {
-            let iconClass = 'email-not-sent';
-            let iconType = 'fa-envelope';
-            let title = `Email ${i}: Not Sent`;
-            
-            if (i <= sequencePosition) {
-                // Check if we have tracking data for this email
-                const emailData = emails.find(e => e.number === i);
-                
-                if (emailData) {
-                    if (emailData.opened) {
-                        iconClass = 'email-opened';
-                        iconType = 'fa-envelope-open';
-                        title = `Email ${i}: Opened`;
-                    } else {
-                        iconClass = 'email-sent';
-                        iconType = 'fa-envelope';
-                        title = `Email ${i}: Sent`;
-                    }
-                } else {
-                    iconClass = 'email-sent';
-                    iconType = 'fa-envelope';
-                    title = `Email ${i}: Sent`;
-                }
-            }
-            
-            icons.push(`<i class="fas ${iconType} ${iconClass}" 
-                           data-email-number="${i}" 
-                           title="${title}"></i>`);
-        }
-        
-        return icons.join('');
-    }
-    
-    /**
-     * Parse engagement data from prospect
-     */
-    parseEngagementData(prospect) {
-        const data = {
-            emails: [],
-            recentPages: [],
-            pageViewCount: 0
-        };
-        
-        if (prospect.engagement_data) {
-            try {
-                const parsed = typeof prospect.engagement_data === 'string' 
-                    ? JSON.parse(prospect.engagement_data) 
-                    : prospect.engagement_data;
-                
-                data.emails = parsed.emails || [];
-                data.recentPages = parsed.recent_pages || [];
-                data.pageViewCount = parsed.page_view_count || 0;
-            } catch (error) {
-                console.error('Failed to parse engagement data:', error);
-            }
-        }
-        
-        return data;
-    }
-    
-    /**
-     * Get filtered prospects for room
-     */
-    getFilteredProspects(room) {
-        const allProspects = this.prospects[room] || [];
-        const filter = this.currentFilters[room];
-        
-        if (filter === 'all') {
-            return allProspects;
-        }
-        
-        return allProspects.filter(p => p.campaign_id === parseInt(filter));
-    }
-    
-    /**
-     * Update campaign dropdown
-     */
-    updateCampaignDropdown(room, campaigns) {
-        const dropdown = document.querySelector(`.campaign-dropdown[data-room="${room}"]`);
-        if (!dropdown) return;
-        
-        // Keep "All Campaigns" option
-        const allOption = dropdown.querySelector('option[value="all"]');
-        dropdown.innerHTML = '';
-        
-        if (allOption) {
-            dropdown.appendChild(allOption);
-        } else {
-            dropdown.innerHTML = '<option value="all">All Campaigns</option>';
-        }
-        
-        // Add campaign options
-        campaigns.forEach(campaign => {
-            const option = document.createElement('option');
-            option.value = campaign.id;
-            option.textContent = campaign.name;
-            dropdown.appendChild(option);
-        });
-    }
-    
-    /**
-     * Filter prospects by campaign
-     */
-    filterProspectsByCampaign(room, campaignId) {
-        this.currentFilters[room] = campaignId;
-        
-        const prospectList = document.querySelector(`.prospect-list[data-room="${room}"]`);
-        const countBadge = document.querySelector(`[data-room="${room}"] .room-count-badge`);
-        
-        if (prospectList) {
-            const filteredProspects = this.getFilteredProspects(room);
-            prospectList.innerHTML = this.renderProspectList(filteredProspects, room);
-            
-            if (countBadge) {
-                countBadge.textContent = filteredProspects.length;
-            }
-        }
-    }
-    
-    /**
-     * Attach event listeners for room
-     */
-    attachRoomEventListeners(room) {
-        // Campaign filter
-        const dropdown = document.querySelector(`.campaign-dropdown[data-room="${room}"]`);
-        if (dropdown) {
-            dropdown.addEventListener('change', (e) => {
-                this.filterProspectsByCampaign(room, e.target.value);
-            });
-        }
-        
-        // Prospect row clicks
-        const rows = document.querySelectorAll(`[data-room="${room}"] .prospect-row`);
-        rows.forEach(row => {
-            row.addEventListener('click', (e) => {
-                // Don't trigger if clicking action buttons
-                if (e.target.closest('.prospect-actions')) {
-                    return;
-                }
-                
-                const prospectId = row.dataset.prospectId;
-                this.showProspectDetails(prospectId);
-            });
-        });
-        
-        // Email icon clicks
-        const emailIcons = document.querySelectorAll(`[data-room="${room}"] .email-icons i`);
-        emailIcons.forEach(icon => {
-            icon.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const prospectRow = icon.closest('.prospect-row');
-                const prospectId = prospectRow.dataset.prospectId;
-                const emailNumber = icon.dataset.emailNumber;
-                this.handleEmailIconClick(prospectId, emailNumber);
-            });
+
+    init() {
+        this.attachEventListeners();
+        this.loadAllRooms();
+
+        // Listen for filter changes
+        document.addEventListener('rtr:filterChanged', () => {
+            this.refreshAllRooms();
         });
 
-        this.attachActionListeners();
+        // Listen for email state updates (from modal copy actions)
+        document.addEventListener('rtr:email-state-update', (e) => {
+            const { visitorId, emailNumber, newState } = e.detail;
+            this.updateButtonState(visitorId, emailNumber, newState);
+        });
     }
-    
-    /**
-     * Show prospect details modal
-     */
-    showProspectDetails(prospectId) {
-        // Find prospect in any room
-        let prospect = null;
-        for (const room in this.prospects) {
-            prospect = this.prospects[room].find(p => p.id === parseInt(prospectId));
-            if (prospect) break;
+
+    setUIManager(uiManager) {
+        this.uiManager = uiManager;
+    }
+
+    attachEventListeners() {
+        // Campaign filter
+        const campaignFilter = document.getElementById('rtr-campaign-filter');
+        if (campaignFilter) {
+            campaignFilter.addEventListener('change', (e) => {
+                this.currentFilters.campaign_id = e.target.value;
+                this.refreshAllRooms();
+                document.dispatchEvent(new CustomEvent('rtr:filterChanged'));
+            });
+        }
+
+        ['problem', 'solution', 'offer'].forEach(room => {
+            const campaignFilter = document.getElementById(`${room}-room-campaign-filter`);
+            if (campaignFilter) {
+                campaignFilter.addEventListener('change', (e) => {
+                    this.loadRoomProspects(room);
+                });
+            }
+        });
+        
+        document.addEventListener('click', (e) => {
+            const badge = e.target.closest('.rtr-campaign-badge');
+            if (badge && !badge.classList.contains('rtr-more-badge')) {
+                const campaignId = badge.dataset.campaignId;
+                const room = badge.closest('.room-detail-container')?.id?.replace('rtr-room-', '');
+                
+                if (campaignId && room) {
+                    const campaignFilter = document.getElementById(`${room}-room-campaign-filter`);
+                    if (campaignFilter) {
+                        campaignFilter.value = campaignId;
+                        this.loadRoomProspects(room);
+                    }
+                }
+            }
+        });        
+
+        // Delegate click events for prospect actions
+        document.addEventListener('click', (e) => {
+            // Email button - NEW: handles different states
+            const emailBtn = e.target.closest('.rtr-email-btn');
+            if (emailBtn) {
+                e.preventDefault();
+                const visitorId = emailBtn.dataset.visitorId;
+                const room = emailBtn.dataset.room;
+                const emailNumber = parseInt(emailBtn.dataset.emailNumber);
+                const emailState = emailBtn.dataset.emailState;
+                this.handleEmailClick(visitorId, room, emailNumber, emailState);
+            }
+
+            // Info button
+            const infoBtn = e.target.closest('.rtr-info-btn');
+            if (infoBtn) {
+                e.preventDefault();
+                const visitorId = infoBtn.dataset.visitorId;
+                const room = infoBtn.dataset.room;
+                this.handleInfoClick(visitorId, room);
+            }
+
+            // Archive/Delete button
+            const archiveBtn = e.target.closest('.rtr-archive-btn');
+            if (archiveBtn) {
+                e.preventDefault();
+                const visitorId = archiveBtn.dataset.visitorId;
+                const room = archiveBtn.dataset.room;
+                this.handleArchiveClick(visitorId, room);
+            }
+
+            // Sales handoff button
+            const handoffBtn = e.target.closest('.rtr-handoff-btn');
+            if (handoffBtn) {
+                e.preventDefault();
+                const visitorId = handoffBtn.dataset.visitorId;
+                this.handleSalesHandoff(visitorId);
+            }
+
+            // Email history button
+            const historyBtn = e.target.closest('.rtr-email-history-btn');
+            if (historyBtn) {
+                e.preventDefault();
+                const visitorId = historyBtn.dataset.visitorId;
+                const room = historyBtn.dataset.room;
+                this.handleEmailHistoryClick(visitorId, room);
+            }
+        });
+    }
+
+    async loadAllRooms() {
+        const rooms = ['problem', 'solution', 'offer'];
+        console.log('Loading all rooms:', rooms);
+        await Promise.all(rooms.map(room => this.loadRoomProspects(room)));
+        console.log('All rooms loaded');
+    }
+
+    async refreshAllRooms() {
+        const rooms = ['problem', 'solution', 'offer'];
+        await Promise.all(rooms.map(room => this.loadRoomProspects(room, this.currentFilters.campaign_id)));
+    }
+
+    async loadRoomProspects(room, campaignId = null) {
+        console.log(`Loading prospects for room: ${room} with campaign filter: ${campaignId}`);
+        if (this.isLoading[room]) {
+            return;
+        }
+
+        this.isLoading[room] = true;
+        console.log(`Fetching prospects for room: ${room}...`);
+        const container = document.querySelector(`#rtr-room-${room} .rtr-prospect-list`);
+        
+        if (!container) {
+            this.isLoading[room] = false;
+            return;
+        }
+
+        this.showLoadingState(container, room);
+
+        try {
+            const url = new URL(`${this.apiUrl}/prospects`, window.location.origin);
+            url.searchParams.append('room', room);
+
+            const clientFilter = document.getElementById('client-select');
+
+            if (clientFilter && clientFilter.value) {
+                url.searchParams.append('client_id', clientFilter.value);
+            }
+
+            const dateFilter = document.getElementById('date-filter');
+
+            if (dateFilter && dateFilter.value) {
+                url.searchParams.append('days', dateFilter.value);
+            }            
+
+            const campaignFilter = document.getElementById(`${room}-room-campaign-filter`);
+
+            if (campaignFilter && campaignFilter.value) {
+                url.searchParams.append('campaign_id', campaignFilter.value);
+            }
+
+            const response = await fetch(url, {
+                headers: {
+                    'X-WP-Nonce': this.nonce
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            this.prospects[room] = data.data || [];
+            
+            // Initialize email states for prospects that don't have them
+            this.prospects[room].forEach(prospect => {
+                this.initializeEmailStates(prospect);
+            });
+            
+            this.populateCampaignDropdowns(room, this.prospects[room]);
+            this.renderProspects(room, this.prospects[room]);
+
+        } catch (error) {
+            console.error(`Failed to load ${room} room prospects:`, error);
+            this.showErrorState(container, room, error.message);
+        } finally {
+            this.isLoading[room] = false;
+        }
+    }
+
+    populateCampaignDropdowns(room, prospects) {
+        const campaignFilter = document.getElementById(`${room}-room-campaign-filter`);
+        if (!campaignFilter) return;
+
+        // Extract unique campaigns from prospects
+        const campaigns = new Map();
+        prospects.forEach(prospect => {
+            // Campaign data is directly on the prospect object
+            if (prospect.campaign_id && prospect.campaign_name) {
+                campaigns.set(prospect.campaign_id, prospect.campaign_name);
+            }
+        });
+
+        console.log(`Found ${campaigns.size} campaigns for ${room}:`, Array.from(campaigns.entries()));
+
+        // Store current selection
+        const currentValue = campaignFilter.value;
+
+        // Populate dropdown
+        // ... [LINES 223-306 UNCHANGED - Campaign dropdown population logic]
+    }
+
+    showLoadingState(container, room) {
+        container.innerHTML = `
+            <div class="rtr-loading-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading ${room} room prospects...</p>
+            </div>
+        `;
+    }
+
+    showErrorState(container, room, errorMessage) {
+        container.innerHTML = `
+            <div class="rtr-error-state">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Failed to load ${room} room prospects</p>
+                <small>${this.escapeHtml(errorMessage)}</small>
+            </div>
+        `;
+    }
+
+    renderProspects(room, prospects) {
+        const container = document.querySelector(`#rtr-room-${room} .rtr-prospect-list`);
+        if (!container) return;
+
+        if (!prospects || prospects.length === 0) {
+            container.innerHTML = `
+                <div class="rtr-empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>No prospects in ${room} room</p>
+                </div>
+            `;
+            this.updateRoomBadge(room, 0);
+            return;
+        }
+
+        // Clear container
+        container.innerHTML = '';
+        
+        // Append each prospect row as a DOM element
+        prospects.forEach(prospect => {
+            const row = this.renderProspectRow(prospect, room);
+            container.appendChild(row);
+        });
+
+        this.updateRoomBadge(room, prospects.length);
+    }
+
+    renderProspectRow(prospect, room) {
+        const row = document.createElement('div');
+        row.className = 'rtr-prospect-row';
+        row.dataset.prospectId = prospect.id;
+        row.dataset.visitorId = prospect.visitor_id || prospect.id;
+
+        // Left Section: Prospect Info
+        const infoSection = document.createElement('div');
+        infoSection.className = 'rtr-prospect-info';
+
+        // Name - handle multiple field formats
+        const nameEl = document.createElement('h3');
+        nameEl.className = 'rtr-prospect-name';
+        const prospectName = prospect.contact_name || 
+                            `${prospect.first_name || ''} ${prospect.last_name || ''}`.trim() ||
+                            prospect.name ||
+                            'Unknown';
+        nameEl.textContent = prospectName;
+        infoSection.appendChild(nameEl);
+
+        // Company
+        const companyName = prospect.company_name || prospect.company || '';
+        if (companyName) {
+            const companyEl = document.createElement('p');
+            companyEl.className = 'rtr-company';
+            companyEl.textContent = companyName;
+            infoSection.appendChild(companyEl);
+        }
+
+        // Campaign Badges
+        const campaignName = prospect.campaign_name || '';
+        if (campaignName) {
+            const badgesContainer = document.createElement('div');
+            badgesContainer.className = 'rtr-campaign-badges';
+            
+            const badge = document.createElement('span');
+            badge.className = 'rtr-campaign-badge';
+            badge.textContent = campaignName;
+            badge.title = campaignName;
+            badge.dataset.campaignId = prospect.campaign_id || '';
+            badgesContainer.appendChild(badge);
+            
+            infoSection.appendChild(badgesContainer);
+        }
+
+        row.appendChild(infoSection);
+
+        // Right Section: Score, Email Sequence, Actions
+        const rightSection = document.createElement('div');
+        rightSection.className = 'rtr-prospect-right';
+
+        // Lead Score
+        const scoreContainer = document.createElement('div');
+        scoreContainer.className = 'rtr-lead-score-container';
+        
+        const scoreLabel = document.createElement('span');
+        scoreLabel.className = 'rtr-score-label';
+        scoreLabel.textContent = 'Lead Score:';
+        
+        const scoreValue = document.createElement('span');
+        scoreValue.className = 'rtr-score-value';
+        scoreValue.textContent = prospect.lead_score || '0';
+        
+        scoreContainer.appendChild(scoreLabel);
+        scoreContainer.appendChild(scoreValue);
+        rightSection.appendChild(scoreContainer);
+
+        // Email Sequence
+        const emailSequence = document.createElement('div');
+        emailSequence.className = 'rtr-email-sequence';
+
+        const emailStates = prospect.email_states || {};
+        const emailCount = 6;
+
+        for (let i = 1; i <= emailCount; i++) {
+            const emailKey = `email_${i}`;
+            const emailData = emailStates[emailKey] || { state: 'pending', timestamp: null };
+            const state = emailData.state || 'pending';
+            
+            const emailBtn = document.createElement('button');
+            emailBtn.className = 'rtr-email-btn';
+            emailBtn.dataset.visitorId = prospect.visitor_id || prospect.id;
+            emailBtn.dataset.room = room;
+            emailBtn.dataset.emailNumber = i;
+            emailBtn.dataset.emailState = state;
+            emailBtn.title = `Email ${i}`;
+
+            const isNextInSequence = this.isNextInSequence(emailStates, i);
+            if (isNextInSequence && (state === 'ready' || state === 'pending')) {
+                emailBtn.classList.add('rtr-email-pulse');
+            }
+
+            const isDisabled = !this.isEmailEnabled(emailStates, i);
+            if (isDisabled) {
+                emailBtn.classList.add('rtr-email-disabled');
+                emailBtn.disabled = true;
+            }            
+
+            const icon = document.createElement('i');
+            icon.className = 'fas';
+
+            switch (state) {
+                case 'sent':
+                    icon.classList.add('fa-check');
+                    emailBtn.classList.add('rtr-email-sent');
+                    break;
+                case 'opened':
+                    icon.classList.add('fa-envelope-open');
+                    emailBtn.classList.add('rtr-email-opened');
+                    break;
+                case 'generating':
+                    icon.classList.add('fa-spinner', 'fa-spin');
+                    emailBtn.classList.add('rtr-email-generating');
+                    emailBtn.disabled = true;
+                    break;
+                case 'ready':
+                    icon.classList.add('fa-envelope');
+                    emailBtn.classList.add('rtr-email-ready');
+                    break;
+                default:
+                    icon.classList.add('fa-envelope');
+                    emailBtn.classList.add('rtr-email-pending');
+            }
+
+            emailBtn.appendChild(icon);
+            emailSequence.appendChild(emailBtn);
+        }
+
+        rightSection.appendChild(emailSequence);
+
+        // Actions
+        const actionsContainer = document.createElement('div');
+        actionsContainer.className = 'rtr-prospect-actions';
+
+        // Archive Button
+        const archiveBtn = document.createElement('button');
+        archiveBtn.className = 'rtr-action-btn rtr-archive-btn';
+        archiveBtn.innerHTML = '<i class="fas fa-archive"></i>';
+        archiveBtn.title = 'Archive Prospect';
+        archiveBtn.dataset.visitorId = prospect.visitor_id || prospect.id;
+        archiveBtn.dataset.room = room;
+        actionsContainer.appendChild(archiveBtn);
+
+        rightSection.appendChild(actionsContainer);
+        row.appendChild(rightSection);
+
+        return row;
+    }
+
+    isNextInSequence(emailStates, emailNumber) {
+        // Email 1 is always next if it's pending or ready
+        if (emailNumber === 1) {
+            const email1 = emailStates['email_1'];
+            return email1?.state === 'pending' || email1?.state === 'ready';
         }
         
-        if (!prospect) {
-            console.error('Prospect not found:', prospectId);
+        // Check if all previous emails are sent/opened
+        for (let i = 1; i < emailNumber; i++) {
+            const emailKey = `email_${i}`;
+            const state = emailStates[emailKey]?.state;
+            if (state !== 'sent' && state !== 'opened') {
+                return false;
+            }
+        }
+        
+        // This email is next if it's pending or ready
+        const currentEmail = emailStates[`email_${emailNumber}`];
+        return currentEmail?.state === 'pending' || currentEmail?.state === 'ready';
+    }
+
+    isEmailEnabled(emailStates, emailNumber) {
+        // Email 1 is always enabled
+        if (emailNumber === 1) return true;
+        
+        // Check if all previous emails are sent/opened
+        for (let i = 1; i < emailNumber; i++) {
+            const emailKey = `email_${i}`;
+            const state = emailStates[emailKey]?.state;
+            if (state !== 'sent' && state !== 'opened') {
+                return false;
+            }
+        }
+        
+        return true;
+    }  
+
+    /**
+     * Initialize email states if missing
+     * @param {Object} prospect - Prospect object
+     */
+    initializeEmailStates(prospect) {
+        if (!prospect.email_states) {
+            // Initialize with default states
+            prospect.email_states = {
+                email_1: { state: 'pending', timestamp: null },
+                email_2: { state: 'pending', timestamp: null },
+                email_3: { state: 'pending', timestamp: null },
+                email_4: { state: 'pending', timestamp: null },
+                email_5: { state: 'pending', timestamp: null }
+            };
+        }
+    }
+
+    /**
+     * Generate email buttons for all 5 emails with independent states
+     * @param {Object} prospect - Prospect object with email_states
+     * @param {String} room - Current room
+     * @returns {String} HTML for 5 email buttons
+     */
+    generateEmailButtons(prospect, room) {
+        const buttons = [];
+        
+        // Generate 5 independent email buttons
+        for (let i = 1; i <= 5; i++) {
+            const emailKey = `email_${i}`;
+            const emailState = prospect.email_states?.[emailKey] || { state: 'pending', timestamp: null };
+            
+            const buttonClass = this.getEmailButtonClass(emailState.state);
+            const icon = this.getEmailButtonIcon(emailState.state);
+            const tooltip = this.getEmailButtonTooltip(emailState.state, i, emailState.timestamp);
+            const disabled = emailState.state === 'generating' ? 'disabled' : '';
+            
+            buttons.push(`
+                <button class="rtr-email-btn ${buttonClass}" 
+                        data-visitor-id="${prospect.id}"
+                        data-room="${room}"
+                        data-email-number="${i}"
+                        data-email-state="${emailState.state}"
+                        title="${tooltip}"
+                        ${disabled}>
+                    <i class="${icon}"></i>
+                    ${emailState.state === 'sent' ? '<span class="rtr-sent-badge">✓</span>' : ''}
+                    ${emailState.state === 'opened' ? '<span class="rtr-opened-badge">👁</span>' : ''}
+                </button>
+            `);
+        }
+        
+        return buttons.join('');
+    }
+
+    /**
+     * Get CSS class for email button based on state
+     * @param {String} state - Email state (pending|generating|ready|sent|opened)
+     * @returns {String} CSS class name
+     */
+    getEmailButtonClass(state) {
+        const classMap = {
+            'pending': 'rtr-email-pending',
+            'generating': 'rtr-email-generating',
+            'ready': 'rtr-email-ready',
+            'sent': 'rtr-email-sent',
+            'opened': 'rtr-email-opened',
+            'failed': 'rtr-email-failed'
+        };
+        return classMap[state] || 'rtr-email-pending';
+    }
+
+    /**
+     * Get icon class for email button based on state
+     * @param {String} state - Email state
+     * @returns {String} Font Awesome icon class
+     */
+    getEmailButtonIcon(state) {
+        const iconMap = {
+            'pending': 'fas fa-envelope',
+            'generating': 'fas fa-spinner fa-spin',
+            'ready': 'fas fa-envelope-open',
+            'sent': 'fas fa-paper-plane',
+            'opened': 'fas fa-envelope-open-text',
+            'failed': 'fas fa-exclamation-triangle'
+        };
+        return iconMap[state] || 'fas fa-envelope';
+    }
+
+    /**
+     * Get tooltip text for email button
+     * @param {String} state - Email state
+     * @param {Number} emailNumber - Email sequence number (1-5)
+     * @param {String|null} timestamp - State timestamp
+     * @returns {String} Tooltip text
+     */
+    getEmailButtonTooltip(state, emailNumber, timestamp) {
+        const tooltipMap = {
+            'pending': `Email ${emailNumber}: Click to generate`,
+            'generating': `Email ${emailNumber}: Generating...`,
+            'ready': `Email ${emailNumber}: Ready - Click to view`,
+            'sent': `Email ${emailNumber}: Sent ${timestamp ? this.formatDate(timestamp) : ''}`,
+            'opened': `Email ${emailNumber}: Opened ${timestamp ? this.formatDate(timestamp) : ''}`,
+            'failed': `Email ${emailNumber}: Failed - Click to retry`
+        };
+        return tooltipMap[state] || `Email ${emailNumber}`;
+    }
+
+    /**
+     * Format date for tooltip display
+     * @param {String} dateString - ISO date string
+     * @returns {String} Formatted date
+     */
+    formatDate(dateString) {
+        if (!dateString) return '';
+        
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        
+        return date.toLocaleDateString();
+    }
+
+    /**
+     * Handle email button click - route based on state
+     * Modified to handle email number and state
+     * @param {String} visitorId - Visitor ID
+     * @param {String} room - Room name
+     * @param {Number} emailNumber - Email sequence number
+     * @param {String} emailState - Current email state
+     */
+    handleEmailClick(visitorId, room, emailNumber, emailState) {
+        // Debounce rapid clicks (500ms)
+        const debounceKey = `${visitorId}-${emailNumber}`;
+        const now = Date.now();
+        const lastClick = this.buttonDebounce.get(debounceKey) || 0;
+        
+        if (now - lastClick < 500) {
+            console.log('Debouncing rapid click');
+            return;
+        }
+        this.buttonDebounce.set(debounceKey, now);
+
+        // Route based on email state
+        switch (emailState) {
+            case 'pending':
+            case 'failed':
+                this.generateNewEmail(visitorId, room, emailNumber);
+                break;
+                
+            case 'generating':
+                // Do nothing - button should be disabled
+                break;
+                
+            case 'ready':
+                this.viewReadyEmail(visitorId, room, emailNumber);
+                break;
+                
+            case 'sent':
+            case 'opened':
+                this.viewEmailHistory(visitorId, room, emailNumber);
+                break;
+                
+            default:
+                console.warn('Unknown email state:', emailState);
+        }
+    }
+
+    /**
+     * Generate a new email (pending or failed state)
+     * NEW: Async generation - no modal, just notification
+     * @param {String} visitorId - Visitor ID
+     * @param {String} room - Room name
+     * @param {Number} emailNumber - Email sequence number
+     */
+    async generateNewEmail(visitorId, room, emailNumber) {
+        console.log(`Generating new email ${emailNumber} for visitor ${visitorId}`);
+        
+        // Update button to generating state immediately
+        this.updateButtonState(visitorId, emailNumber, 'generating');
+        
+        // Notify user that generation started
+        if (this.uiManager) {
+            this.uiManager.notify('Email generation started. You\'ll be notified when ready.', 'info');
+        }
+        
+        // Emit event to start polling
+        document.dispatchEvent(new CustomEvent('rtr:email-generation-started', {
+            detail: { visitorId, emailNumber, room }
+        }));
+        
+        try {
+            let baseUrl = this.apiUrl;
+            if (baseUrl.includes('/wp-json')) {
+                baseUrl = baseUrl.split('/wp-json')[0];
+            }
+            const apiEndpoint = `${baseUrl}/wp-json/directreach/v2/emails/generate`;
+            
+            const response = await fetch(apiEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-WP-Nonce': this.nonce
+                },
+                body: JSON.stringify({
+                    prospect_id: parseInt(visitorId, 10),
+                    room_type: room,
+                    email_number: parseInt(emailNumber, 10)
+                })
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Server response:', errorText);
+                throw new Error(`Generation failed: ${response.status} - ${errorText}`);
+            }
+            
+            const data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.message || 'Email generation failed');
+            }
+            
+            // Success! Update button to ready state
+            this.updateButtonState(visitorId, emailNumber, 'ready');
+            
+            if (this.uiManager) {
+                this.uiManager.notify('Email ready! Click to view.', 'success');
+            }
+            
+            // Emit event for any listeners
+            document.dispatchEvent(new CustomEvent('rtr:email-generated', {
+                detail: { visitorId, emailNumber, room }
+            }));
+            
+        } catch (error) {
+            console.error('Email generation failed:', error);
+            
+            // Update button to failed state
+            this.updateButtonState(visitorId, emailNumber, 'failed');
+            
+            if (this.uiManager) {
+                this.uiManager.notify('Email generation failed. Click to retry.', 'error');
+            }
+        }
+    }
+
+    /**
+     * View ready email (ready state)
+     * NEW: Dispatch rtr:view-ready-email instead of rtr:openEmailModal
+     * @param {String} visitorId - Visitor ID
+     * @param {String} room - Room name
+     * @param {Number} emailNumber - Email sequence number
+     */
+    viewReadyEmail(visitorId, room, emailNumber) {
+        // Get prospect data to pass name and room
+        const prospectCard = document.querySelector(`[data-visitor-id="${visitorId}"]`);
+        let prospectName = 'Prospect';
+        
+        if (prospectCard) {
+            // Get name
+            const nameElement = prospectCard.querySelector('.rtr-prospect-name');
+            if (nameElement) {
+                prospectName = nameElement.textContent.trim();
+            }
+            
+            // Get room from the card's parent section
+            const roomSection = prospectCard.closest('[data-room]');
+            if (roomSection) {
+                room = roomSection.getAttribute('data-room');
+            }
+        }
+        
+        document.dispatchEvent(new CustomEvent('rtr:view-ready-email', {
+            detail: {
+                prospectId: visitorId,
+                emailNumber: emailNumber,
+                prospectName: prospectName,
+                room: room
+            }
+        }));
+    }
+
+    /**
+     * View email history (sent or opened state)
+     * @param {String} visitorId - Visitor ID
+     * @param {String} room - Room name
+     * @param {Number} emailNumber - Email sequence number
+     */
+    viewEmailHistory(visitorId, room, emailNumber) {
+        console.log(`Viewing email history ${emailNumber} for visitor ${visitorId}`);
+        
+        // Get prospect name from the card
+        const prospectCard = document.querySelector(`[data-visitor-id="${visitorId}"]`);
+        let prospectName = 'Prospect';
+        
+        if (prospectCard) {
+            const nameElement = prospectCard.querySelector('.rtr-prospect-name');
+            if (nameElement) {
+                prospectName = nameElement.textContent.trim();
+            }
+        }
+        
+        // Dispatch event to open email history modal
+        document.dispatchEvent(new CustomEvent('rtr:openEmailHistory', {
+            detail: { 
+                visitorId, 
+                room,
+                emailNumber,
+                prospectName
+            }
+        }));
+    }
+
+    /**
+     * Update button state in UI
+     * @param {String} visitorId - Visitor ID
+     * @param {Number} emailNumber - Email sequence number
+     * @param {String} newState - New state to set
+     * @param {String|null} timestamp - Optional timestamp
+     */
+    updateButtonState(visitorId, emailNumber, newState, timestamp = null) {
+        const button = document.querySelector(
+            `.rtr-email-btn[data-visitor-id="${visitorId}"][data-email-number="${emailNumber}"]`
+        );
+        
+        if (!button) {
+            console.warn(`Button not found for visitor ${visitorId}, email ${emailNumber}`);
             return;
         }
         
-        // Emit event for modal display
-        document.dispatchEvent(new CustomEvent('rtr:show-prospect-details', {
-            detail: { prospect }
-        }));
-    }
-    
-    /**
-     * Handle email icon click
-     */
-    handleEmailIconClick(prospectId, emailNumber) {
-        // Emit event for email modal
-        document.dispatchEvent(new CustomEvent('rtr:show-email-details', {
-            detail: { 
-                prospectId: parseInt(prospectId),
-                emailNumber: parseInt(emailNumber)
-            }
-        }));
-    }
-    
-    /**
-     * Remove prospect from UI
-     */
-    removeProspect(prospectId, animated = true) {
-        const row = document.querySelector(`.prospect-row[data-prospect-id="${prospectId}"]`);
-        if (!row) return;
+        // Update button attributes
+        button.dataset.emailState = newState;
         
-        if (animated) {
-            row.style.transition = 'all 0.3s ease';
-            row.style.opacity = '0';
-            row.style.transform = 'translateX(-20px)';
-            
-            setTimeout(() => {
-                this.removeProspectElement(row);
-            }, 300);
+        // Update button class
+        button.className = `rtr-email-btn ${this.getEmailButtonClass(newState)}`;
+        
+        // Update icon
+        const icon = button.querySelector('i');
+        if (icon) {
+            icon.className = this.getEmailButtonIcon(newState);
+        }
+        
+        // Update badges
+        button.querySelectorAll('.rtr-sent-badge, .rtr-opened-badge').forEach(b => b.remove());
+        if (newState === 'sent') {
+            button.insertAdjacentHTML('beforeend', '<span class="rtr-sent-badge">✓</span>');
+        } else if (newState === 'opened') {
+            button.insertAdjacentHTML('beforeend', '<span class="rtr-opened-badge">👁</span>');
+        }
+        
+        // Update tooltip
+        button.title = this.getEmailButtonTooltip(newState, emailNumber, timestamp);
+        
+        // Update disabled state
+        if (newState === 'generating') {
+            button.disabled = true;
         } else {
-            this.removeProspectElement(row);
+            button.disabled = false;
+        }
+        
+        console.log(`Updated button state: visitor ${visitorId}, email ${emailNumber}, state ${newState}`);
+    }
+
+    // ... [LINES 372-527 UNCHANGED - All other methods remain the same]
+
+    getLeadScoreColor(score) {
+        if (score >= 70) return '#10b981'; // Green
+        if (score >= 40) return '#f59e0b'; // Yellow/Orange
+        return '#ef4444'; // Red
+    }
+
+    formatRelativeTime(dateString) {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins} min ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        
+        return date.toLocaleDateString();
+    }
+
+    updateRoomBadge(room, count) {
+        const badge = document.querySelector(`#rtr-room-${room} .room-count-badge`);
+        if (badge) {
+            badge.textContent = count;
         }
     }
-    
+
+    handleInfoClick(visitorId, room) {
+        document.dispatchEvent(new CustomEvent('rtr:showProspectInfo', {
+            detail: { visitorId, room }
+        }));
+    }
+
+    async handleArchiveClick(visitorId, room) {
+        if (!this.uiManager) {
+            console.error('UI Manager not set');
+            return;
+        }
+
+        const confirmed = await this.uiManager.confirmAction(
+            'Archive Prospect',
+            'Are you sure you want to archive this prospect?',
+            'Archive',
+            'Cancel'
+        );
+
+        if (!confirmed) return;
+
+        // For now, use a default reason. In future, could add custom reason dialog
+        const reason = 'Archived by user';
+
+        try {
+            const response = await fetch(`${this.apiUrl}/prospects/${visitorId}/archive`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-WP-Nonce': this.nonce
+                },
+                body: JSON.stringify({ reason })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to archive prospect');
+            }
+
+            document.dispatchEvent(new CustomEvent('rtr:prospectArchived', {
+                detail: { visitorId, room, reason }
+            }));
+
+        } catch (error) {
+            console.error('Failed to archive prospect:', error);
+            if (this.uiManager) {
+                this.uiManager.notify('Failed to archive prospect', 'error');
+            }
+        }
+    }
+
+    async handleSalesHandoff(visitorId) {
+        if (!this.uiManager) {
+            console.error('UI Manager not set');
+            return;
+        }
+
+        const confirmed = await this.uiManager.confirmAction(
+            'Hand off to Sales?',
+            'This will move the prospect to the Sales Room.',
+            'Confirm',
+            'Cancel'
+        );
+
+        if (!confirmed) return;
+
+        try {
+            const response = await fetch(`${this.apiUrl}/prospects/${visitorId}/handoff-sales`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-WP-Nonce': this.nonce
+                },
+                body: JSON.stringify({ notes: '' })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to hand off to sales');
+            }
+
+            document.dispatchEvent(new CustomEvent('rtr:salesHandoff', {
+                detail: { visitorId }
+            }));
+
+        } catch (error) {
+            console.error('Failed to hand off to sales:', error);
+            if (this.uiManager) {
+                this.uiManager.notify('Failed to hand off prospect', 'error');
+            }
+        }
+    }
+
+    handleEmailHistoryClick(visitorId, room) {
+        document.dispatchEvent(new CustomEvent('rtr:openEmailHistory', {
+            detail: { visitorId, room }
+        }));
+    }
+
+    removeProspect(visitorId, room) {
+        const card = document.querySelector(`#rtr-room-${room} .rtr-prospect-row[data-visitor-id="${visitorId}"]`);
+        if (card) {
+            card.style.transition = 'all 0.3s ease';
+            card.style.opacity = '0';
+            card.style.transform = 'translateX(-20px)';
+            setTimeout(() => card.remove(), 300);
+        }
+
+        if (this.prospects[room]) {
+            this.prospects[room] = this.prospects[room].filter(p => p.visitor_id != visitorId);
+            this.updateRoomBadge(room, this.prospects[room].length);
+        }
+    }
+
+    updateProspectEmailStatus(visitorId, room) {
+        this.loadRoomProspects(room);
+    }
+
     /**
-     * Remove prospect element and update counts
+     * NEW: Update prospect email buttons based on state changes
+     * @param {String} visitorId - Visitor ID
+     * @param {Array} emailStates - Array of email state objects
      */
-    removeProspectElement(row) {
-        const container = row.closest('.room-detail-container');
-        const room = container?.dataset.room;
-        
-        row.remove();
-        
-        if (container && room) {
-            const badge = container.querySelector('.room-count-badge');
-            const remainingRows = container.querySelectorAll('.prospect-row');
-            
-            if (badge) {
-                badge.textContent = remainingRows.length;
+    updateProspectEmailButtons(visitorId, emailStates) {
+        if (!emailStates || !Array.isArray(emailStates)) {
+            console.warn('Invalid email states provided');
+            return;
+        }
+
+        emailStates.forEach(emailState => {
+            if (emailState.status) {
+                this.updateButtonState(
+                    visitorId, 
+                    emailState.email_number, 
+                    emailState.status
+                );
             }
-            
-            // Update internal data
-            const prospectId = parseInt(row.dataset.prospectId);
+        });
+    }
+
+    /**
+     * NEW: Find prospect by ID across all rooms
+     * @param {String} visitorId - Visitor ID to search for
+     * @returns {Object|null} Prospect object or null if not found
+     */
+    findProspectById(visitorId) {
+        for (const room of ['problem', 'solution', 'offer']) {
             if (this.prospects[room]) {
-                this.prospects[room] = this.prospects[room].filter(p => p.id !== prospectId);
-            }
-            
-            // Show empty state if no prospects left
-            if (remainingRows.length === 0) {
-                const prospectList = container.querySelector('.prospect-list');
-                if (prospectList) {
-                    prospectList.innerHTML = this.renderProspectList([], room);
+                const prospect = this.prospects[room].find(p => p.visitor_id == visitorId);
+                if (prospect) {
+                    return prospect;
                 }
             }
         }
+        return null;
     }
-    
-    /**
-     * Update prospect score in UI
-     */
-    updateProspectScore(prospectId, newScore) {
-        const row = document.querySelector(`.prospect-row[data-prospect-id="${prospectId}"]`);
-        if (!row) return;
-        
-        const scoreEl = row.querySelector('.score-value');
-        if (scoreEl) {
-            scoreEl.textContent = newScore;
-            
-            // Add animation
-            scoreEl.style.transition = 'all 0.3s ease';
-            scoreEl.style.transform = 'scale(1.2)';
-            scoreEl.style.fontWeight = '700';
-            
-            setTimeout(() => {
-                scoreEl.style.transform = 'scale(1)';
-            }, 300);
-        }
-        
-        // Update handoff button if in offer room
-        const handoffBtn = row.querySelector('.handoff-btn');
-        if (handoffBtn && newScore >= 85) {
-            handoffBtn.classList.add('handoff-ready');
-        } else if (handoffBtn) {
-            handoffBtn.classList.remove('handoff-ready');
-        }
-    }
-    
-    /**
-     * Get room info
-     */
-    getRoomInfo(room) {
-        const info = {
-            problem: { 
-                name: 'Problem Room', 
-                color: '#e74c3c',
-                icon: 'fa-exclamation-triangle'
-            },
-            solution: { 
-                name: 'Solution Room', 
-                color: '#f39c12',
-                icon: 'fa-lightbulb'
-            },
-            offer: { 
-                name: 'Offer Room', 
-                color: '#27ae60',
-                icon: 'fa-handshake'
-            },
-            sales: { 
-                name: 'Sales Room', 
-                color: '#9b59b6',
-                icon: 'fa-dollar-sign'
-            }
-        };
-        return info[room] || info.problem;
-    }
-    
-    /**
-     * Escape HTML
-     */
+
     escapeHtml(text) {
         const div = document.createElement('div');
-        div.textContent = text || '';
+        div.textContent = text;
         return div.innerHTML;
     }
-
-
-/**
-     * Archive prospect with confirmation
-     */
-    async archiveProspect(prospectId, campaignId, companyName) {
-        const reason = await this.showArchiveDialog(companyName);
-        
-        if (reason === null) return; // Cancelled
-        
-        try {
-            const response = await this.api.post(
-                `/prospects/${prospectId}/archive`,
-                { reason }
-            );
-            
-            if (response.success) {
-                this.removeProspect(prospectId, true);
-                
-                // Emit event for count update
-                document.dispatchEvent(new CustomEvent('rtr:prospect-archived', {
-                    detail: { prospectId, room: this.getProspectRoom(prospectId) }
-                }));
-                
-                // Show notification
-                document.dispatchEvent(new CustomEvent('rtr:notification', {
-                    detail: { type: 'success', message: `${companyName} archived` }
-                }));
-            }
-        } catch (error) {
-            document.dispatchEvent(new CustomEvent('rtr:notification', {
-                detail: { type: 'error', message: 'Failed to archive prospect' }
-            }));
-        }
-    }
-    
-    /**
-     * Hand off to sales
-     */
-    async handoffToSales(prospectId, campaignId, companyName) {
-        const notes = await this.showHandoffDialog(companyName);
-        
-        if (notes === null) return; // Cancelled
-        
-        try {
-            const response = await this.api.post(
-                `/prospects/${prospectId}/handoff-sales`,
-                { notes }
-            );
-            
-            if (response.success) {
-                this.removeProspect(prospectId, true);
-                
-                // Emit event for count update
-                document.dispatchEvent(new CustomEvent('rtr:prospect-handoff', {
-                    detail: { prospectId }
-                }));
-                
-                // Show notification
-                document.dispatchEvent(new CustomEvent('rtr:notification', {
-                    detail: { type: 'success', message: `${companyName} handed off to sales` }
-                }));
-            }
-        } catch (error) {
-            document.dispatchEvent(new CustomEvent('rtr:notification', {
-                detail: { type: 'error', message: 'Failed to hand off prospect' }
-            }));
-        }
-    }
-    
-    /**
-     * Show archive dialog
-     */
-    showArchiveDialog(companyName) {
-        return new Promise((resolve) => {
-            const modal = document.createElement('div');
-            modal.className = 'action-modal';
-            modal.innerHTML = `
-                <div class="modal-overlay"></div>
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-archive"></i> Archive Prospect</h3>
-                        <button class="modal-close">&times;</button>
-                    </div>
-                    <div class="modal-body">
-                        <p>Archive <strong>${this.escapeHtml(companyName)}</strong>?</p>
-                        <div class="form-group">
-                            <label>Reason (optional)</label>
-                            <textarea id="archive-reason" rows="3" 
-                                placeholder="Why are you archiving this prospect?"></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button class="btn btn-secondary cancel-btn">Cancel</button>
-                        <button class="btn btn-danger confirm-btn">
-                            <i class="fas fa-archive"></i> Archive
-                        </button>
-                    </div>
-                </div>
-            `;
-            
-            document.body.appendChild(modal);
-            
-            const closeModal = (result) => {
-                modal.classList.remove('active');
-                setTimeout(() => modal.remove(), 300);
-                resolve(result);
-            };
-            
-            modal.querySelector('.cancel-btn').onclick = () => closeModal(null);
-            modal.querySelector('.modal-close').onclick = () => closeModal(null);
-            modal.querySelector('.modal-overlay').onclick = () => closeModal(null);
-            
-            modal.querySelector('.confirm-btn').onclick = () => {
-                const reason = document.getElementById('archive-reason').value.trim();
-                closeModal(reason || '');
-            };
-            
-            requestAnimationFrame(() => modal.classList.add('active'));
-        });
-    }
-    
-    /**
-     * Show handoff dialog
-     */
-    showHandoffDialog(companyName) {
-        return new Promise((resolve) => {
-            const modal = document.createElement('div');
-            modal.className = 'action-modal';
-            modal.innerHTML = `
-                <div class="modal-overlay"></div>
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-handshake"></i> Hand Off to Sales</h3>
-                        <button class="modal-close">&times;</button>
-                    </div>
-                    <div class="modal-body">
-                        <p>Hand off <strong>${this.escapeHtml(companyName)}</strong> to sales?</p>
-                        <div class="form-group">
-                            <label>Notes for Sales Team</label>
-                            <textarea id="handoff-notes" rows="4" 
-                                placeholder="Context or next steps for sales..."></textarea>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button class="btn btn-secondary cancel-btn">Cancel</button>
-                        <button class="btn btn-primary confirm-btn">
-                            <i class="fas fa-handshake"></i> Hand Off
-                        </button>
-                    </div>
-                </div>
-            `;
-            
-            document.body.appendChild(modal);
-            
-            const closeModal = (result) => {
-                modal.classList.remove('active');
-                setTimeout(() => modal.remove(), 300);
-                resolve(result);
-            };
-            
-            modal.querySelector('.cancel-btn').onclick = () => closeModal(null);
-            modal.querySelector('.modal-close').onclick = () => closeModal(null);
-            modal.querySelector('.modal-overlay').onclick = () => closeModal(null);
-            
-            modal.querySelector('.confirm-btn').onclick = () => {
-                const notes = document.getElementById('handoff-notes').value.trim();
-                closeModal(notes || '');
-            };
-            
-            requestAnimationFrame(() => modal.classList.add('active'));
-        });
-    }
-    
-    /**
-     * Get prospect room from DOM
-     */
-    getProspectRoom(prospectId) {
-        const row = document.querySelector(`.prospect-row[data-prospect-id="${prospectId}"]`);
-        return row?.closest('.room-detail-container')?.dataset.room || null;
-    }
-    
-    /**
-     * Attach action button listeners
-     */
-    attachActionListeners() {
-        // Archive buttons
-        document.querySelectorAll('.archive-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const row = btn.closest('.prospect-row');
-                const prospectId = parseInt(row.dataset.prospectId);
-                const campaignId = parseInt(row.dataset.campaignId);
-                const companyName = row.querySelector('.company-name')?.textContent || 'Unknown';
-                
-                await this.archiveProspect(prospectId, campaignId, companyName);
-            });
-        });
-        
-        // Handoff buttons
-        document.querySelectorAll('.handoff-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const row = btn.closest('.prospect-row');
-                const prospectId = parseInt(row.dataset.prospectId);
-                const campaignId = parseInt(row.dataset.campaignId);
-                const companyName = row.querySelector('.company-name')?.textContent || 'Unknown';
-                
-                await this.handoffToSales(prospectId, campaignId, companyName);
-            });
-        });
-    }    
 }

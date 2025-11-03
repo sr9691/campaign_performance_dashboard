@@ -108,6 +108,10 @@ $logo_url = plugins_url('assets/MEMO_Seal.png', dirname(dirname(dirname(__FILE__
     const dropdown = document.getElementById('settings-dropdown');
     const toggleBtn = document.getElementById('settings-toggle-btn');
     const menu = document.getElementById('settings-menu');
+
+    if (dropdown && dropdown.hasAttribute('data-initialized')) {
+        return; // Skip if already initialized
+    }    
     
     if (toggleBtn && dropdown) {
         // Toggle dropdown on button click
@@ -130,5 +134,7 @@ $logo_url = plugins_url('assets/MEMO_Seal.png', dirname(dirname(dirname(__FILE__
             });
         }
     }
+
+    dropdown.setAttribute('data-initialized', 'true');    
 })();
 </script>

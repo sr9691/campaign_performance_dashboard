@@ -1,590 +1,844 @@
 /**
  * Email Modal Manager
- * 
- * Handles AI-powered email generation workflow
- * 
+ *
+ * Handles AI-powered email generation modal UI and workflow
+ *
  * @package DirectReach
  * @subpackage ReadingTheRoom
- * @since 1.0.0
+ * @since 2.0.0
  */
 
 export default class EmailModalManager {
-    constructor(APIClientClass, config) {
-        // Create v2 API client for email generation
-        this.api = new APIClientClass(
-            `${config.siteUrl}/wp-json/directreach/v2`,
-            config.nonce
-        );
-        
+    constructor(api, config) {
+        this.api = api;
         this.config = config;
         this.modal = null;
         this.currentProspect = null;
-        this.currentRoom = null;
-        this.currentEmailNumber = null;
-        this.generatedEmail = null;
-        this.trackingId = null;
-        
+        this.currentEmail = null;
+        this._isListening = false;
         this.init();
     }
-    
+
     /**
-     * Initialize modal
+     * Initialize modal and event listeners
      */
     init() {
-        this.createModal();
-        this.attachEventListeners();
+        if (this._isListening) return;
+        this._createModal();
+        this._attachEventListeners();
+        this._isListening = true;
     }
-    
+
     /**
      * Create modal HTML structure
      */
-    createModal() {
-        const modalHTML = `
-            <div class="email-generation-modal" id="email-generation-modal">
-                <div class="email-modal-overlay"></div>
+    _createModal() {
+        if (document.getElementById('email-generation-modal')) {
+            this.modal = document.getElementById('email-generation-modal');
+            return;
+        }
+
+        const html = `
+            <div class="email-generation-modal" id="email-generation-modal" role="dialog" aria-modal="true">
+                <div class="email-modal-overlay" data-rtr="overlay"></div>
                 <div class="email-modal-content">
-                    <!-- Header -->
                     <div class="email-modal-header">
                         <h3>
-                            <i class="fas fa-robot"></i>
-                            Generate Email - <span class="prospect-name"></span>
+                            <i class="fas fa-robot" aria-hidden="true"></i>
+                            Generate Email - <span class="prospect-name-header"></span>
                         </h3>
                         <button class="modal-close" aria-label="Close modal">&times;</button>
                     </div>
-                    
-                    <!-- Body -->
+
                     <div class="email-modal-body">
                         <!-- Loading State -->
-                        <div class="modal-body-section loading-state">
+                        <div class="modal-body-section loading-state" aria-live="polite">
                             <div class="loading-spinner">
-                                <i class="fas fa-spinner"></i>
+                                <i class="fas fa-robot fa-spin"></i>
                             </div>
-                            <p class="loading-text">
-                                Generating personalized email with AI...
-                            </p>
+                            <p class="loading-text">AI is crafting your email...</p>
                             <div class="loading-progress">
                                 <div class="progress-bar"></div>
                             </div>
-                            <small class="loading-hint">
-                                This typically takes 5-10 seconds
-                            </small>
+                            <p class="loading-hint">This usually takes 5-10 seconds</p>
                         </div>
-                        
+
                         <!-- Email Preview State -->
                         <div class="modal-body-section email-preview">
                             <div class="email-metadata">
                                 <div class="meta-item">
-                                    <i class="fas fa-layer-group"></i>
+                                    <i class="fas fa-user"></i>
+                                    <span class="meta-label">To:</span>
+                                    <span class="meta-value prospect-email"></span>
+                                </div>
+                                <div class="meta-item">
+                                    <i class="fas fa-file-alt"></i>
                                     <span class="meta-label">Template:</span>
                                     <span class="meta-value template-name"></span>
-                                    <span class="badge global-badge" style="display: none;">Global</span>
+                                    <span class="badge global-badge" style="display:none;">Global</span>
                                 </div>
                                 <div class="meta-item">
                                     <i class="fas fa-link"></i>
                                     <span class="meta-label">Content Link:</span>
-                                    <span class="meta-value link-title"></span>
-                                </div>
-                                <div class="meta-item">
-                                    <i class="fas fa-coins"></i>
-                                    <span class="meta-label">Cost:</span>
-                                    <span class="meta-value email-cost"></span>
+                                    <a href="#" class="meta-value content-link" target="_blank" rel="noopener"></a>
                                 </div>
                             </div>
-                            
+
                             <div class="email-subject-section">
-                                <label class="email-label">Subject:</label>
-                                <div class="email-subject" contenteditable="true"></div>
+                                <label class="email-label" for="email-subject-input">Subject Line:</label>
+                                <input type="text" 
+                                       id="email-subject-input" 
+                                       class="email-subject" 
+                                       placeholder="Email subject..."
+                                       spellcheck="true" />
                             </div>
-                            
+
                             <div class="email-body-section">
-                                <label class="email-label">Email Body:</label>
-                                <div class="email-body" contenteditable="true"></div>
-                            </div>
-                            
-                            <div class="email-tracking-info">
-                                <i class="fas fa-info-circle"></i>
-                                Email includes tracking pixel to confirm opens
+                                <label class="email-label" for="email-body-input">Email Body:</label>
+                                <div id="email-body-input"
+                                     class="email-body" 
+                                     contenteditable="true"
+                                     data-placeholder="Email body will appear here..."
+                                     spellcheck="true"></div>
+                                <div class="email-tracking-info">
+                                    <i class="fas fa-eye"></i>
+                                    <span>Tracking pixel included for open detection</span>
+                                </div>
                             </div>
                         </div>
-                        
+
                         <!-- Error State -->
-                        <div class="modal-body-section error-state">
+                        <div class="modal-body-section error-state" role="alert">
                             <div class="error-icon">
                                 <i class="fas fa-exclamation-triangle"></i>
                             </div>
-                            <h4>AI Generation Failed</h4>
+                            <h4>Email Generation Failed</h4>
                             <p class="error-message"></p>
-                            <p class="fallback-message">
-                                Using template with basic personalization instead.
-                            </p>
+                            <p class="fallback-message">Please try again.</p>
                         </div>
                     </div>
-                    
-                    <!-- Footer -->
+
                     <div class="email-modal-footer">
-                        <button class="btn btn-secondary regenerate-btn">
-                            <i class="fas fa-redo"></i> Regenerate
+                        <button class="btn btn-secondary cancel-btn">
+                            <i class="fas fa-times"></i> Cancel
                         </button>
                         <button class="btn btn-primary copy-btn">
                             <i class="fas fa-copy"></i> Copy to Clipboard
                         </button>
                     </div>
-                    
-                    <!-- Success Toast -->
+
                     <div class="copy-success">
                         <i class="fas fa-check-circle"></i>
-                        Email copied! Paste into your email client.
+                        <span>Email copied to clipboard!</span>
                     </div>
                 </div>
             </div>
         `;
-        
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+        document.body.insertAdjacentHTML('beforeend', html);
         this.modal = document.getElementById('email-generation-modal');
     }
-    
+
     /**
      * Attach event listeners
      */
-    attachEventListeners() {
-        // Close button
+    _attachEventListeners() {
+        // Close modal handlers
+        const overlay = this.modal.querySelector('[data-rtr="overlay"]');
         const closeBtn = this.modal.querySelector('.modal-close');
-        closeBtn.addEventListener('click', () => this.hideModal());
-        
-        // Overlay click
-        const overlay = this.modal.querySelector('.email-modal-overlay');
-        overlay.addEventListener('click', () => this.hideModal());
-        
-        // Escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.modal.classList.contains('active')) {
-                this.hideModal();
-            }
+        const cancelBtn = this.modal.querySelector('.cancel-btn');
+
+        [overlay, closeBtn, cancelBtn].forEach(el => {
+            if (el) el.addEventListener('click', () => this.hideModal());
         });
-        
-        // Regenerate button
-        const regenerateBtn = this.modal.querySelector('.regenerate-btn');
-        regenerateBtn.addEventListener('click', () => this.regenerateEmail());
-        
+
         // Copy button
         const copyBtn = this.modal.querySelector('.copy-btn');
-        copyBtn.addEventListener('click', () => this.copyToClipboard());
-        
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => this.copyEmailToClipboard());
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (!this.modal.classList.contains('active')) return;
+
+            if (e.key === 'Escape') {
+                this.hideModal();
+            } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                this.copyEmailToClipboard();
+            }
+        });
+
         // Listen for email generation requests
         document.addEventListener('rtr:generate-email', (e) => {
-            this.generateEmail(e.detail);
+            this.showEmailModal(e.detail);
+        });
+
+        // NEW: Listen for ready email viewing
+        document.addEventListener('rtr:view-ready-email', (e) => {
+            this.showReadyEmail(e.detail);
         });
     }
-    
+
     /**
-     * Generate email for prospect
-     * 
-     * @param {Object} data - { prospectId, room, emailNumber, prospectName }
+     * Show email generation modal
      */
-    async generateEmail(data) {
-        const { prospectId, room, emailNumber, prospectName } = data;
-        
-        this.currentProspect = prospectId;
-        this.currentRoom = room;
-        this.currentEmailNumber = emailNumber;
-        this.generatedEmail = null;
-        this.trackingId = null;
-        
-        // Update prospect name in header
-        const prospectNameEl = this.modal.querySelector('.prospect-name');
-        prospectNameEl.textContent = prospectName || `Prospect ${prospectId}`;
-        
-        // Show modal in loading state
-        this.showModal('loading');
-        
-        // Update email icon to generating state
-        this.updateEmailIcon(prospectId, emailNumber, 'generating');
-        
+    async showEmailModal({ prospectId, emailNumber, prospectName, room }) {
+
+        if (!prospectId || !emailNumber) {
+            console.error('Missing prospectId or emailNumber');
+            return;
+        }
+
+        this.currentProspect = { id: prospectId, name: prospectName, room: room };
+
+        this.currentEmail = null;
+
+        // Update modal header
+        this.modal.querySelector('.prospect-name-header').textContent = prospectName || `Prospect ${prospectId}`;
+
+        // Show modal and loading state
+        this.modal.classList.add('active');
+        this._showSection('loading');
+
         try {
-            const response = await this.api.post('/emails/generate', {
-                prospect_id: prospectId,
-                room_type: room,
-                email_number: emailNumber
-            });
-            
-            if (response.success && response.data) {
-                this.generatedEmail = response.data;
-                this.trackingId = response.data.email_tracking_id;
-                
-                this.displayEmail(response.data);
-                this.showModal('preview');
-                
-                // Update email icon to ready state
-                this.updateEmailIcon(prospectId, emailNumber, 'ready');
-                
-                // Emit event for analytics
-                this.emitEvent('email:generated', {
-                    prospectId,
-                    emailData: response.data,
-                    generationTime: response.meta?.generation_time_ms
-                });
-            } else {
-                throw new Error(response.message || 'Generation failed');
-            }
+            // Generate email via API
+            const email = await this._generateEmail(prospectId, room);
+            this.currentEmail = email;
+
+            // Display email preview
+            this._displayEmailPreview(email);
+            this._showSection('email-preview');
+
         } catch (error) {
-            console.error('Email generation error:', error);
-            this.showError(error.message);
-            
-            // Update email icon back to pending
-            this.updateEmailIcon(prospectId, emailNumber, 'pending');
-            
-            // Emit error event
-            this.emitEvent('email:error', { 
-                prospectId,
-                error: error.message 
-            });
+            console.error('Email generation failed:', error);
+            this._showError(error.message || 'Failed to generate email. Please try again.');
+            this._showSection('error');
         }
     }
-    
+
+    /**
+     * Generate email via API
+     */
+    async _generateEmail(prospectId, room) {
+        const response = await this.api.post('/emails/generate', {
+            prospect_id: prospectId,
+            room_type: room
+        });
+
+        if (!response.success) {
+            throw new Error(response.message || 'Email generation failed');
+        }
+
+        return response.data;
+    }
+
     /**
      * Display generated email in modal
      */
-    displayEmail(emailData) {
+    _displayEmailPreview(email) {
         // Update metadata
-        const templateName = this.modal.querySelector('.template-name');
-        templateName.textContent = emailData.template_used?.name || 'Unknown Template';
+        this.modal.querySelector('.prospect-email').textContent = email.prospect_email || 'No email';
+        this.modal.querySelector('.template-name').textContent = email.template_used?.name || 'No template';
         
         const globalBadge = this.modal.querySelector('.global-badge');
-        if (emailData.template_used?.is_global) {
-            globalBadge.style.display = 'inline-block';
-        } else {
-            globalBadge.style.display = 'none';
+        if (globalBadge) {
+            globalBadge.style.display = email.template_used?.is_global ? 'inline-block' : 'none';
         }
-        
-        const linkTitle = this.modal.querySelector('.link-title');
-        linkTitle.textContent = emailData.selected_url?.title || 'No link';
-        
-        const emailCost = this.modal.querySelector('.email-cost');
-        const cost = emailData.tokens_used?.cost || 0;
-        emailCost.textContent = `$${cost.toFixed(4)}`;
-        
+
+        const contentLink = this.modal.querySelector('.content-link');
+        if (email.selected_url?.url) {
+            contentLink.href = email.selected_url.url;
+            contentLink.textContent = email.selected_url.title || email.selected_url.url;
+            contentLink.parentElement.style.display = 'flex';
+        } else {
+            contentLink.parentElement.style.display = 'none';
+        }
+
         // Update subject
-        const subjectEl = this.modal.querySelector('.email-subject');
-        subjectEl.textContent = emailData.subject || '';
-        
+        const subjectInput = this.modal.querySelector('.email-subject');
+        subjectInput.value = email.subject || '';
+
         // Update body
-        const bodyEl = this.modal.querySelector('.email-body');
-        bodyEl.innerHTML = emailData.body_html || '';
-        
-        // Show metadata section
-        const metadataSection = this.modal.querySelector('.email-metadata');
-        metadataSection.style.display = 'flex';
+        const bodyDiv = this.modal.querySelector('.email-body');
+        bodyDiv.innerHTML = email.body_html || '<p>No content generated</p>';
+
+        // Enable editing
+        subjectInput.removeAttribute('disabled');
+        bodyDiv.setAttribute('contenteditable', 'true');
     }
-    
+
     /**
      * Copy email to clipboard
      */
-    async copyToClipboard() {
-        if (!this.generatedEmail) {
-            console.error('No email to copy');
-            return;
-        }
-        
-        const copyBtn = this.modal.querySelector('.copy-btn');
-        const originalHTML = copyBtn.innerHTML;
-        
+    async copyEmailToClipboard() {
         try {
-            // Get current content (may have been edited)
-            const subjectEl = this.modal.querySelector('.email-subject');
-            const bodyEl = this.modal.querySelector('.email-body');
-            
-            const subject = subjectEl.textContent;
-            const bodyHTML = bodyEl.innerHTML;
-            const bodyText = bodyEl.textContent;
-            
-            // Build email with tracking pixel using dynamic site URL
-            const trackingToken = this.generatedEmail.tracking_token;
-            const trackingPixelUrl = `${this.config.siteUrl}/wp-json/directreach/v2/emails/track-open/${trackingToken}`;
-            
-            const trackingPixel = trackingToken 
-                ? `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" alt="" />`
-                : '';
-            
-            const emailHTMLWithTracking = bodyHTML + trackingPixel;
-            
-            // Copy to clipboard (HTML + plain text)
+            // Get current values (may have been edited)
+            const subject = this.modal.querySelector('.email-subject').value;
+            const bodyDiv = this.modal.querySelector('.email-body');
+            const bodyHtml = bodyDiv.innerHTML;
+            const bodyText = bodyDiv.textContent;
+
+            // Prepare email with tracking pixel
+            const trackingToken = this._generateTrackingToken();
+            const trackingPixel = `<img src="${this.config.siteUrl}/wp-json/directreach/v2/track-open/${trackingToken}" width="1" height="1" style="display:none" alt="" />`;
+            const emailHtmlWithTracking = bodyHtml + trackingPixel;
+
+            // Copy to clipboard (both HTML and plain text)
             await navigator.clipboard.write([
                 new ClipboardItem({
-                    'text/html': new Blob([emailHTMLWithTracking], { type: 'text/html' }),
+                    'text/html': new Blob([emailHtmlWithTracking], { type: 'text/html' }),
                     'text/plain': new Blob([bodyText], { type: 'text/plain' })
                 })
             ]);
-            
-            // Track as copied/sent
-            await this.trackCopy();
-            
-            // Show success
-            this.showCopySuccess();
-            
-            // Update button
-            copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
-            copyBtn.disabled = true;
-            
-            // Update email icon to sent state
-            this.updateEmailIcon(this.currentProspect, this.currentEmailNumber, 'sent');
-            
-            // Emit event
-            this.emitEvent('email:copied', {
-                prospectId: this.currentProspect,
-                emailNumber: this.currentEmailNumber,
-                trackingId: this.trackingId
-            });
-            
-            // Log tracking pixel URL for debugging
-            console.log('[RTR Email] Tracking pixel URL:', trackingPixelUrl);
-            
-            // Close modal after short delay
-            setTimeout(() => {
-                copyBtn.innerHTML = originalHTML;
-                copyBtn.disabled = false;
-                this.hideModal();
-            }, 2000);
-            
+
+            // Track the copy action
+            await this._trackEmailCopy(subject, emailHtmlWithTracking, bodyText, trackingToken);
+
+            // Show success message
+            this._showCopySuccess();
+
+            // Dispatch success event
+            document.dispatchEvent(new CustomEvent('rtr:email:generated', {
+                detail: { 
+                    prospectId: this.currentProspect.id,
+                    subject,
+                    success: true
+                }
+            }));
+
+            // Close modal after brief delay
+            setTimeout(() => this.hideModal(), 1500);
+
         } catch (error) {
-            console.error('Copy failed:', error);
-            alert('Failed to copy email. Please try again or copy manually.');
-            
-            copyBtn.innerHTML = originalHTML;
+            console.error('Failed to copy email:', error);
+            document.dispatchEvent(new CustomEvent('rtr:notification', {
+                detail: { 
+                    type: 'error', 
+                    message: 'Failed to copy email to clipboard. Please try again.' 
+                }
+            }));
         }
     }
-    
+
     /**
-     * Track email copy/send
+     * Track email copy in database
      */
-    async trackCopy() {
-        if (!this.trackingId) {
-            console.warn('No tracking ID available');
-            return;
-        }
-        
+    async _trackEmailCopy(subject, bodyHtml, bodyText, trackingToken) {
         try {
             const response = await this.api.post('/emails/track-copy', {
-                email_tracking_id: this.trackingId,
-                prospect_id: this.currentProspect,
-                url_included: this.generatedEmail.selected_url?.url || null
+                prospect_id: this.currentProspect.id,
+                email_number: (this.currentEmail?.email_number || 1),
+                room_type: this.currentProspect.room,
+                subject,
+                body_html: bodyHtml,
+                body_text: bodyText,
+                tracking_token: trackingToken,
+                template_used: this.currentEmail?.template_used?.id || null,
+                url_included: this.currentEmail?.selected_url?.url || null,
+                ai_prompt_tokens: this.currentEmail?.usage?.prompt_tokens || 0,
+                ai_completion_tokens: this.currentEmail?.usage?.completion_tokens || 0
             });
-            
-            if (response.success) {
-                console.log('Email tracked as copied:', response.data);
+
+            if (!response.success) {
+                console.error('Failed to track email copy:', response.message);
             }
         } catch (error) {
-            console.error('Failed to track copy:', error);
-            // Don't fail the copy operation
+            console.error('Error tracking email copy:', error);
         }
     }
-    
+
     /**
-     * Regenerate email
+     * Generate tracking token
      */
-    async regenerateEmail() {
-        if (!this.currentProspect || !this.currentRoom || !this.currentEmailNumber) {
-            console.error('Missing regeneration data');
+    _generateTrackingToken() {
+        const data = `${this.currentProspect.id}-${Date.now()}-${Math.random()}`;
+        return btoa(data).replace(/[^a-zA-Z0-9]/g, '').substring(0, 32);
+    }
+
+    /**
+     * Show copy success animation
+     */
+    _showCopySuccess() {
+        const successEl = this.modal.querySelector('.copy-success');
+        if (successEl) {
+            successEl.classList.add('show');
+            setTimeout(() => successEl.classList.remove('show'), 3000);
+        }
+    }
+
+    /**
+     * NEW: Show ready email (email already generated, non-editable view)
+     * 
+     * @param {Object} details - { prospectId, emailNumber, prospectName }
+     */
+    async showReadyEmail({ prospectId, emailNumber, prospectName }) {
+        if (!prospectId || !emailNumber) {
+            console.error('Missing prospectId or emailNumber');
             return;
         }
-        
-        const prospectNameEl = this.modal.querySelector('.prospect-name');
-        const prospectName = prospectNameEl.textContent;
-        
-        await this.generateEmail({
-            prospectId: this.currentProspect,
-            room: this.currentRoom,
-            emailNumber: this.currentEmailNumber,
-            prospectName: prospectName
-        });
-    }
-    
-    /**
-     * Show modal in specific state
-     * 
-     * @param {string} state - 'loading', 'preview', or 'error'
-     */
-    showModal(state) {
-        // Hide all sections
-        this.modal.querySelectorAll('.modal-body-section').forEach(section => {
-            section.classList.remove('active');
-        });
-        
-        // Show requested section
-        const stateMap = {
-            'loading': '.loading-state',
-            'preview': '.email-preview',
-            'error': '.error-state'
+
+        this.currentProspect = { 
+            id: prospectId, 
+            name: prospectName,
+            room: null // Will try to get from email tracking
         };
-        
-        const section = this.modal.querySelector(stateMap[state]);
-        if (section) {
-            section.classList.add('active');
-        }
-        
-        // Show/hide footer buttons
-        const footer = this.modal.querySelector('.email-modal-footer');
-        if (state === 'loading') {
-            footer.style.display = 'none';
-        } else {
-            footer.style.display = 'flex';
-        }
-        
-        // Show modal
+        this.currentEmail = null;
+
+        // Update modal header
+        this.modal.querySelector('.prospect-name-header').textContent = 
+            prospectName || `Prospect ${prospectId}`;
+
+        // Show modal and loading state
         this.modal.classList.add('active');
-        
-        // Focus management
-        if (state === 'preview') {
-            const subjectEl = this.modal.querySelector('.email-subject');
-            if (subjectEl) {
-                subjectEl.focus();
+        this._showSection('loading');
+
+        try {
+            // Use config from instance or fallback to global
+            const config = window.rtrDashboardConfig || this.config || {};
+            
+            // Fetch email from tracking system
+            // Extract base URL properly
+            let baseUrl = this.api?.url || config.restUrl || config.siteUrl || '';
+            if (baseUrl.includes('/wp-json')) {
+                baseUrl = baseUrl.split('/wp-json')[0];
+            }
+            const apiEndpoint = `${baseUrl}/wp-json/directreach/v2/emails/tracking/prospect/${prospectId}/email/${emailNumber}`;
+            
+            const response = await fetch(
+                apiEndpoint,
+                {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': config.nonce
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch email: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.message || 'Failed to load email');
+            }
+
+            this.currentEmail = {
+                id: data.data.id,
+                email_tracking_id: data.data.id, 
+                email_number: data.data.email_number || emailNumber, 
+                room_type: data.data.room_type, 
+                subject: data.data.subject,
+                body_html: data.data.body_html,
+                body_text: data.data.body_text,
+                url_included: data.data.url_included,
+                tracking_token: data.data.tracking_token,
+                template_used: data.data.template_used,
+                generated_by_ai: data.data.generated_by_ai,
+                copied_at: data.data.copied_at 
+            };
+
+            // Update prospect room from email if available
+            if (data.data.room_type && !this.currentProspect.room) {
+                this.currentProspect.room = data.data.room_type;
+            }
+
+            // Display email in READ-ONLY mode
+            this._displayReadyEmail(this.currentEmail);
+            this._showSection('email-preview');
+
+        } catch (error) {
+            console.error('Failed to load ready email:', error);
+            this._showError(error.message || 'Failed to load email. Please try again.');
+            this._showSection('error');
+        }
+    }
+
+    /**
+     * NEW: Display ready email in read-only mode
+     * 
+     * @param {Object} email - Email data
+     */
+    _displayReadyEmail(email) {
+        // Populate metadata
+        const prospectEmail = this.modal.querySelector('.prospect-email');
+        if (prospectEmail) {
+            prospectEmail.textContent = this.currentProspect.email || 'N/A';
+        }
+
+        const templateName = this.modal.querySelector('.template-name');
+        const globalBadge = this.modal.querySelector('.global-badge');
+        if (email.template_used && templateName) {
+            templateName.textContent = email.template_used.name || 'Custom';
+            if (globalBadge) {
+                globalBadge.style.display = email.template_used.is_global ? 'inline-block' : 'none';
             }
         }
+
+        const contentLink = this.modal.querySelector('.content-link');
+        if (email.url_included && contentLink) {
+            contentLink.href = email.url_included;
+            contentLink.textContent = email.url_included;
+            contentLink.closest('.meta-item').style.display = 'flex';
+        } else if (contentLink) {
+            contentLink.closest('.meta-item').style.display = 'none';
+        }
+
+        const errorSection = this.modal.querySelector('.error-state');
+        if (errorSection) {
+            errorSection.style.display = 'none';
+        }
+
+        // Set subject (READ-ONLY)
+        const subjectInput = this.modal.querySelector('.email-subject');
+        if (subjectInput) {
+            subjectInput.value = email.subject || '';
+            subjectInput.setAttribute('readonly', 'readonly');
+            subjectInput.classList.add('readonly');
+        }
+
+        // Set body (READ-ONLY)
+        const bodyDiv = this.modal.querySelector('.email-body');
+        if (bodyDiv) {
+            bodyDiv.innerHTML = email.body_html || '';
+            bodyDiv.setAttribute('contenteditable', 'false');
+            bodyDiv.classList.add('readonly');
+        }
+
+        // Update copy button to show both options
+        this._updateCopyButtons();
     }
-    
+
+    /**
+     * NEW: Update footer to show both copy options and regenerate
+     */
+    _updateCopyButtons() {
+        const footer = this.modal.querySelector('.email-modal-footer');
+        if (!footer) return;
+
+        // Check if email has been copied (sent state)
+        const wasCopied = this.currentEmail?.copied_at || false;
+
+        // Build footer HTML with conditional Regenerate button
+        footer.innerHTML = `
+            <button class="btn btn-primary copy-html-btn">
+                <i class="fas fa-copy"></i> Copy HTML
+            </button>
+            <button class="btn btn-secondary copy-raw-btn">
+                <i class="fas fa-code"></i> Copy Raw HTML
+            </button>
+            ${!wasCopied ? `
+            <button class="btn btn-warning regenerate-btn">
+                <i class="fas fa-sync-alt"></i> Regenerate
+            </button>
+            ` : ''}
+            <button class="btn btn-tertiary cancel-btn">
+                <i class="fas fa-times"></i> Cancel
+            </button>
+            <div class="copy-success"><i class="fas fa-check"></i> Copied!</div>
+        `;
+
+        // Attach event listeners
+        footer.querySelector('.copy-html-btn')?.addEventListener('click', () => {
+            this.copyFormattedHTML();
+        });
+
+        footer.querySelector('.copy-raw-btn')?.addEventListener('click', () => {
+            this.copyRawHTML();
+        });
+
+        footer.querySelector('.regenerate-btn')?.addEventListener('click', () => {
+            this.regenerateEmail();
+        });
+
+        footer.querySelector('.cancel-btn')?.addEventListener('click', () => {
+            this.hideModal();
+        });
+    }
+
+    /**
+     * NEW: Copy formatted HTML (for pasting into Gmail)
+     * Includes tracking pixel
+     */
+    async copyFormattedHTML() {
+        if (!this.currentEmail) {
+            console.error('No email to copy');
+            return;
+        }
+
+        try {
+            const htmlWithTracking = this._addTrackingPixel(this.currentEmail.body_html);
+
+            // Use Clipboard API for rich HTML
+            const blob = new Blob([htmlWithTracking], { type: 'text/html' });
+            const clipboardItem = new ClipboardItem({
+                'text/html': blob
+            });
+
+            await navigator.clipboard.write([clipboardItem]);
+
+            this._showCopySuccess();
+            this._trackCopy();
+
+            // Notify user
+            document.dispatchEvent(new CustomEvent('rtr:showNotification', {
+                detail: {
+                    message: 'Formatted HTML copied! Paste into your email client.',
+                    type: 'success'
+                }
+            }));
+
+            // Update button state to "sent"
+            document.dispatchEvent(new CustomEvent('rtr:email-state-update', {
+                detail: {
+                    visitorId: this.currentProspect.id,
+                    emailNumber: this.currentEmail.email_number || 1,
+                    newState: 'sent'
+                }
+            }));
+
+            // Close modal after brief delay
+            setTimeout(() => this.hideModal(), 800);
+
+        } catch (error) {
+            console.error('Failed to copy formatted HTML:', error);
+            // Fallback to text
+            this.copyRawHTML();
+        }
+    }
+
+    /**
+     * NEW: Copy raw HTML source code
+     * Includes tracking pixel
+     */
+    async copyRawHTML() {
+        if (!this.currentEmail) {
+            console.error('No email to copy');
+            return;
+        }
+
+        try {
+            const htmlWithTracking = this._addTrackingPixel(this.currentEmail.body_html);
+
+            await navigator.clipboard.writeText(htmlWithTracking);
+
+            this._showCopySuccess();
+            this._trackCopy();
+
+            // Notify user
+            document.dispatchEvent(new CustomEvent('rtr:showNotification', {
+                detail: {
+                    message: 'Raw HTML copied to clipboard!',
+                    type: 'success'
+                }
+            }));
+
+            // Update button state to "sent"
+            document.dispatchEvent(new CustomEvent('rtr:email-state-update', {
+                detail: {
+                    visitorId: this.currentProspect.id,
+                    emailNumber: this.currentEmail.email_number || 1,
+                    newState: 'sent'
+                }
+            }));
+
+            // Close modal after brief delay
+            setTimeout(() => this.hideModal(), 800);
+
+        } catch (error) {
+            console.error('Failed to copy raw HTML:', error);
+            alert('Failed to copy. Please try again.');
+        }
+    }
+
+    /**
+     * Regenerate email with new AI generation
+     */
+    async regenerateEmail() {
+        if (!this.currentProspect || !this.currentEmail) {
+            console.error('Cannot regenerate: missing prospect or email data');
+            return;
+        }
+
+        if (!confirm('This will generate a new email and replace the current one. Continue?')) {
+            return;
+        }
+
+        this._showSection('loading');
+
+        try {
+            
+            // Use API client instead of raw fetch
+            const data = await this.api.post('/emails/generate', {
+                prospect_id: parseInt(this.currentProspect.id, 10),
+                room_type: this.currentProspect.room || this.currentEmail.room_type,
+                force_regenerate: true,
+                email_number: parseInt(this.currentEmail.email_number || 1, 10)
+            });
+
+            if (!data.success) {
+                throw new Error(data.message || 'Email regeneration failed');
+            }
+
+            this.currentEmail = {
+                id: data.data.id,
+                email_tracking_id: data.data.id,
+                subject: data.data.subject,
+                body_html: data.data.body_html,
+                body_text: data.data.body_text,
+                url_included: data.data.url_included,
+                tracking_token: data.data.tracking_token,
+                template_used: data.data.template_used,
+                email_number: data.data.email_number,
+                force_regenerate: true,
+                room_type: data.data.room_type || this.currentEmail.room_type,
+                copied_at: null
+            };
+
+            this._displayReadyEmail(this.currentEmail);
+            this._showSection('email-preview');
+
+            document.dispatchEvent(new CustomEvent('rtr:showNotification', {
+                detail: {
+                    message: 'Email regenerated successfully!',
+                    type: 'success'
+                }
+            }));
+
+            if (this.currentProspect?.id) {
+                document.dispatchEvent(new CustomEvent('rtr:emailGenerated', {
+                    detail: {
+                        prospectId: this.currentProspect.id,
+                        emailNumber: this.currentEmail.email_number,
+                        trackingId: this.currentEmail.id
+                    }
+                }));
+            }
+
+        } catch (error) {
+            console.error('Failed to regenerate email:', error);
+            this._showError(error.message || 'Failed to regenerate email. Please try again.');
+            this._showSection('error');
+        }
+    }
+
+    /**
+     * NEW: Add tracking pixel to HTML
+     * 
+     * @param {string} html - Original HTML
+     * @returns {string} HTML with tracking pixel
+     */
+    _addTrackingPixel(html) {
+        if (!this.currentEmail || !this.currentEmail.tracking_token) {
+            return html;
+        }
+
+        const trackingUrl = `${window.location.origin}/wp-json/directreach/v2/emails/track-open/${this.currentEmail.tracking_token}`;
+        const trackingPixel = `<img src="${trackingUrl}" width="1" height="1" style="display:none;" alt="" />`;
+
+        // Insert tracking pixel at end of body
+        if (html.includes('</body>')) {
+            return html.replace('</body>', `${trackingPixel}</body>`);
+        } else {
+            return html + trackingPixel;
+        }
+    }
+
+    /**
+     * NEW: Track that email was copied
+     */
+    async _trackCopy() {
+        if (!this.currentEmail || (!this.currentEmail.id && !this.currentEmail.tracking_id)) {
+            return;
+        }
+
+        try {
+            // Extract base URL properly
+            let baseUrl = this.config?.siteUrl || window.DirectReachConfig?.siteUrl || '';
+            if (baseUrl.includes('/wp-json')) {
+                baseUrl = baseUrl.split('/wp-json')[0];
+            }
+            const apiEndpoint = `${baseUrl}/wp-json/directreach/v2/emails/track-copy`;
+            
+            await fetch(apiEndpoint, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-WP-Nonce': window.rtrDashboardConfig?.nonce || this.config?.nonce || ''
+                },
+                body: JSON.stringify({
+                    email_tracking_id: this.currentEmail?.id || this.currentEmail?.tracking_id,
+                    prospect_id: this.currentProspect?.id,
+                    url_included: this.currentEmail?.url_included || ''
+                })
+            });
+
+            // Emit event for UI updates
+            document.dispatchEvent(new CustomEvent('rtr:email-copied', {
+                detail: {
+                    visitorId: this.currentProspect?.id,
+                    emailNumber: this.currentEmail?.email_number
+                }
+            }));
+
+        } catch (error) {
+            console.error('Failed to track copy:', error);
+            // Don't block the copy operation
+        }
+    }
+
     /**
      * Hide modal
      */
     hideModal() {
+        if (!this.modal) return;
         this.modal.classList.remove('active');
-        
-        // Reset state
         this.currentProspect = null;
-        this.currentRoom = null;
-        this.currentEmailNumber = null;
-        this.generatedEmail = null;
-        this.trackingId = null;
-        
-        // Hide success toast
-        const successToast = this.modal.querySelector('.copy-success');
-        successToast.classList.remove('active');
-    }
-    
-    /**
-     * Show error state
-     * 
-     * @param {string} message - Error message
-     */
-    showError(message) {
-        const errorMsg = this.modal.querySelector('.error-message');
-        errorMsg.textContent = message || 'An unexpected error occurred.';
-        
-        this.showModal('error');
-    }
-    
-    /**
-     * Show copy success toast
-     */
-    showCopySuccess() {
-        const successToast = this.modal.querySelector('.copy-success');
-        successToast.classList.add('active');
-        
+        this.currentEmail = null;
+
+        // Reset modal content after animation
         setTimeout(() => {
-            successToast.classList.remove('active');
-        }, 3000);
+            this._showSection(null);
+            this.modal.querySelector('.email-subject').value = '';
+            this.modal.querySelector('.email-body').innerHTML = '';
+        }, 300);
     }
-    
+
     /**
-     * Update email icon state in prospect row
-     * 
-     * @param {number} prospectId - Prospect ID
-     * @param {number} emailNumber - Email sequence number
-     * @param {string} state - Icon state (pending, generating, ready, sent, opened)
+     * Show specific section (loading, email-preview, error)
      */
-    updateEmailIcon(prospectId, emailNumber, state) {
-        const prospectRow = document.querySelector(`.prospect-row[data-prospect-id="${prospectId}"]`);
-        if (!prospectRow) return;
-        
-        const emailIcon = prospectRow.querySelector(`.email-icons i[data-email-number="${emailNumber}"]`);
-        if (!emailIcon) return;
-        
-        // Remove all state classes
-        emailIcon.classList.remove(
-            'email-not-sent',
-            'email-pending',
-            'email-generating',
-            'email-ready',
-            'email-sent',
-            'email-opened'
-        );
-        
-        // Remove any badges
-        const existingBadge = emailIcon.querySelector('.sent-badge, .opened-badge');
-        if (existingBadge) {
-            existingBadge.remove();
-        }
-        
-        // Add new state
-        switch (state) {
-            case 'pending':
-                emailIcon.classList.add('email-pending');
-                emailIcon.className = 'fas fa-envelope email-pending';
-                emailIcon.title = `Email ${emailNumber}: Ready to generate`;
-                emailIcon.style.cursor = 'pointer';
-                break;
-                
-            case 'generating':
-                emailIcon.classList.add('email-generating');
-                emailIcon.className = 'fas fa-spinner email-generating';
-                emailIcon.title = `Email ${emailNumber}: Generating...`;
-                emailIcon.style.cursor = 'wait';
-                break;
-                
-            case 'ready':
-                emailIcon.classList.add('email-ready');
-                emailIcon.className = 'fas fa-envelope-open email-ready';
-                emailIcon.title = `Email ${emailNumber}: Ready to copy`;
-                emailIcon.style.cursor = 'pointer';
-                break;
-                
-            case 'sent':
-                emailIcon.classList.add('email-sent');
-                emailIcon.className = 'fas fa-paper-plane email-sent';
-                emailIcon.title = `Email ${emailNumber}: Sent`;
-                
-                // Add checkmark badge
-                const sentBadge = document.createElement('span');
-                sentBadge.className = 'sent-badge';
-                sentBadge.innerHTML = '✓';
-                emailIcon.appendChild(sentBadge);
-                break;
-                
-            case 'opened':
-                emailIcon.classList.add('email-opened');
-                emailIcon.className = 'fas fa-envelope-open-text email-opened';
-                emailIcon.title = `Email ${emailNumber}: Opened`;
-                
-                // Add eye badge
-                const openedBadge = document.createElement('span');
-                openedBadge.className = 'opened-badge';
-                openedBadge.innerHTML = '👁';
-                emailIcon.appendChild(openedBadge);
-                break;
-                
-            default:
-                emailIcon.classList.add('email-not-sent');
-                emailIcon.className = 'fas fa-envelope email-not-sent';
-                emailIcon.title = `Email ${emailNumber}: Not sent`;
+    _showSection(section) {
+        this.modal.querySelectorAll('.modal-body-section').forEach(el => {
+            el.classList.remove('active');
+        });
+
+        if (section) {
+            const target = this.modal.querySelector(`.${section}`);
+            if (target) target.classList.add('active');
         }
     }
-    
+
     /**
-     * Emit custom event
-     * 
-     * @param {string} eventName - Event name
-     * @param {Object} detail - Event detail data
+     * Show error message
      */
-    emitEvent(eventName, detail) {
-        document.dispatchEvent(new CustomEvent(`rtr:${eventName}`, { detail }));
+    _showError(message) {
+        const errorMsg = this.modal.querySelector('.error-message');
+        if (errorMsg) {
+            errorMsg.textContent = message || 'An unexpected error occurred.';
+        }
     }
-    
+
     /**
-     * Show notification (helper)
-     * 
-     * @param {string} message - Notification message
-     * @param {string} type - Notification type (success, error, info)
+     * Escape HTML
      */
-    showNotification(message, type = 'info') {
-        // Delegate to main dashboard notification system
-        this.emitEvent('notification', { message, type });
+    _escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text || '';
+        return div.innerHTML;
     }
 }

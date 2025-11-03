@@ -1,307 +1,282 @@
 <?php
 /**
- * Reading the Room Dashboard View
- * 
- * Main dashboard interface matching the mockup design
- * 
+ * Reading the Room Dashboard - PRODUCTION READY
+ *
+ * All class names now match CSS and JavaScript expectations
+ *
  * @package DirectReach
  * @subpackage ReadingTheRoom
- * @since 1.0.0
+ * @since 2.0.0
  */
 
-// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
+show_admin_bar(false);
+
+// Disable concatenation
+if (!defined('CONCATENATE_SCRIPTS')) {
+    define('CONCATENATE_SCRIPTS', false);
+}
+
+// Force direct script tag output
+add_filter('print_scripts_array', function ($handles) {
+    if (isset($_GET['page']) && $_GET['page'] === 'dr-reading-room') {
+        global $wp_scripts;
+        if (isset($wp_scripts->registered['rtr-main'])) {
+            $wp_scripts->registered['rtr-main']->extra['type'] = 'module';
+        }
+    }
+    return $handles;
+});
+
+// Enqueue CSS in correct order
+wp_enqueue_style('directreach-variables', plugin_dir_url(__FILE__) . '../css/variables.css', [], '2.0.0');
+wp_enqueue_style('directreach-base', plugin_dir_url(__FILE__) . '../css/base.css', [], '2.0.0');
+wp_enqueue_style('directreach-header', plugin_dir_url(__FILE__) . '../css/header.css', [], '2.0.0');
+wp_enqueue_style('directreach-room-cards', plugin_dir_url(__FILE__) . '../css/room-cards.css', [], '2.0.0');
+wp_enqueue_style('directreach-room-details', plugin_dir_url(__FILE__) . '../css/room-details.css', [], '2.0.0');
+wp_enqueue_style('directreach-prospect-list', plugin_dir_url(__FILE__) . '../css/prospect-list.css', [], '2.0.0');
+wp_enqueue_style('directreach-modals', plugin_dir_url(__FILE__) . '../css/modals.css', [], '2.0.0');
+wp_enqueue_style('directreach-email-modal', plugin_dir_url(__FILE__) . '../css/email-modal.css', [], '2.0.0');
+wp_enqueue_style('directreach-email-history-modal', plugin_dir_url(__FILE__) . '../css/email-history-modal.css', [], '2.0.0');
+wp_enqueue_style('directreach-charts', plugin_dir_url(__FILE__) . '../css/charts.css', [], '2.0.0');
+wp_enqueue_style('directreach-ui-utilities', plugin_dir_url(__FILE__) . '../css/ui.css', [], '2.0.0');
+wp_enqueue_style('directreach-responsive', plugin_dir_url(__FILE__) . '../css/responsive.css', [], '2.0.0');
+wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', [], '5.15.4');
+wp_enqueue_script('chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js', array(), '4.4.0', true);
+
+// Enqueue main JavaScript as ES module
+wp_enqueue_script(
+    'rtr-dashboard-main',
+    plugins_url('admin/js/main.js', dirname(__DIR__)),
+    array(), // No dependencies
+    '2.1.0',
+    true // Load in footer
+);
+
+// Localize config for JS - MUST be called AFTER wp_enqueue_script
+wp_localize_script(
+    'rtr-dashboard-main',
+    'rtrDashboardConfig',
+    array(
+        'siteUrl'      => esc_url(get_site_url()),
+        'nonce'        => wp_create_nonce('wp_rest'),
+        'restUrl'      => esc_url(rest_url('directreach/v1/reading-room')), // ← FIX: change to v1/reading-room
+        'apiUrl'       => esc_url(rest_url('directreach/v1/reading-room')),
+        'emailApiUrl'  => esc_url(rest_url('directreach/v2')),              // ← ADD: for email endpoints
+        'ajaxUrl'      => admin_url('admin-ajax.php'),
+        'userId'       => get_current_user_id(),
+        'userIsAdmin'  => current_user_can('manage_options'),
+        'assets'       => array(
+            'logo' => esc_url(plugins_url('assets/images/MEMO_Logo.png', dirname(dirname(dirname(dirname(__FILE__)))))),
+            'seal' => esc_url(plugins_url('assets/images/MEMO_Seal.png', dirname(dirname(dirname(dirname(__FILE__))))))
+        )
+    )
+);
+
+// Mark the script as a module
+add_filter('script_loader_tag', function($tag, $handle) {
+    if ($handle === 'rtr-dashboard-main') {
+        $tag = str_replace('<script ', '<script type="module" ', $tag);
+    }
+    return $tag;
+}, 10, 2);
+
+// Get current user info
 $current_user = wp_get_current_user();
 $user_initials = strtoupper(substr($current_user->first_name, 0, 1) . substr($current_user->last_name, 0, 1));
+if (empty(trim($user_initials))) {
+    $user_initials = strtoupper(substr($current_user->user_login, 0, 2));
+}
 $user_display_name = $current_user->display_name;
 $user_role = !empty($current_user->roles) ? ucfirst($current_user->roles[0]) : 'User';
 
-// Get premium clients for dropdown
+// Define required variables
+$is_admin = current_user_can('manage_options');
+
+// Get ONLY premium clients (subscription_tier = 'premium')
 global $wpdb;
-$clients = $wpdb->get_results(
-    "SELECT id, client_name 
-     FROM {$wpdb->prefix}cpd_clients 
-     WHERE subscription_tier = 'premium' 
-     AND rtr_enabled = 1
-     ORDER BY client_name ASC"
-);
-?>
-<!DOCTYPE html>
-<html lang="en">
+$clients_table = $wpdb->prefix . 'cpd_clients';
+$clients = [];
+
+if ($wpdb->get_var("SHOW TABLES LIKE '$clients_table'") == $clients_table) {
+    $clients = $wpdb->get_results(
+        "SELECT id, client_name 
+         FROM $clients_table 
+         WHERE subscription_tier = 'premium' 
+         ORDER BY client_name ASC",
+        ARRAY_A
+    );
+}
+
+if (!is_array($clients)) {
+    $clients = [];
+}
+
+?><!DOCTYPE html>
+<html <?php language_attributes(); ?>>
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DirectReach - Reading the Room</title>
+    <meta charset="<?php bloginfo('charset'); ?>">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php esc_html_e('Reading the Room Dashboard', 'directreach'); ?></title>
+    <style>
+        /* CRITICAL: Hide admin bar completely */
+        #wpadminbar {
+            display: none !important;
+        }
+        html {
+            margin-top: 0 !important;
+        }
+        * html body {
+            margin-top: 0 !important;
+        }
+        body.reading-room-dashboard {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .reading-room-container {
+            min-height: 100vh;
+            width: 100%;
+            max-width: 100%;
+        }
+        .main-content {
+            width: 100%;
+            max-width: 100%;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        .content-area {
+            width: 100%;
+            max-width: 100%;
+            margin: 0;
+        }
+    </style>
     <?php 
-    // CSS already enqueued via enqueue_custom_assets
-    wp_print_styles();
+    remove_action('wp_head', '_admin_bar_bump_cb');
+    wp_head(); 
     ?>
 </head>
-<body>
+
+<body class="reading-room-dashboard">
     <div class="reading-room-container">
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Header -->
-            <div class="content-header">
-                <div class="header-title">
-                    <img src="<?php echo plugins_url('assets/MEMO_Seal.png', dirname(__FILE__, 2)); ?>" 
-                         alt="DirectReach" 
-                         onerror="this.src='data:image/svg+xml,%3Csvg width=\'180\' height=\'60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Crect width=\'180\' height=\'60\' fill=\'white\' rx=\'8\'/%3E%3Ctext x=\'90\' y=\'35\' font-family=\'Montserrat, sans-serif\' font-size=\'24\' font-weight=\'700\' text-anchor=\'middle\' fill=\'%232c435d\'%3EDirectReach%3C/text%3E%3C/svg%3E'" />
-                    <div class="premium-badge">Premium</div>
-                    <h1>Reading the Room Dashboard</h1>
-                </div>
-                <div class="header-controls">
-                    <select class="date-filter">
-                        <option value="7">Last 7 days</option>
-                        <option value="30" selected>Last 30 days</option>
-                        <option value="90">Last 90 days</option>
-                    </select>
-                    <button class="refresh-btn">
-                        <i class="fas fa-sync-alt"></i>
-                        Refresh
-                    </button>
-                    <div class="user-info">
-                        <div class="user-avatar"><?php echo esc_html($user_initials); ?></div>
-                        <div>
-                            <div style="font-weight: 600; font-size: 0.9rem; color: #2c435d;">
-                                <?php echo esc_html($user_display_name); ?>
-                            </div>
-                            <div style="font-size: 0.8rem; color: #666;">
-                                <?php echo esc_html($user_role); ?>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+        <!-- Header -->
+        <header class="content-header">
+            <div class="header-title">
+                <img src="<?php echo esc_url( plugin_dir_url( dirname( dirname( dirname( dirname( __FILE__ ) ) ) ) ) . 'assets/images/MEMO_Logo.png' ); ?>" alt="DirectReach Logo" />
+                <h1>Reading the Room Dashboard</h1>
+                <span class="premium-badge">Premium</span>
             </div>
 
-            <!-- Content Area -->
-            <div class="content-area">
-                <!-- Pipeline Overview Header -->
-                <div class="pipeline-header">
-                    <div class="header-left">
+            <div class="header-controls">
+                <div class="date-filter-group">
+                    <select id="date-filter" class="date-filter">
+                        <option value="7">Last 7 Days</option>
+                        <option value="30" selected>Last 30 Days</option>
+                        <option value="90">Last 90 Days</option>
+                    </select>
+                </div>
+
+                <button id="refresh-dashboard" class="refresh-btn">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+
+                <div class="user-info">
+                    <div class="user-avatar"><?php echo esc_html($user_initials); ?></div>
+                    <span><?php echo esc_html($user_display_name); ?></span>
+                    <small><?php echo esc_html($user_role); ?></small>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <main class="main-content">
+            <section class="content-area">
+                <!-- Pipeline Overview -->
+                <div class="pipeline-overview">
+                    <div class="pipeline-header">
                         <h2>Pipeline Overview</h2>
-                    </div>
-                    <div class="header-right">
-                        <?php if (current_user_can('administrator') && count($clients) > 1): ?>
-                        <div class="client-selector">
-                            <label>Client:</label>
-                            <select class="client-dropdown">
+                        <div class="client-selector" <?php if (!$is_admin) echo 'style="display:none;"'; ?>>
+                            <label for="client-select">Client:</label>
+                            <select id="client-select" class="client-dropdown">
                                 <option value="">All Clients</option>
                                 <?php foreach ($clients as $client): ?>
-                                <option value="<?php echo esc_attr($client->id); ?>">
-                                    <?php echo esc_html($client->client_name); ?>
-                                </option>
+                                    <option value="<?php echo esc_attr($client['id']); ?>">
+                                        <?php echo esc_html($client['client_name']); ?>
+                                    </option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <!-- Room Cards -->
-                <div class="room-cards-container">
-                    <!-- Problem Room -->
-                    <div class="room-overview-card problem-room">
-                        <div class="room-card-header">
-                            <div class="room-circle">
-                                <i class="fas fa-exclamation-triangle"></i>
-                            </div>
-                            <div class="room-info">
-                                <h3>Problem Room</h3>
-                                <p>Attract Phase</p>
-                            </div>
-                            <button class="chart-btn" data-room="problem" title="View Campaign Charts">
-                                <i class="fas fa-chart-bar"></i>
-                            </button>
-                        </div>
-                        <div class="room-content">
-                            <div class="room-metrics-clean">
-                                <div class="room-count" data-room="problem">0</div>
-                                <div class="room-label">ACTIVE PROSPECTS</div>
-                            </div>
-                            <div class="room-stats-horizontal">
-                                <div class="stat-item">
-                                    <span class="stat-number">0</span>
-                                    <span class="stat-label">New Today</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-number">0%</span>
-                                    <span class="stat-label">Progress Rate</span>
-                                </div>
-                            </div>
-                        </div>
                     </div>
 
-                    <!-- Solution Room -->
-                    <div class="room-overview-card solution-room">
-                        <div class="room-card-header">
-                            <div class="room-circle">
-                                <i class="fas fa-lightbulb"></i>
-                            </div>
-                            <div class="room-info">
-                                <h3>Solution Room</h3>
-                                <p>Identify & Nurture</p>
-                            </div>
-                            <button class="chart-btn" data-room="solution" title="View Campaign Charts">
-                                <i class="fas fa-chart-bar"></i>
-                            </button>
-                        </div>
-                        <div class="room-content">
-                            <div class="room-metrics-clean">
-                                <div class="room-count" data-room="solution">0</div>
-                                <div class="room-label">ENGAGED VISITORS</div>
-                            </div>
-                            <div class="room-stats-horizontal">
-                                <div class="stat-item">
-                                    <span class="stat-number">0</span>
-                                    <span class="stat-label">High Scores</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-number">0%</span>
-                                    <span class="stat-label">Open Rate</span>
-                                </div>
-                            </div>
-                        </div>
+                    <!-- Room Cards Section -->
+                    <div id="rtr-room-cards-container" class="rtr-room-cards-container">
+                        <!-- JavaScript will populate room cards here -->
                     </div>
 
-                    <!-- Offer Room -->
-                    <div class="room-overview-card offer-room">
-                        <div class="room-card-header">
-                            <div class="room-circle">
-                                <i class="fas fa-handshake"></i>
-                            </div>
-                            <div class="room-info">
-                                <h3>Offer Room</h3>
-                                <p>Invite & Close</p>
-                            </div>
-                            <button class="chart-btn" data-room="offer" title="View Campaign Charts">
-                                <i class="fas fa-chart-bar"></i>
-                            </button>
-                        </div>
-                        <div class="room-content">
-                            <div class="room-metrics-clean">
-                                <div class="room-count" data-room="offer">0</div>
-                                <div class="room-label">SALES READY</div>
-                            </div>
-                            <div class="room-stats-horizontal">
-                                <div class="stat-item">
-                                    <span class="stat-number">0</span>
-                                    <span class="stat-label">This Week</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-number">0%</span>
-                                    <span class="stat-label">Click Rate</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Sales Room -->
-                    <div class="room-overview-card sales-room">
-                        <div class="room-card-header">
-                            <div class="room-circle">
-                                <i class="fas fa-dollar-sign"></i>
-                            </div>
-                            <div class="room-info">
-                                <h3>Sales Room</h3>
-                                <p>Negotiate & Convert</p>
-                            </div>
-                            <button class="chart-btn" data-room="sales" title="View Campaign Charts">
-                                <i class="fas fa-chart-bar"></i>
-                            </button>
-                        </div>
-                        <div class="room-content">
-                            <div class="room-metrics-clean">
-                                <div class="room-count" data-room="sales">0</div>
-                                <div class="room-label">SALES HANDOFFS</div>
-                            </div>
-                            <div class="room-stats-horizontal">
-                                <div class="stat-item">
-                                    <span class="stat-number">0</span>
-                                    <span class="stat-label">This Week</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-number">0</span>
-                                    <span class="stat-label">Avg Days</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Individual Room Sections -->
+                <!-- Prospect Details Section - Room Detail Views -->
                 <div class="room-details-section">
-                    <!-- Room details will be populated by JavaScript -->
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Chart Modal -->
-    <div class="modal" id="chart-modal">
-        <div class="modal-content chart-modal-content">
-            <button class="close-modal">&times;</button>
-            <div class="modal-header">
-                <h2 id="chart-modal-title">Campaign Analytics</h2>
-                <div class="chart-controls">
-                    <select id="chart-timeframe" class="chart-select">
-                        <option value="7">Last 7 days</option>
-                        <option value="30" selected>Last 30 days</option>
-                        <option value="90">Last 90 days</option>
-                    </select>
-                    <select id="chart-type" class="chart-select">
-                        <option value="bar">Bar Chart</option>
-                        <option value="pie">Pie Chart</option>
-                        <option value="line">Trend Line</option>
-                    </select>
-                </div>
-            </div>
-            <div class="modal-body">
-                <div class="chart-container">
-                    <canvas id="campaign-chart"></canvas>
-                </div>
-                <div class="chart-summary">
-                    <div class="summary-stats">
-                        <div class="summary-item">
-                            <div class="summary-value" id="total-prospects">0</div>
-                            <div class="summary-label">Total Prospects</div>
+                    <div id="rtr-room-problem" class="room-detail-container">
+                        <div class="room-detail-header">
+                            <h3><i class="fas fa-exclamation-triangle"></i> Problem Room <span class="room-count-badge">0</span></h3>
+                            <div><select id="problem-room-campaign-filter" class="campaign-dropdown">
+                                <option value="">All Campaigns</option></select>
+                            </div>
                         </div>
-                        <div class="summary-item">
-                            <div class="summary-value" id="active-campaigns">0</div>
-                            <div class="summary-label">Active Campaigns</div>
-                        </div>
-                        <div class="summary-item">
-                            <div class="summary-value" id="top-campaign">-</div>
-                            <div class="summary-label">Top Campaign</div>
-                        </div>
+                        <div class="rtr-prospect-list"></div>
                     </div>
+
+                    <div id="rtr-room-solution" class="room-detail-container">
+                        <div class="room-detail-header">
+                            <h3><i class="fas fa-lightbulb"></i> Solution Room <span class="room-count-badge">0</span></h3>
+                            <div><select id="solution-room-campaign-filter" class="campaign-dropdown">
+                                <option value="">All Campaigns</option></select>
+                            </div>
+                        </div>
+                        <div class="rtr-prospect-list"></div>
+                    </div>
+
+                    <div id="rtr-room-offer" class="room-detail-container">
+                        <div class="room-detail-header">
+                            <h3><i class="fas fa-handshake"></i> Offer Room <span class="room-count-badge">0</span></h3>
+                            <div><select id="offer-room-campaign-filter" class="campaign-dropdown">
+                                <option value="">All Campaigns</option></select>
+                            </div>
+                        </div>
+                        <div class="rtr-prospect-list"></div>
+                    </div>
+
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Analytics Modal -->
+    <div id="analytics-modal" class="rtr-modal" style="display: none;">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Room Analytics</h3>
+                <button class="modal-close" aria-label="Close">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="summary-stats">
+                    <!-- Stats will be inserted by JS -->
+                </div>
+                <div class="chart-container" style="height: 400px;">
+                    <!-- Chart will be inserted by JS -->
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Email Details Modal -->
-    <div class="modal" id="email-details-modal">
-        <div class="modal-content" style="max-width: 700px">
-            <button class="close-modal">&times;</button>
-            <div class="modal-header">
-                <h2 id="email-modal-title">Email Details</h2>
-            </div>
-            <div class="modal-body">
-                <div id="email-modal-content"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Notification Container -->
-    <div class="notification-container"></div>
-
-    <?php 
-    // JavaScript already enqueued via enqueue_custom_assets
-    wp_print_scripts();
-    ?>
+<?php 
+remove_action('wp_footer', 'wp_admin_bar_render', 1000);
+wp_footer(); 
+?>
+    
 </body>
 </html>

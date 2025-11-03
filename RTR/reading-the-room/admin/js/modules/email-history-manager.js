@@ -1,411 +1,289 @@
 /**
  * Email History Manager
- * 
+ *
  * Handles read-only display of sent email details
- * 
+ *
  * @package DirectReach
  * @subpackage ReadingTheRoom
  * @since 1.0.0
  */
 
 export default class EmailHistoryManager {
-    constructor(api, config) {
-        this.api = api;
+    constructor(config) {
         this.config = config;
+        this.nonce = config?.nonce || window.rtrDashboardConfig?.nonce || '';
+        this.siteUrl = config?.siteUrl || window.rtrDashboardConfig?.siteUrl || '';
         this.modal = null;
         this.currentTracking = null;
-        
+        this._isListening = false;
         this.init();
     }
-    
+
     /**
-     * Initialize modal
+     * Initialize modal and listeners
      */
     init() {
-        this.createModal();
-        this.attachEventListeners();
+        if (this._isListening) return;
+        this._createModal();
+        this._attachEventListeners();
+        this._isListening = true;
     }
-    
+
     /**
-     * Create modal HTML structure
+     * Build modal HTML once
      */
-    createModal() {
-        const modalHTML = `
-            <div class="email-history-modal" id="email-history-modal">
-                <div class="email-modal-overlay"></div>
+    _createModal() {
+        if (document.getElementById('email-history-modal')) {
+            this.modal = document.getElementById('email-history-modal');
+            return;
+        }
+
+        const html = `
+            <div class="email-history-modal" id="email-history-modal" role="dialog" aria-modal="true">
+                <div class="email-modal-overlay" data-rtr="overlay"></div>
                 <div class="email-modal-content">
-                    <!-- Header -->
                     <div class="email-modal-header">
                         <h3>
-                            <i class="fas fa-envelope-open-text"></i>
+                            <i class="fas fa-envelope-open-text" aria-hidden="true"></i>
                             Email <span class="email-number-badge"></span> - <span class="prospect-name"></span>
                         </h3>
                         <button class="modal-close" aria-label="Close modal">&times;</button>
                     </div>
-                    
-                    <!-- Body -->
+
                     <div class="email-modal-body">
-                        <!-- Loading State -->
-                        <div class="modal-body-section loading-state">
-                            <div class="loading-spinner">
-                                <i class="fas fa-spinner"></i>
-                            </div>
+                        <div class="modal-body-section loading-state" aria-live="polite">
+                            <div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i></div>
                             <p class="loading-text">Loading email details...</p>
                         </div>
-                        
-                        <!-- History Display -->
+
                         <div class="modal-body-section history-display">
-                            <!-- Subject (Read-Only) -->
                             <div class="email-subject-section">
                                 <label class="email-label">Subject:</label>
                                 <div class="email-subject-readonly"></div>
                             </div>
-                            
-                            <!-- Body (Read-Only) -->
+
                             <div class="email-body-section">
                                 <label class="email-label">Email Body:</label>
                                 <div class="email-body-readonly"></div>
                             </div>
-                            
-                            <!-- Email Details -->
+
                             <div class="email-details-section">
                                 <h4>Email Details</h4>
                                 <div class="details-grid">
-                                    <div class="detail-item">
-                                        <i class="fas fa-calendar-alt"></i>
-                                        <span class="detail-label">Sent:</span>
-                                        <span class="detail-value sent-date"></span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <i class="fas fa-check-circle"></i>
-                                        <span class="detail-label">Status:</span>
-                                        <span class="detail-value email-status"></span>
-                                    </div>
-                                    <div class="detail-item">
-                                        <i class="fas fa-layer-group"></i>
-                                        <span class="detail-label">Template:</span>
-                                        <span class="detail-value template-name"></span>
-                                    </div>
-                                    <div class="detail-item url-item">
-                                        <i class="fas fa-link"></i>
-                                        <span class="detail-label">Content Link:</span>
-                                        <span class="detail-value url-included"></span>
-                                    </div>
-                                    <div class="detail-item tokens-item">
-                                        <i class="fas fa-robot"></i>
-                                        <span class="detail-label">AI Tokens:</span>
-                                        <span class="detail-value tokens-used"></span>
-                                    </div>
-                                    <div class="detail-item cost-item">
-                                        <i class="fas fa-coins"></i>
-                                        <span class="detail-label">Cost:</span>
-                                        <span class="detail-value email-cost"></span>
-                                    </div>
+                                    <div class="detail-item"><i class="fas fa-calendar-alt"></i><span>Sent:</span><span class="sent-date"></span></div>
+                                    <div class="detail-item"><i class="fas fa-check-circle"></i><span>Status:</span><span class="email-status"></span></div>
+                                    <div class="detail-item"><i class="fas fa-layer-group"></i><span>Template:</span><span class="template-name"></span></div>
+                                    <div class="detail-item url-item"><i class="fas fa-link"></i><span>Content Link:</span><span class="url-included"></span></div>
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- Error State -->
-                        <div class="modal-body-section error-state">
-                            <div class="error-icon">
-                                <i class="fas fa-exclamation-triangle"></i>
-                            </div>
+
+                        <div class="modal-body-section error-state" role="alert">
+                            <div class="error-icon"><i class="fas fa-exclamation-triangle"></i></div>
                             <h4>Failed to Load Email</h4>
                             <p class="error-message"></p>
                         </div>
                     </div>
-                    
-                    <!-- Footer -->
+
                     <div class="email-modal-footer">
-                        <button class="btn btn-secondary close-btn">
-                            <i class="fas fa-times"></i> Close
-                        </button>
+                        <button class="btn btn-secondary close-btn"><i class="fas fa-times"></i> Close</button>
                     </div>
                 </div>
-            </div>
-        `;
-        
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
+            </div>`;
+        document.body.insertAdjacentHTML('beforeend', html);
         this.modal = document.getElementById('email-history-modal');
     }
-    
+
     /**
-     * Attach event listeners
+     * Attach event listeners safely
      */
-    attachEventListeners() {
-        // Close buttons
-        const closeBtn = this.modal.querySelector('.modal-close');
-        const footerCloseBtn = this.modal.querySelector('.close-btn');
-        
-        closeBtn.addEventListener('click', () => this.hideModal());
-        footerCloseBtn.addEventListener('click', () => this.hideModal());
-        
-        // Overlay click
-        const overlay = this.modal.querySelector('.email-modal-overlay');
+    _attachEventListeners() {
+        const overlay = this.modal.querySelector('[data-rtr="overlay"]');
+        const closeBtns = this.modal.querySelectorAll('.modal-close, .close-btn');
+
+        [...closeBtns].forEach(btn => btn.addEventListener('click', () => this.hideModal()));
         overlay.addEventListener('click', () => this.hideModal());
-        
-        // Escape key
+
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && this.modal.classList.contains('active')) {
                 this.hideModal();
             }
         });
-        
-        // Listen for history requests
-        document.addEventListener('rtr:show-email-history', (e) => {
+
+        document.addEventListener('rtr:openEmailHistory', (e) => {
             this.showEmailHistory(e.detail);
         });
     }
-    
+
     /**
-     * Show email history
-     * 
-     * @param {Object} data - { prospectId, emailNumber, prospectName }
+     * Show email history modal
      */
-    async showEmailHistory(data) {
-        const { prospectId, emailNumber, prospectName } = data;
-        
+    async showEmailHistory({ visitorId, emailNumber, prospectName, room }) {
+        if (!visitorId || !emailNumber) {
+            console.error('EmailHistoryManager: Missing visitorId or emailNumber');
+            return;
+        }
+
         this.currentTracking = null;
-        
-        // Update header
-        const prospectNameEl = this.modal.querySelector('.prospect-name');
-        const emailBadge = this.modal.querySelector('.email-number-badge');
-        
-        prospectNameEl.textContent = prospectName || `Prospect ${prospectId}`;
-        emailBadge.textContent = `#${emailNumber}`;
-        
-        // Show modal in loading state
-        this.showModal('loading');
-        
+        this._showSection('loading');
+        this.modal.classList.add('active');
+
+        // Use prospectName if provided, otherwise default
+        const displayName = prospectName || `Prospect ${visitorId}`;
+        this.modal.querySelector('.prospect-name').textContent = displayName;
+        this.modal.querySelector('.email-number-badge').textContent = `#${emailNumber}`;
+
         try {
-            // Fetch tracking data from API (v2 endpoint)
-            const emailApi = new APIClient(
-                `${this.config.siteUrl}/wp-json/directreach/v2`,
-                this.config.nonce
-            );
-            
-            const response = await emailApi.get(
-                `/emails/tracking/prospect/${prospectId}/email/${emailNumber}`
-            );
-            
-            if (response.success && response.data) {
-                this.currentTracking = response.data;
-                this.displayEmailHistory(response.data);
-                this.showModal('history');
-            } else {
-                throw new Error(response.message || 'Failed to load email history');
+            // Construct the v2 API endpoint
+            let baseUrl = this.siteUrl;
+            if (baseUrl.includes('/wp-json')) {
+                baseUrl = baseUrl.split('/wp-json')[0];
             }
+            const apiEndpoint = `${baseUrl}/wp-json/directreach/v2/emails/tracking/prospect/${visitorId}/email/${emailNumber}`;
+            
+            const response = await fetch(apiEndpoint, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-WP-Nonce': this.nonce
+                }
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Email history API error:', errorText);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.message || 'Failed to load email history');
+            }
+            
+            this.currentTracking = data.data;
+            this.displayEmailHistory(data.data);
+            this._showSection('history');
+            
         } catch (error) {
             console.error('Failed to load email history:', error);
-            this.showError(error.message);
+            this._showError(error.message || 'Failed to load email history.');
         }
     }
-    
+
     /**
-     * Display email history data
-     * 
-     * @param {Object} data - Tracking data from API
+     * Populate modal with data
      */
     displayEmailHistory(data) {
-        // Subject
         const subjectEl = this.modal.querySelector('.email-subject-readonly');
-        subjectEl.textContent = data.subject || 'No subject';
-        
-        // Body
         const bodyEl = this.modal.querySelector('.email-body-readonly');
-        bodyEl.innerHTML = data.body_html || '<p>No content</p>';
-        
-        // Sent date
-        const sentDateEl = this.modal.querySelector('.sent-date');
-        sentDateEl.textContent = this.formatDate(data.copied_at || data.sent_at);
-        
-        // Status
+        const sentEl = this.modal.querySelector('.sent-date');
         const statusEl = this.modal.querySelector('.email-status');
-        const status = this.getStatusDisplay(data.status, data.opened_at);
-        statusEl.innerHTML = status;
-        
-        // Template
         const templateEl = this.modal.querySelector('.template-name');
+        const urlEl = this.modal.querySelector('.url-included');
+
+        subjectEl.textContent = data.subject || 'No subject';
+        bodyEl.innerHTML = data.body_html || '<p>No content</p>';
+        sentEl.textContent = this._formatDate(data.copied_at || data.sent_at);
+        statusEl.innerHTML = this._statusBadge(data.status, data.opened_at);
+
         if (data.template_used) {
-            const badge = data.template_used.is_global 
-                ? '<span class="badge global-badge">Global</span>' 
+            const badge = data.template_used.is_global
+                ? '<span class="badge global-badge">Global</span>'
                 : '<span class="badge campaign-badge">Campaign</span>';
-            templateEl.innerHTML = `${this.escapeHtml(data.template_used.name)} ${badge}`;
+            templateEl.innerHTML = `${this._escapeHtml(data.template_used.name)} ${badge}`;
         } else {
             templateEl.textContent = 'No template';
         }
-        
-        // URL
+
+        // Optional fields
         const urlItem = this.modal.querySelector('.url-item');
-        const urlEl = this.modal.querySelector('.url-included');
         if (data.url_included) {
-            urlEl.innerHTML = `<a href="${this.escapeHtml(data.url_included)}" target="_blank" rel="noopener">${this.truncateUrl(data.url_included)}</a>`;
+            urlEl.innerHTML = `<a href="${this._escapeHtml(data.url_included)}" target="_blank" rel="noopener">${this._truncateUrl(data.url_included)}</a>`;
             urlItem.style.display = 'flex';
         } else {
             urlItem.style.display = 'none';
         }
-        
-        // Tokens (only for AI-generated emails)
-        const tokensItem = this.modal.querySelector('.tokens-item');
-        const tokensEl = this.modal.querySelector('.tokens-used');
-        if (data.generated_by_ai && data.usage) {
-            tokensEl.textContent = `${data.usage.total_tokens} tokens`;
-            tokensItem.style.display = 'flex';
-        } else {
-            tokensItem.style.display = 'none';
-        }
-        
-        // Cost (only for AI-generated emails)
-        const costItem = this.modal.querySelector('.cost-item');
-        const costEl = this.modal.querySelector('.email-cost');
-        if (data.generated_by_ai && data.usage) {
-            costEl.textContent = `$${data.usage.cost.toFixed(4)}`;
-            costItem.style.display = 'flex';
-        } else {
-            costItem.style.display = 'none';
-        }
+
     }
-    
+
     /**
-     * Get status display HTML
+     * Create status badge HTML
      */
-    getStatusDisplay(status, openedAt) {
-        if (openedAt) {
-            return '<span class="status-badge status-opened"><i class="fas fa-envelope-open"></i> Opened</span>';
-        }
-        
-        switch (status) {
-            case 'copied':
-            case 'sent':
-                return '<span class="status-badge status-sent"><i class="fas fa-paper-plane"></i> Sent</span>';
-            case 'opened':
-                return '<span class="status-badge status-opened"><i class="fas fa-envelope-open"></i> Opened</span>';
-            case 'clicked':
-                return '<span class="status-badge status-clicked"><i class="fas fa-mouse-pointer"></i> Clicked</span>';
-            default:
-                return '<span class="status-badge status-pending"><i class="fas fa-clock"></i> Pending</span>';
-        }
-    }
-    
-    /**
-     * Format date for display
-     */
-    formatDate(dateStr) {
-        if (!dateStr) return 'Unknown';
-        
-        const date = new Date(dateStr);
-        const options = {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
+    _statusBadge(status, openedAt) {
+        if (openedAt) return '<span class="status-badge status-opened"><i class="fas fa-envelope-open"></i> Opened</span>';
+
+        const map = {
+            copied: ['status-sent', 'fa-paper-plane', 'Sent'],
+            sent: ['status-sent', 'fa-paper-plane', 'Sent'],
+            opened: ['status-opened', 'fa-envelope-open', 'Opened'],
+            clicked: ['status-clicked', 'fa-mouse-pointer', 'Clicked']
         };
-        
-        return date.toLocaleDateString('en-US', options);
+        const [cls, icon, text] = map[status] || ['status-pending', 'fa-clock', 'Pending'];
+        return `<span class="status-badge ${cls}"><i class="fas ${icon}"></i> ${text}</span>`;
     }
-    
-    /**
-     * Truncate URL for display
-     */
-    truncateUrl(url) {
-        if (url.length <= 50) return url;
-        return url.substring(0, 47) + '...';
-    }
-    
-    /**
-     * Show modal in specific state
-     */
-    showModal(state) {
-        // Hide all sections
-        this.modal.querySelectorAll('.modal-body-section').forEach(section => {
-            section.classList.remove('active');
-        });
-        
-        // Show requested section
-        const stateMap = {
-            'loading': '.loading-state',
-            'history': '.history-display',
-            'error': '.error-state'
-        };
-        
-        const section = this.modal.querySelector(stateMap[state]);
-        if (section) {
-            section.classList.add('active');
-        }
-        
-        // Show modal
-        this.modal.classList.add('active');
-    }
-    
+
     /**
      * Hide modal
      */
     hideModal() {
+        if (!this.modal) return;
         this.modal.classList.remove('active');
         this.currentTracking = null;
+        this._showSection(null);
     }
-    
-    /**
-     * Show error state
-     */
-    showError(message) {
-        const errorMsg = this.modal.querySelector('.error-message');
-        errorMsg.textContent = message || 'An unexpected error occurred.';
-        
-        this.showModal('error');
-    }
-    
-    /**
-     * Escape HTML
-     */
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text || '';
-        return div.innerHTML;
-    }
-}
 
-// Make APIClient available (imported from main.js context)
-class APIClient {
-    constructor(baseUrl, nonce) {
-        this.baseUrl = baseUrl;
-        this.nonce = nonce;
-    }
-    
-    async request(endpoint, options = {}) {
-        const url = `${this.baseUrl}${endpoint}`;
-        const headers = {
-            'Content-Type': 'application/json',
-            'X-WP-Nonce': this.nonce
-        };
-        
-        const config = {
-            ...options,
-            headers: {
-                ...headers,
-                ...options.headers
-            }
-        };
-        
-        try {
-            const response = await fetch(url, config);
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.message || 'Request failed');
-            }
-            
-            return data;
-        } catch (error) {
-            console.error('API Error:', error);
-            throw error;
+    /**
+     * Show one section (loading, history, error)
+     */
+    _showSection(section) {
+        this.modal.querySelectorAll('.modal-body-section').forEach(s => s.classList.remove('active'));
+        if (section) {
+            const target = this.modal.querySelector(`.${section}-state`) ||
+                           this.modal.querySelector(`.${section}-display`);
+            if (target) target.classList.add('active');
         }
     }
-    
-    get(endpoint, params = {}) {
-        const query = new URLSearchParams(params).toString();
-        const url = query ? `${endpoint}?${query}` : endpoint;
-        return this.request(url, { method: 'GET' });
+
+    /**
+     * Show error UI
+     */
+    _showError(message) {
+        const msg = this.modal.querySelector('.error-message');
+        msg.textContent = message || 'An unexpected error occurred.';
+        this._showSection('error');
+    }
+
+    /**
+     * Date formatting helper
+     */
+    _formatDate(str) {
+        if (!str) return 'Unknown';
+        try {
+            const date = new Date(str);
+            return date.toLocaleString('en-US', {
+                year: 'numeric', month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+        } catch {
+            return 'Invalid date';
+        }
+    }
+
+    /**
+     * URL truncation helper
+     */
+    _truncateUrl(url) {
+        return url.length <= 50 ? url : `${url.slice(0, 47)}...`;
+    }
+
+    /**
+     * Escape HTML safely
+     */
+    _escapeHtml(text) {
+        const d = document.createElement('div');
+        d.textContent = text || '';
+        return d.innerHTML;
     }
 }

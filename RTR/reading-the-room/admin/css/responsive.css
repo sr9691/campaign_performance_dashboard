@@ -10,41 +10,18 @@
         gap: 20px;
     }
     
-    .prospect-metrics {
-        align-items: center;
-        text-align: center;
-    }
-    
-    .email-progress {
-        justify-content: center;
-    }
-    
     .room-content {
         flex-direction: row;
-    }
-    
-    .summary-stats {
-        grid-template-columns: repeat(2, 1fr);
     }
 }
 
 @media (max-width: 1024px) and (min-width: 769px) {
-    .prospect-row {
-        align-items: center;
-    }
-    
-    .prospect-metrics {
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 6px;
-    }
-    
     .email-icons {
-        gap: 3px;
+        gap: 5px;
     }
     
     .email-icons i {
-        font-size: 0.85rem;
+        font-size: 1.1rem;
     }
     
     .content-area {
@@ -155,45 +132,31 @@
     }
     
     .prospect-row {
-        flex-wrap: wrap;
-        gap: 10px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 15px;
     }
     
-    .prospect-name {
-        flex-basis: 100%;
-        margin-bottom: 5px;
+    .prospect-info {
+        width: 100%;
     }
     
     .prospect-metrics {
-        flex-basis: 100%;
+        width: 100%;
         flex-direction: row;
         justify-content: space-between;
         align-items: center;
-    }
-    
-    .lead-score {
-        text-align: left;
-    }
-    
-    .email-progress {
-        justify-content: flex-end;
+        margin-right: 0;
     }
     
     .email-icons {
-        gap: 6px;
+        gap: 5px;
     }
     
     .prospect-actions {
-        flex-wrap: wrap;
-        gap: 5px;
-        justify-content: center;
-        margin-top: 8px;
-    }
-    
-    .handoff-btn, .archive-btn {
-        min-width: 36px;
-        padding: 6px 8px;
-        font-size: 0.8rem;
+        width: 100%;
+        justify-content: flex-end;
     }
 
     .room-content {
@@ -215,7 +178,7 @@
     
     .campaign-tag {
         font-size: 0.7rem;
-        padding: 1px 6px;
+        padding: 3px 10px;
     }
     
     .chart-btn {
@@ -224,10 +187,10 @@
         margin-top: 10px;
     }
     
-    /* Modal responsive adjustments */
     .modal-content {
         width: 95%;
         max-height: 90vh;
+        padding: 20px;
     }
     
     .chart-modal-content {
@@ -241,15 +204,6 @@
     
     .chart-container {
         height: 300px;
-    }
-    
-    .summary-stats {
-        grid-template-columns: 1fr;
-        gap: 10px;
-    }
-    
-    .prospect-detail-view > div:first-child {
-        grid-template-columns: 1fr !important;
     }
 }
 
@@ -287,74 +241,24 @@
         padding: 15px;
     }
     
+    .prospect-row {
+        padding: 12px;
+    }
+    
+    .email-icons {
+        gap: 4px;
+    }
+    
+    .email-icons i {
+        font-size: 1.1rem;
+    }
+    
     .modal-content {
         padding: 15px;
         border-radius: 8px;
     }
     
-    .modal-header {
-        padding: 15px;
-    }
-    
-    .modal-body {
-        padding: 15px;
-    }
-    
     .chart-container {
         height: 250px;
-    }
-}
-
-/* Print styles */
-@media print {
-    .content-header,
-    .header-controls,
-    .chart-btn,
-    .prospect-actions,
-    .modal {
-        display: none !important;
-    }
-    
-    .room-cards-container,
-    .room-details-section {
-        grid-template-columns: 1fr;
-    }
-    
-    .room-overview-card,
-    .room-detail-container {
-        break-inside: avoid;
-        page-break-inside: avoid;
-    }
-}
-
-/* High contrast mode */
-@media (prefers-contrast: high) {
-    .room-overview-card,
-    .room-detail-container,
-    .modal-content {
-        border: 2px solid #000;
-    }
-    
-    .prospect-row:hover {
-        background: #e0e0e0;
-    }
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-    }
-    
-    .handoff-btn.handoff-ready {
-        animation: none;
-    }
-    
-    .email-due-today {
-        animation: none;
     }
 }

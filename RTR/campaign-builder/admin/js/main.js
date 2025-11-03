@@ -244,22 +244,35 @@ class CampaignBuilder {
      * Setup global event listeners
      */
     setupGlobalListeners() {
-        // Settings dropdown toggle
-        const settingsToggle = document.querySelector('.settings-toggle');
+        // Settings dropdown toggle - ONLY if not already initialized by inline script
         const settingsDropdown = document.querySelector('.settings-dropdown');
+        const settingsToggle = document.querySelector('.settings-toggle');
         
-        if (settingsToggle && settingsDropdown) {
-            settingsToggle.addEventListener('click', (e) => {
-                e.stopPropagation();
-                settingsDropdown.classList.toggle('active');
-            });
-            
-            // Close dropdown when clicking outside
-            document.addEventListener('click', (e) => {
-                if (!settingsDropdown.contains(e.target)) {
-                    settingsDropdown.classList.remove('active');
-                }
-            });
+        // Check if inline script already initialized it (prevents duplicate listeners)
+        if (settingsDropdown && !settingsDropdown.hasAttribute('data-initialized')) {
+            if (settingsToggle) {
+                console.log('Campaign Builder: Settings dropdown initialized by main.js');
+                
+                settingsToggle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const wasActive = settingsDropdown.classList.contains('active');
+                    settingsDropdown.classList.toggle('active');
+                    console.log('Campaign Builder: Dropdown toggled from', wasActive, 'to', settingsDropdown.classList.contains('active'));
+                });
+                
+                // Close dropdown when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!settingsDropdown.contains(e.target) && settingsDropdown.classList.contains('active')) {
+                        settingsDropdown.classList.remove('active');
+                        console.log('Campaign Builder: Dropdown closed (clicked outside)');
+                    }
+                });
+                
+                // Mark as initialized to prevent duplicate listeners
+                settingsDropdown.setAttribute('data-initialized', 'true');
+            }
+        } else if (settingsDropdown && settingsDropdown.hasAttribute('data-initialized')) {
+            console.log('Campaign Builder: Settings dropdown already initialized by inline script, skipping');
         }
         
         // Logout button

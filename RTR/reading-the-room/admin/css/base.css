@@ -1,24 +1,35 @@
-* {
+/* --------------------------------------------------
+   Base Styles - Reading the Room Dashboard
+   -------------------------------------------------- */
+
+/* Reset & Box Model */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
 }
 
-body {
+/* Document Base */
+html, body {
+    height: 100%;
     font-family: var(--font-family);
-    background-color: var(--bg-color);
+    font-size: var(--font-size-base);
     color: var(--text-color-dark);
-    overflow: hidden;
-    height: 100vh;
+    background-color: var(--bg-color);
+    line-height: 1.6;
 }
 
+/* Root Layout Container */
 .reading-room-container {
     display: flex;
-    height: 100vh;
-    width: 100vw;
     flex-direction: column;
+    min-height: 100vh;
+    width: 100%;
 }
 
+/* Main Content Area */
 .main-content {
     flex: 1;
     display: flex;
@@ -26,91 +37,268 @@ body {
     overflow: hidden;
 }
 
+/* Scrollable Area */
 .content-area {
     flex: 1;
-    padding: 30px;
     overflow-y: auto;
+    padding: var(--space-md) 0 0 0;
+    background: var(--bg-color);
 }
 
+/* Section Headers */
 .pipeline-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 30px;
-    padding-top: 10px;
+    margin-bottom: var(--space-lg);
 }
 
 .pipeline-header h2 {
-    font-size: 1.8rem;
-    font-weight: 700;
+    font-size: 1.75rem;
+    font-weight: var(--font-weight-bold);
     color: var(--text-color-dark);
+}
+
+.pipeline-overview {
+    display: block !important;
+    visibility: visible !important;
+    padding: 0 var(--space-md);
+}
+
+.rtr-room-cards-container {
+    display: grid !important;
+    visibility: visible !important;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    opacity: 1 !important;
+    min-height: 200px;    
+    padding: 0 var(--space-md);
+}
+
+/* Loading skeleton for empty state */
+.rtr-room-cards-container:empty::before {
+    content: '';
+    display: block;
+    width: 100%;
+    height: 150px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+    border-radius: 8px;
+    grid-column: 1 / -1;
+}
+
+@keyframes loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* --------------------------------------------------
+   Room Sections - Horizontal Layout
+   -------------------------------------------------- */
+
+.room-details-section {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 1rem !important;
+    width: 100%;
+    margin-top: 2rem;
+    align-items: start;
+    visibility: visible !important;
+    opacity: 1 !important;    
+}
+
+.room-detail-container {
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 400px;
+    max-height: 800px;
+}
+
+.room-detail-container.problem-detail {
+    border-top: 4px solid #e74c3c;
+}
+
+.room-detail-container.solution-detail {
+    border-top: 4px solid #f39c12;
+}
+
+.room-detail-container.offer-detail {
+    border-top: 4px solid #27ae60;
+}
+
+.room-detail-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    background: #f8f9fa;
+}
+
+.room-detail-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #2c3e50;
+}
+
+.room-detail-header h3 i {
+    font-size: 1.125rem;
+}
+
+.prospect-badge,
+.room-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #3498db;
+    color: white;
+    border-radius: 12px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    min-width: 32px;
+}
+
+.campaign-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.campaign-filter label {
+    font-size: 0.875rem;
+    color: #7f8c8d;
     margin: 0;
 }
 
-.header-right {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-}
-
-.client-selector {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.client-selector label {
-    font-weight: 600;
-    color: var(--text-color-dark);
-}
-
-.client-dropdown {
-    padding: 8px 15px;
-    border: 1px solid var(--line-color);
-    border-radius: 6px;
-    font-family: var(--font-family);
-    font-size: 0.9rem;
+.campaign-filter select {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.875rem;
     background: white;
-    min-width: 200px;
+    cursor: pointer;
 }
 
-/* Loading animation */
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+/* RTR Prospect List Container */
+.rtr-prospect-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 1rem;
+    max-height: calc(800px - 100px);
 }
 
-/* Utility Classes */
-.notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 15px 20px;
-    border-radius: 5px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    z-index: 1001;
-    font-weight: 500;
-    opacity: 0;
-    transform: translateX(100%);
-    transition: all 0.3s ease;
+.rtr-prospect-list::-webkit-scrollbar {
+    width: 8px;
 }
 
-.notification-success {
-    background: #27ae60;
-    color: white;
+.rtr-prospect-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
 }
 
-.notification-error {
-    background: #e74c3c;
-    color: white;
+.rtr-prospect-list::-webkit-scrollbar-thumb {
+    background: #bdc3c7;
+    border-radius: 4px;
 }
 
-.notification-info {
-    background: #4294cc;
-    color: white;
+.rtr-prospect-list::-webkit-scrollbar-thumb:hover {
+    background: #95a5a6;
 }
 
-/* Scrollbar styling */
+/* Responsive Breakpoints */
+@media (max-width: 1399px) {
+    .room-details-section {
+        gap: 1.25rem !important;
+    }
+    
+    .room-detail-header h3 {
+        font-size: 1.125rem;
+    }
+}
+
+@media (max-width: 1023px) {
+    .room-details-section {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    
+    .room-detail-container.offer-detail {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 767px) {
+    .room-details-section {
+        grid-template-columns: 1fr !important;
+    }
+    
+    .room-detail-container {
+        min-height: 300px;
+        max-height: 600px;
+    }
+    
+    .room-detail-header {
+        padding: 1rem;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .campaign-filter {
+        width: 100%;
+    }
+}
+
+@media (max-width: 479px) {
+    .room-details-section {
+        gap: 1rem !important;
+    }
+    
+    .room-detail-header {
+        padding: 0.75rem;
+    }
+    
+    .room-detail-header h3 {
+        font-size: 1rem;
+    }
+    
+    .rtr-prospect-list {
+        padding: 0.75rem;
+    }
+}
+
+/* --------------------------------------------------
+   Utility
+   -------------------------------------------------- */
+
+.text-muted {
+    color: var(--text-color-muted);
+}
+
+.hidden {
+    display: none !important;
+}
+
+.centered {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* --------------------------------------------------
+   Scrollbar Styling (Webkit only)
+   -------------------------------------------------- */
 .content-area::-webkit-scrollbar {
     width: 8px;
 }
@@ -121,9 +309,27 @@ body {
 
 .content-area::-webkit-scrollbar-thumb {
     background: var(--gray-300);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
 }
 
 .content-area::-webkit-scrollbar-thumb:hover {
     background: var(--gray-400);
+}
+
+/* --------------------------------------------------
+   Loading State (placeholder text)
+   -------------------------------------------------- */
+.placeholder {
+    padding: var(--space-xl);
+    text-align: center;
+    color: var(--text-color-muted);
+    font-style: italic;
+}
+
+/* --------------------------------------------------
+   Animations
+   -------------------------------------------------- */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }

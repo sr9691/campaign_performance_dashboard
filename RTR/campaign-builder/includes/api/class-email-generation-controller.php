@@ -96,6 +96,11 @@ class Email_Generation_Controller extends WP_REST_Controller {
                         return is_numeric( $param ) && $param > 0;
                     },
                 ),
+                'force_regenerate' => array(         // ← ADD THIS
+                    'required' => false,
+                    'type' => 'boolean',
+                    'default' => false,
+                ),
             ),
         ));
 
@@ -117,6 +122,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
                     'required' => false,
                     'type' => 'string',
                     'format' => 'uri',
+                    'default' => '',
                 ),
             ),
         ));
@@ -186,6 +192,22 @@ class Email_Generation_Controller extends WP_REST_Controller {
             ),
         ));
 
+        // Get email states for prospect
+        register_rest_route( $this->namespace, '/' . $this->rest_base . '/states/(?P<prospect_id>[\d]+)', array(
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => array( $this, 'get_email_states' ),
+            'permission_callback' => array( $this, 'get_tracking_permissions_check' ),
+            'args' => array(
+                'prospect_id' => array(
+                    'required' => true,
+                    'type' => 'integer',
+                    'validate_callback' => function( $param ) {
+                        return is_numeric( $param ) && $param > 0;
+                    },
+                ),
+            ),
+        ));        
+
     }
 
     /**
@@ -195,183 +217,423 @@ class Email_Generation_Controller extends WP_REST_Controller {
      * @return WP_REST_Response|WP_Error
      */
     public function generate_email( $request ) {
-        $start_time = microtime( true );
-
-        $prospect_id = (int) $request->get_param( 'prospect_id' );
+        // Extract and validate parameters
+        $prospect_id = absint( $request->get_param( 'prospect_id' ) );
         $room_type = sanitize_text_field( $request->get_param( 'room_type' ) );
-        $email_number = (int) $request->get_param( 'email_number' );
-
-        // Validate prospect exists and get campaign_id
-        $prospect = $this->get_prospect( $prospect_id );
-        if ( is_wp_error( $prospect ) ) {
-            return $prospect;
-        }
-
-        $campaign_id = (int) $prospect['campaign_id'];
-
-        // Log generation attempt
-        error_log( sprintf(
-            '[DirectReach] Email generation requested: prospect=%d, campaign=%d, room=%s, email_num=%d',
-            $prospect_id,
-            $campaign_id,
-            $room_type,
-            $email_number
-        ));
-
-        // Generate email via AI
-        $result = $this->generator->generate_email(
-            $prospect_id,
-            $campaign_id,
-            $room_type,
-            $email_number
-        );
-
-        if ( is_wp_error( $result ) ) {
-            error_log( '[DirectReach] Email generation failed: ' . $result->get_error_message() );
-            
+        $email_number = absint( $request->get_param( 'email_number' ) );
+        
+        // Validate parameters
+        if ( ! $prospect_id ) {
             return new WP_Error(
-                $result->get_error_code(),
-                $result->get_error_message(),
-                array( 'status' => 500 )
+                'invalid_prospect_id',
+                __( 'Invalid prospect ID provided.', 'directreach' ),
+                array( 'status' => 400 )
             );
         }
-
-        // Generate tracking token
-        $tracking_token = $this->generate_tracking_token();
-
-        // Create email tracking record
-        $tracking_id = $this->tracking->create_tracking_record( array(
-            'prospect_id' => $prospect_id,
-            'email_number' => $email_number,
-            'room_type' => $room_type,
-            'subject' => $result['subject'],
-            'body_html' => $result['body_html'],
-            'body_text' => $result['body_text'],
-            'generated_by_ai' => ! isset( $result['fallback'] ) || ! $result['fallback'],
-            'template_used' => $result['template_used']['id'] ?? null,
-            'ai_prompt_tokens' => $result['tokens_used']['prompt'] ?? 0,
-            'ai_completion_tokens' => $result['tokens_used']['completion'] ?? 0,
-            'url_included' => $result['selected_url']['url'] ?? null,
-            'tracking_token' => $tracking_token,
-            'status' => 'pending',
-        ));
-
-        if ( is_wp_error( $tracking_id ) ) {
-            error_log( '[DirectReach] Failed to create tracking record: ' . $tracking_id->get_error_message() );
-        }
-
-        // Record usage stats if AI was used
-        if ( ! isset( $result['fallback'] ) || ! $result['fallback'] ) {
-            $this->rate_limiter->record_generation(
-                $result['tokens_used']['total'] ?? 0,
-                $result['tokens_used']['cost'] ?? 0
+        
+        if ( ! in_array( $room_type, array( 'problem', 'solution', 'offer' ), true ) ) {
+            return new WP_Error(
+                'invalid_room_type',
+                __( 'Invalid room type. Must be: problem, solution, or offer.', 'directreach' ),
+                array( 'status' => 400 )
             );
         }
+        
+        if ( $email_number < 1 || $email_number > 5 ) {
+            return new WP_Error(
+                'invalid_email_number',
+                __( 'Invalid email number. Must be between 1 and 5.', 'directreach' ),
+                array( 'status' => 400 )
+            );
+        }
+        
+        global $wpdb;
+        $prospects_table = $wpdb->prefix . 'rtr_prospects';
+        
+        // Get prospect with campaign info
+        $prospect = $wpdb->get_row( $wpdb->prepare(
+            "SELECT p.*, c.client_id, c.id as campaign_id
+            FROM {$prospects_table} p
+            INNER JOIN {$wpdb->prefix}dr_campaign_settings c ON p.campaign_id = c.id
+            WHERE p.id = %d AND p.archived_at IS NULL",
+            $prospect_id
+        ) );
+        
+        if ( ! $prospect ) {
+            return new WP_Error(
+                'prospect_not_found',
+                __( 'Prospect not found or has been archived.', 'directreach' ),
+                array( 'status' => 404 )
+            );
+        }
+        
+        // Parse email states JSON
+        $email_states = json_decode( $prospect->email_states, true );
+        if ( ! is_array( $email_states ) ) {
+            $email_states = array();
+        }
+        
+        $state_key = "{$room_type}_{$email_number}";
+        
+        // Store original state for rollback on error
+        $original_state = $email_states[ $state_key ] ?? 'pending';
+        
+        // Get force_regenerate parameter
+        $force_regenerate = (bool) $request->get_param( 'force_regenerate' );
 
-        $total_time = ( microtime( true ) - $start_time ) * 1000;
+        // Check if email is already in "ready" state (skip if force_regenerate is true)
+        if ( !$force_regenerate && isset( $email_states[ $state_key ] ) && $email_states[ $state_key ] === 'ready' ) {
+            // Try to get existing email from tracking
+            $existing_email = $this->get_existing_email( $prospect_id, $room_type, $email_number );
+            
+            if ( $existing_email ) {
+                // Return cached email
+                return rest_ensure_response( array(
+                    'success' => true,
+                    'cached' => true,
+                    'data' => $existing_email
+                ) );
+            }
+            
+            // Tracking record missing - force regenerate
+            $original_state = 'pending';
+            $email_states[ $state_key ] = 'pending';
+            $wpdb->update(
+                $prospects_table,
+                array( 'email_states' => wp_json_encode( $email_states ) ),
+                array( 'id' => $prospect_id ),
+                array( '%s' ),
+                array( '%d' )
+            );
+        }
+        
+        // Set state to "pending"
+        $email_states[ $state_key ] = 'pending';
+        $wpdb->update(
+            $prospects_table,
+            array( 'email_states' => wp_json_encode( $email_states ) ),
+            array( 'id' => $prospect_id ),
+            array( '%s' ),
+            array( '%d' )
+        );
+        
+        try {
+            // Call AI generator
+            $result = $this->generator->generate_email(
+                $prospect_id,
+                $prospect->campaign_id,
+                $room_type,
+                $email_number
+            );
+            
+            // Check if generation failed
+            if ( is_wp_error( $result ) ) {
+                $error_message = $result->get_error_message();
+                
+                // Provide friendly message for common issues
+                if ( strpos( $error_message, 'No templates available' ) !== false ) {
+                    throw new \Exception( '⚠️ No valid email templates found. Please check that templates are properly configured in Campaign Builder with all required components: persona, style_rules, output_spec, personalization_guidelines, constraints, examples, and context_instructions.' );
+                }
+                
+                throw new \Exception( $error_message );
+            }
 
-        // Build response
-        $response = array(
-            'success' => true,
-            'data' => array(
-                'email_tracking_id' => $tracking_id,
+            if ( ! $result['success'] ) {
+                throw new \Exception( $result['message'] ?? 'Email generation failed. Please try again or contact support.' );
+            }
+            
+            // Generate tracking token
+            $tracking_token = $this->generate_tracking_token();
+            
+            // Prepare tracking data with all required fields
+            $tracking_data = array(
+                'prospect_id' => $prospect_id,
+                'visitor_id' => $prospect->visitor_id,
+                'room_type' => $room_type,
+                'email_number' => $email_number,
                 'subject' => $result['subject'],
                 'body_html' => $result['body_html'],
-                'body_text' => $result['body_text'],
-                'selected_url' => $result['selected_url'],
-                'template_used' => $result['template_used'],
+                'body_text' => $result['body_text'] ?? strip_tags( $result['body_html'] ),
                 'tracking_token' => $tracking_token,
-                'tokens_used' => $result['tokens_used'],
-            ),
-            'meta' => array(
-                'generation_time_ms' => round( $total_time, 2 ),
-                'api_calls' => 1,
-                'fallback_used' => isset( $result['fallback'] ) && $result['fallback'],
-            ),
+                'status' => 'generated',
+                'generated_by_ai' => 1,
+                'url_included' => isset( $result['selected_url'] ) ? 
+                    ( is_array( $result['selected_url'] ) ? $result['selected_url']['url'] : $result['selected_url'] ) : 
+                    null,
+                'template_used' => isset( $result['template_used'] ) ? 
+                    ( is_array( $result['template_used'] ) ? $result['template_used']['id'] : $result['template_used'] ) : 
+                    null,
+                'ai_prompt_tokens' => isset( $result['tokens_used']['prompt_tokens'] ) ? 
+                    $result['tokens_used']['prompt_tokens'] : 0,
+                'ai_completion_tokens' => isset( $result['tokens_used']['completion_tokens'] ) ? 
+                    $result['tokens_used']['completion_tokens'] : 0,
+            );
+            
+            // Create tracking record with enhanced error handling
+            try {
+                $tracking_id = $this->tracking->create_tracking_record( $tracking_data );
+                
+                if ( ! $tracking_id ) {
+                    // Log detailed error for debugging
+                    error_log( sprintf(
+                        '[DirectReach] Failed to create tracking record for prospect %d, email %d. Last DB error: %s',
+                        $prospect_id,
+                        $email_number,
+                        $wpdb->last_error ? $wpdb->last_error : 'No DB error reported'
+                    ) );
+                    
+                    throw new \Exception( 'Unable to save email tracking data. Please try again.' );
+                }
+            } catch ( \Exception $tracking_exception ) {
+                error_log( sprintf(
+                    '[DirectReach] Exception creating tracking record: %s',
+                    $tracking_exception->getMessage()
+                ) );
+                throw new \Exception( 'Failed to save email: ' . $tracking_exception->getMessage() );
+            }
+            
+            // Set state to "ready"
+            $email_states[ $state_key ] = 'ready';
+            $wpdb->update(
+                $prospects_table,
+                array( 'email_states' => wp_json_encode( $email_states ) ),
+                array( 'id' => $prospect_id ),
+                array( '%s' ),
+                array( '%d' )
+            );
+            
+            // Return success response
+            return rest_ensure_response( array(
+                'success' => true,
+                'cached' => false,
+                'data' => array(
+                    'id' => $tracking_id,                      
+                    'email_tracking_id' => $tracking_id,
+                    'tracking_token' => $tracking_token,
+                    'subject' => $result['subject'],
+                    'body_html' => $result['body_html'],       
+                    'body_text' => $result['body_text'] ?? strip_tags($result['body_html']),
+                    'email_number' => $email_number,           
+                    'room_type' => $room_type,                 
+                    'url_included' => $result['selected_url'],
+                    'template_used' => $result['template_used'] ?? null,
+                    'tokens_used' => $result['tokens_used'] ?? null,
+                    'generation_time_ms' => $result['generation_time_ms'] ?? null
+                )
+            ) );
+            
+        } catch ( \Exception $e ) {
+            // ROLLBACK: Reset state to original
+            $email_states[ $state_key ] = $original_state;
+            $wpdb->update(
+                $prospects_table,
+                array( 'email_states' => wp_json_encode( $email_states ) ),
+                array( 'id' => $prospect_id ),
+                array( '%s' ),
+                array( '%d' )
+            );
+            
+            // Determine error type for better user messaging
+            $error_code = 'generation_failed';
+            $error_message = $e->getMessage();
+            $status_code = 500;
+            
+            if ( strpos( $error_message, 'No templates available' ) !== false ||
+                 strpos( $error_message, 'Missing required component' ) !== false ||
+                 strpos( $error_message, 'No valid email templates found' ) !== false ) {
+                $error_code = 'template_error';
+                $error_message = 'Template configuration error. Please ensure all templates have the required components: persona, style_rules, output_spec, personalization_guidelines, constraints, examples, and context_instructions.';
+            } elseif ( strpos( $error_message, 'Failed to save email' ) !== false ||
+                       strpos( $error_message, 'Unable to save email tracking data' ) !== false ) {
+                $error_code = 'tracking_error';
+                $error_message = 'Unable to save email tracking data. Please try again or contact support.';
+            } elseif ( strpos( $error_message, 'rate limit' ) !== false ) {
+                $error_code = 'rate_limit';
+                $status_code = 429;
+            }
+            
+            // Log detailed error
+            error_log( sprintf(
+                '[DirectReach] Email generation failed for prospect %d, email %d. Error: %s',
+                $prospect_id,
+                $email_number,
+                $e->getMessage()
+            ) );
+            
+            return new WP_Error(
+                $error_code,
+                $error_message,
+                array( 
+                    'status' => $status_code,
+                    'details' => defined( 'WP_DEBUG' ) && WP_DEBUG ? $e->getMessage() : null
+                )
+            );
+        }
+    }
+
+    /**
+     * Get existing email from tracking if available
+     * 
+     * @param int    $prospect_id   Prospect ID
+     * @param string $room_type     Room type
+     * @param int    $email_number  Email sequence number
+     * @return array|null Email data or null if not found
+     */
+    private function get_existing_email( $prospect_id, $room_type, $email_number ) {
+        global $wpdb;
+        $tracking_table = $wpdb->prefix . 'rtr_email_tracking';
+        
+        $tracking = $wpdb->get_row( $wpdb->prepare(
+            "SELECT id, subject, body_html, body_text, url_included, tracking_token, 
+                    template_used, ai_prompt_tokens, ai_completion_tokens, created_at
+            FROM {$tracking_table} 
+            WHERE prospect_id = %d 
+            AND room_type = %s 
+            AND email_number = %d 
+            ORDER BY created_at DESC 
+            LIMIT 1",
+            $prospect_id,
+            $room_type,
+            $email_number
+        ) );
+        
+        if ( ! $tracking ) {
+            return null;
+        }
+        
+        return array(
+            'id' => (int) $tracking->id,                    
+            'email_tracking_id' => (int) $tracking->id,
+            'tracking_token' => $tracking->tracking_token,
+            'subject' => $tracking->subject,
+            'body_html' => $tracking->body_html,            
+            'body_text' => $tracking->body_text,            
+            'email_number' => $email_number,                
+            'room_type' => $room_type,                      
+            'url_included' => $tracking->url_included,
+            'template_used' => $tracking->template_used ? (int) $tracking->template_used : null,  
+            'tokens_used' => array(                         
+                'prompt_tokens' => (int) $tracking->ai_prompt_tokens,
+                'completion_tokens' => (int) $tracking->ai_completion_tokens
+            )
         );
-
-        error_log( sprintf(
-            '[DirectReach] Email generated successfully: tracking_id=%d, time=%dms, ai=%s',
-            $tracking_id,
-            round( $total_time ),
-            isset( $result['fallback'] ) && $result['fallback'] ? 'no' : 'yes'
-        ));
-
-        return rest_ensure_response( $response );
     }
 
     /**
      * Track copy endpoint
      *
      * Marks email as copied/sent and updates prospect's sent URLs.
+     * Uses transactions for data consistency.
      *
      * @param WP_REST_Request $request Request object
      * @return WP_REST_Response|WP_Error
      */
     public function track_copy( $request ) {
+        global $wpdb;
+        
         $email_tracking_id = (int) $request->get_param( 'email_tracking_id' );
         $prospect_id = (int) $request->get_param( 'prospect_id' );
         $url_included = $request->get_param( 'url_included' );
 
-        // Update email tracking record
-        $update_result = $this->tracking->update_tracking_status(
-            $email_tracking_id,
-            'copied',
-            array( 'copied_at' => current_time( 'mysql' ) )
-        );
-
-        if ( is_wp_error( $update_result ) ) {
-            return $update_result;
-        }
-
-        // Update prospect's sent URLs
-        if ( ! empty( $url_included ) ) {
-            $url_update = $this->update_prospect_sent_urls( $prospect_id, $url_included );
+        // Start transaction for atomic updates
+        $wpdb->query('START TRANSACTION');
+        
+        try {
+            // Get current prospect state (for potential rollback reference)
+            $current_position = (int) $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT email_sequence_position FROM {$wpdb->prefix}rtr_prospects WHERE id = %d",
+                    $prospect_id
+                )
+            );
             
-            if ( is_wp_error( $url_update ) ) {
-                error_log( '[DirectReach] Failed to update sent URLs: ' . $url_update->get_error_message() );
-                // Don't fail the request, just log
+            // Update email tracking record to 'copied' status
+            $update_result = $this->tracking->update_status(
+                $email_tracking_id,
+                'copied',
+                array( 'copied_at' => current_time( 'mysql' ) )
+            );
+
+            if ( is_wp_error( $update_result ) ) {
+                throw new Exception( $update_result->get_error_message() );
             }
+
+            // Update prospect's sent URLs
+            if ( ! empty( $url_included ) ) {
+                $url_update = $this->update_prospect_sent_urls( $prospect_id, $url_included );
+                
+                if ( is_wp_error( $url_update ) ) {
+                    throw new Exception( 'Failed to update sent URLs: ' . $url_update->get_error_message() );
+                }
+            }
+
+            // Update prospect's email data (timestamp + increment sequence position)
+            $email_data_update = $this->update_prospect_email_data( $prospect_id );
+            
+            if ( is_wp_error( $email_data_update ) ) {
+                throw new Exception( 'Failed to update prospect data: ' . $email_data_update->get_error_message() );
+            }
+            
+            // Commit transaction
+            $wpdb->query('COMMIT');
+            
+            $new_position = $current_position + 1;
+
+            error_log( sprintf(
+                '[DirectReach] Email copied: tracking_id=%d, prospect=%d, position=%d→%d, url=%s',
+                $email_tracking_id,
+                $prospect_id,
+                $current_position,
+                $new_position,
+                $url_included ?? 'none'
+            ));
+
+            return rest_ensure_response( array(
+                'success' => true,
+                'message' => 'Email marked as copied',
+                'data' => array(
+                    'email_tracking_id' => $email_tracking_id,
+                    'prospect_id' => $prospect_id,
+                    'status' => 'copied',
+                    'copied_at' => current_time( 'mysql' ),
+                    'email_sequence_position' => $new_position,
+                ),
+            ));
+            
+        } catch ( Exception $e ) {
+            // Rollback on any error
+            $wpdb->query('ROLLBACK');
+            
+            error_log( '[DirectReach] track_copy failed: ' . $e->getMessage() );
+            
+            return new WP_Error(
+                'copy_tracking_failed',
+                $e->getMessage(),
+                array( 'status' => 500 )
+            );
         }
-
-        // Update prospect's email data (timestamp + increment sequence position)
-        $this->update_prospect_email_data( $prospect_id );
-
-        error_log( sprintf(
-            '[DirectReach] Email copied: tracking_id=%d, prospect=%d, url=%s',
-            $email_tracking_id,
-            $prospect_id,
-            $url_included ?? 'none'
-        ));
-
-        return rest_ensure_response( array(
-            'success' => true,
-            'message' => 'Email marked as copied',
-            'data' => array(
-                'email_tracking_id' => $email_tracking_id,
-                'status' => 'copied',
-                'copied_at' => current_time( 'mysql' ),
-            ),
-        ));
-    }   
+    }  
 
     /**
      * Track open endpoint (tracking pixel)
      *
-     * Future implementation - returns 1x1 transparent GIF.
+     * Updates email status when tracking pixel is loaded.
+     * Returns 1x1 transparent GIF.
      *
      * @param WP_REST_Request $request Request object
-     * @return WP_REST_Response
+     * @return void (outputs GIF and exits)
      */
     public function track_open( $request ) {
         $token = sanitize_text_field( $request->get_param( 'token' ) );
 
-        // Update tracking record
+        // Update tracking record (delegates to tracking manager)
+        // The tracking manager handles checking if already opened
         $this->tracking->record_open( $token );
 
         // Return 1x1 transparent GIF
         header( 'Content-Type: image/gif' );
-        header( 'Cache-Control: no-cache, no-store, must-revalidate' );
+        header( 'Content-Length: 43' );
+        header( 'Cache-Control: no-cache, no-store, must-revalidate, max-age=0' );
         header( 'Pragma: no-cache' );
         header( 'Expires: 0' );
         
@@ -536,7 +798,17 @@ class Email_Generation_Controller extends WP_REST_Controller {
      * @return bool|WP_Error
      */
     public function generate_permissions_check( $request ) {
-        if ( ! current_user_can( 'edit_posts' ) ) {
+        // Check if user is logged in
+        if ( ! is_user_logged_in() ) {
+            return new WP_Error(
+                'rest_forbidden',
+                'You must be logged in to generate emails',
+                array( 'status' => 403 )
+            );
+        }
+
+        // Check basic capability - use a more permissive check for logged-in users
+        if ( ! current_user_can( 'read' ) ) {
             return new WP_Error(
                 'rest_forbidden',
                 'You do not have permission to generate emails',
@@ -554,14 +826,13 @@ class Email_Generation_Controller extends WP_REST_Controller {
      * @return bool|WP_Error
      */
     public function track_permissions_check( $request ) {
-        if ( ! current_user_can( 'edit_posts' ) ) {
+        if ( ! is_user_logged_in() ) {
             return new WP_Error(
                 'rest_forbidden',
-                'You do not have permission to track emails',
+                __( 'You must be logged in to track emails.', 'directreach' ),
                 array( 'status' => 403 )
             );
         }
-
         return true;
     }
 
@@ -705,6 +976,100 @@ class Email_Generation_Controller extends WP_REST_Controller {
         
         return $exists > 0;
     }
+
+    /**
+     * Get email tracking states for a prospect
+     * Returns tracking data for all email states (pending, copied, opened, etc.)
+     * 
+     * @param WP_REST_Request $request Request object
+     * @return WP_REST_Response|WP_Error
+     */
+    public function get_email_states( $request ) {
+        global $wpdb;
+        
+        $prospect_id = (int) $request->get_param( 'prospect_id' );
+        
+        if ( ! $prospect_id ) {
+            return new WP_Error(
+                'missing_prospect_id',
+                'prospect_id is required',
+                array( 'status' => 400 )
+            );
+        }
+        
+        // Get all email tracking records for prospect
+        $tracking_table = $wpdb->prefix . 'rtr_email_tracking';
+        $email_states = $wpdb->get_results( 
+            $wpdb->prepare(
+                "SELECT 
+                    id as email_tracking_id,
+                    email_number,
+                    room_type,
+                    subject,
+                    status,
+                    generated_by_ai,
+                    template_used,
+                    url_included,
+                    copied_at,
+                    sent_at,
+                    opened_at,
+                    clicked_at,
+                    ai_prompt_tokens,
+                    ai_completion_tokens,
+                    created_at
+                FROM {$tracking_table}
+                WHERE prospect_id = %d
+                ORDER BY email_number ASC, created_at DESC",
+                $prospect_id
+            ), 
+            ARRAY_A 
+        );
+        
+        // Get prospect summary
+        $prospect = $this->get_prospect( $prospect_id );
+        
+        if ( is_wp_error( $prospect ) ) {
+            return $prospect;
+        }
+        
+        // Parse urls_sent JSON
+        $urls_sent = array();
+        if ( ! empty( $prospect['urls_sent'] ) ) {
+            $urls_sent = json_decode( $prospect['urls_sent'], true );
+            if ( ! is_array( $urls_sent ) ) {
+                $urls_sent = array();
+            }
+        }
+        
+        // Build summary counts
+        $summary = array(
+            'total_emails' => count( $email_states ),
+            'pending' => 0,
+            'copied' => 0,
+            'sent' => 0,
+            'opened' => 0,
+            'clicked' => 0,
+        );
+        
+        foreach ( $email_states as $email ) {
+            $status = $email['status'] ?? 'pending';
+            if ( isset( $summary[ $status ] ) ) {
+                $summary[ $status ]++;
+            }
+        }
+        
+        return rest_ensure_response( array(
+            'success' => true,
+            'data' => array(
+                'prospect_id' => $prospect_id,
+                'email_sequence_position' => (int) $prospect['email_sequence_position'],
+                'last_email_sent' => $prospect['last_email_sent'],
+                'urls_sent' => $urls_sent,
+                'email_states' => $email_states,
+                'summary' => $summary,
+            ),
+        ));
+    }    
 
     /**
      * Check if user has admin permissions
@@ -934,7 +1299,17 @@ class Email_Generation_Controller extends WP_REST_Controller {
      * @return bool|WP_Error
      */
     public function get_tracking_permissions_check( $request ) {
-        if ( ! current_user_can( 'edit_posts' ) ) {
+        // Allow if user is logged in and has dashboard access
+        if ( ! is_user_logged_in() ) {
+            return new WP_Error(
+                'rest_forbidden',
+                'You must be logged in to view email tracking',
+                array( 'status' => 403 )
+            );
+        }
+        
+        // Check if user has access to RTR dashboard (same permission as viewing dashboard)
+        if ( ! current_user_can( 'read' ) ) {
             return new WP_Error(
                 'rest_forbidden',
                 'You do not have permission to view email tracking',
@@ -944,5 +1319,4 @@ class Email_Generation_Controller extends WP_REST_Controller {
         
         return true;
     }
-
 }

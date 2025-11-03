@@ -21,25 +21,26 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 15px;
+    flex-wrap: nowrap;
+    gap: 8px;
 }
 
 .room-detail-header h3 {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: 700;
     color: var(--text-color-dark);
     margin: 0;
+    white-space: nowrap;
 }
 
 .room-count-badge {
     background: var(--secondary-color);
     color: white;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 700;
-    padding: 4px 12px;
+    padding: 3px 10px;
     border-radius: 20px;
-    margin-left: 10px;
+    margin-left: 8px;
 }
 
 .campaign-filter {
@@ -48,13 +49,13 @@
 }
 
 .campaign-dropdown {
-    padding: 8px 12px;
+    padding: 6px 10px;
     border: 1px solid var(--line-color);
     border-radius: 6px;
     font-family: var(--font-family);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     background: white;
-    min-width: 180px;
+    min-width: 150px;
     color: var(--text-color-dark);
 }
 
@@ -64,214 +65,293 @@
     box-shadow: 0 0 0 2px rgba(66, 148, 204, 0.2);
 }
 
-.campaign-tag {
-    font-size: 0.75rem;
-    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-    color: #1976d2;
-    padding: 2px 8px;
-    border-radius: 12px;
-    margin-top: 4px;
-    display: inline-block;
-    font-weight: 500;
-}
-
 /* Prospect List */
 .prospect-list {
     padding: 20px;
+    background: #f8f9fa;
 }
 
+/* Prospect Row - New Layout Matching Screenshot */
 .prospect-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 0;
-    border-bottom: 1px solid #f0f0f0;
+    padding: 16px 20px;
+    margin-bottom: 8px;
+    background: white !important;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
     transition: all 0.3s ease;
 }
 
 .prospect-row:last-child {
-    border-bottom: none;
+    margin-bottom: 0;
 }
 
 .prospect-row:hover {
-    background: #f8f9fa;
-    cursor: pointer;
-    padding-left: 10px;
-    margin-left: -10px;
-    padding-right: 10px;
-    margin-right: -10px;
-    border-radius: 6px;
-}
-
-.prospect-name strong {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-color-dark);
-}
-
-.company-name {
-    font-size: 0.85rem;
-    color: var(--text-color-light);
-    margin-top: 2px;
-}
-
-/* Lead Score Styles */
-.lead-score {
-    text-align: right;
-    font-size: 0.85rem;
-    color: var(--text-color-light);
-}
-
-.score-value {
-    font-weight: 700;
-}
-
-.problem-score {
-    color: var(--problem-room-color);
-}
-
-.solution-score {
-    color: var(--solution-room-color);
-}
-
-.offer-score {
-    color: var(--offer-room-color);
-}
-
-/* Prospect Actions */
-.prospect-actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
-
-.handoff-btn {
-    background: var(--offer-room-color);
-    border: 1px solid var(--offer-room-color);
-    color: white;
-    padding: 8px 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    transition: all 0.3s ease;
-}
-
-.handoff-btn:hover {
-    background: #229954;
-    border-color: #229954;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    border-color: #d1d5db;
     transform: translateY(-1px);
 }
 
-.handoff-btn i {
-    font-size: 0.9rem;
-}
-
-/* Blinking handoff button for high scores */
-.handoff-btn.handoff-ready {
-    animation: blinkHandoff 2s infinite;
-    box-shadow: 0 0 10px rgba(39, 174, 96, 0.5);
-}
-
-@keyframes blinkHandoff {
-    0% {
-        background: var(--offer-room-color);
-        box-shadow: 0 0 5px rgba(39, 174, 96, 0.5);
-    }
-    50% {
-        background: #2ecc71;
-        box-shadow: 0 0 20px rgba(39, 174, 96, 0.8);
-        transform: scale(1.05);
-    }
-    100% {
-        background: var(--offer-room-color);
-        box-shadow: 0 0 5px rgba(39, 174, 96, 0.5);
-    }
-}
-
-.archive-btn {
-    background: none;
-    border: 1px solid #e0e0e0;
-    color: #999;
-    padding: 8px 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    transition: all 0.3s ease;
-}
-
-.archive-btn:hover {
-    background: #f8f9fa;
-    border-color: #dc3545;
-    color: #dc3545;
-}
-
-.archive-btn i {
-    font-size: 0.9rem;
-}
-
-/* Email Icons Styles */
-.prospect-metrics {
-    text-align: right;
+/* LEFT SIDE - Name, Company, Campaign */
+.prospect-info {
+    flex: 1;
     display: flex;
     flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.prospect-name {
+    margin: 0;
+}
+
+.prospect-name strong {
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.company-name {
+    font-size: 14px;
+    color: #6b7280;
+    margin: 0;
+    font-weight: 400;
+}
+
+.campaign-tag {
+    display: inline-block;
+    font-size: 12px;
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-weight: 500;
+    width: fit-content;
+    margin-top: 2px;
+    border: 1px solid #93c5fd;
+}
+
+/* Hide email icons if they appear in prospect-info */
+.prospect-info .email-icons {
+    display: none !important;
+}
+
+/* HIDE OLD METRICS SECTION */
+.prospect-metrics {
+    display: none !important;
+}
+
+/* RIGHT SIDE - Lead Score, Email Icons, Archive Button */
+.prospect-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+}
+
+/* Lead Score Display */
+.lead-score-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.lead-score {
+    display: flex;
+    align-items: center;
     gap: 8px;
-    align-items: flex-end;
+    font-size: 14px;
+    color: #6b7280;
+    white-space: nowrap;
 }
 
-.email-progress {
-    display: flex;
-    gap: 15px;
-    font-size: 0.8rem;
-    color: var(--text-color-light);
+.lead-score::before {
+    content: 'Lead Score:';
+    font-weight: 500;
 }
 
+.score-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #f59e0b;
+    margin: 0;
+    line-height: 1;
+}
+
+/* Score colors for different rooms */
+.problem-score .score-value {
+    color: #ef4444;
+}
+
+.solution-score .score-value {
+    color: #3b82f6;
+}
+
+.offer-score .score-value {
+    color: #10b981;
+}
+
+/* Email Icons - Horizontal display */
 .email-icons {
-    display: flex;
-    gap: 4px;
+    display: flex !important;
+    gap: 8px;
     align-items: center;
 }
 
 .email-icons i {
-    font-size: 0.9rem;
-    transition: all 0.3s ease;
-    cursor: pointer;
-}
-
-.email-icons i:hover {
-    transform: scale(1.2);
+    font-size: 18px;
+    transition: all 0.2s ease;
 }
 
 .email-not-sent {
-    color: #ccc;
-    opacity: 0.5;
+    color: #d1d5db;
 }
 
 .email-sent {
-    color: var(--solution-room-color);
+    color: #10b981;
 }
 
 .email-opened {
-    color: var(--offer-room-color);
+    color: #10b981;
 }
 
-/* Next Email Due Animation */
 .email-due-today {
     animation: pulseEmail 2s infinite;
-    transform-origin: center;
 }
 
 @keyframes pulseEmail {
-    0% {
+    0%, 100% {
         transform: scale(1);
         opacity: 1;
     }
     50% {
         transform: scale(1.3);
         opacity: 0.7;
-        filter: brightness(1.5);
     }
-    100% {
-        transform: scale(1);
-        opacity: 1;
+}
+
+/* Hide all buttons except archive */
+.prospect-actions .send-email-btn,
+.prospect-actions .info-btn,
+.prospect-actions .handoff-btn,
+.prospect-actions button:not(.archive-btn) {
+    display: none !important;
+}
+
+/* Archive Button */
+.archive-btn {
+    display: flex !important;
+    background: transparent;
+    border: none;
+    color: #9ca3af;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.2s ease;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+}
+
+.archive-btn:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.archive-btn:active {
+    transform: scale(0.95);
+}
+
+.archive-btn i {
+    font-size: 18px;
+}
+
+/* Empty State */
+.prospect-list:empty::after {
+    content: 'No prospects in this room';
+    display: block;
+    text-align: center;
+    padding: 40px 20px;
+    color: #9ca3af;
+    font-size: 14px;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .room-details-section {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .room-details-section {
+        grid-template-columns: 1fr;
+    }
+
+    .prospect-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 16px;
+    }
+
+    .prospect-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .lead-score {
+        font-size: 13px;
+    }
+
+    .score-value {
+        font-size: 20px;
+    }
+
+    .email-icons i {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 567px) {
+    .prospect-name strong {
+        font-size: 16px;
+    }
+
+    .company-name {
+        font-size: 13px;
+    }
+
+    .campaign-tag {
+        font-size: 11px;
+        padding: 3px 10px;
+    }
+
+    .score-value {
+        font-size: 18px;
+    }
+
+    .email-icons {
+        gap: 6px;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .prospect-actions {
+        display: none;
+    }
+
+    .prospect-row {
+        border: 1px solid #000;
+        page-break-inside: avoid;
+    }
+
+    .email-icons {
+        display: none !important;
     }
 }
