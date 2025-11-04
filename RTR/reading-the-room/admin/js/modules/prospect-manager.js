@@ -92,10 +92,11 @@ export default class ProspectManager {
 
         // Delegate click events for prospect actions
         document.addEventListener('click', (e) => {
-            // Email button - NEW: handles different states
+            // Email button
             const emailBtn = e.target.closest('.rtr-email-btn');
             if (emailBtn) {
                 e.preventDefault();
+                const prospectId = emailBtn.dataset.prospectId;
                 const visitorId = emailBtn.dataset.visitorId;
                 const room = emailBtn.dataset.room;
                 const emailNumber = parseInt(emailBtn.dataset.emailNumber);
@@ -512,7 +513,8 @@ export default class ProspectManager {
             
             buttons.push(`
                 <button class="rtr-email-btn ${buttonClass}" 
-                        data-visitor-id="${prospect.id}"
+                        data-prospect-id="${prospect.id}"
+                        data-visitor-id="${prospect.visitor_id || prospect.id}"
                         data-room="${room}"
                         data-email-number="${i}"
                         data-email-state="${emailState.state}"

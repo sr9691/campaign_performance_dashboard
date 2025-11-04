@@ -1,17 +1,16 @@
 <?php
 /**
- * Score Calculator
+ * RTR Score Calculator
  * 
- * Calculates lead scores based on firmographics, engagement, and purchase signals
- * Assigns prospects to Problem, Solution, or Offer rooms
- * Caches scores in wp_cpd_visitors table
+ * Calculates visitor lead scores based on JSON-configured rules across three room types:
+ * - Problem Room: Visitor qualification (company fit, role match, basic engagement)
+ * - Solution Room: Engagement signals (emails, page visits, ad interaction)
+ * - Offer Room: Intent signals (demo requests, pricing, contact forms)
  * 
- * @package DirectReach
- * @subpackage RTR_Scoring_System
- * @since 2.1.0
+ * @package DirectReach_Reports
+ * @subpackage RTR
  */
 
-// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -25,28 +24,22 @@ class RTR_Score_Calculator {
     private $wpdb;
     
     /**
-     * Scoring rules database handler
-     * @var RTR_Scoring_Rules_Database
+     * Table names
+     * @var array
      */
-    private $rules_db;
+    private $tables = array();
     
     /**
-     * Room thresholds database handler
-     * @var RTR_Room_Thresholds_Database
+     * Cached column existence checks
+     * @var array
      */
-    private $thresholds_db;
+    private static $column_cache = array();
     
     /**
-     * Visitors table name
-     * @var string
+     * Cached rules by client
+     * @var array
      */
-    private $visitors_table;
-    
-    /**
-     * Visitor activity table name
-     * @var string
-     */
-    private $activity_table;
+    private $rules_cache = array();
     
     /**
      * Constructor
@@ -54,770 +47,723 @@ class RTR_Score_Calculator {
     public function __construct() {
         global $wpdb;
         $this->wpdb = $wpdb;
-        $this->visitors_table = $wpdb->prefix . 'cpd_visitors';
-        $this->activity_table = $wpdb->prefix . 'cpd_visitor_activity';
         
-        // Get database handlers
-        $system = directreach_scoring_system();
-        $this->rules_db = $system->get_scoring_rules_db();
-        $this->thresholds_db = $system->get_room_thresholds_db();
+        // Initialize table names
+        $this->tables = array(
+            'visitors' => $wpdb->prefix . 'cpd_visitors',
+            'global_rules' => $wpdb->prefix . 'rtr_global_scoring_rules',
+            'client_rules' => $wpdb->prefix . 'rtr_client_scoring_rules',
+            'content_links' => $wpdb->prefix . 'rtr_room_content_links',
+            'thresholds' => $wpdb->prefix . 'rtr_room_thresholds'
+        );
     }
     
-    // ===========================================
-    // MAIN CALCULATION METHOD
-    // ===========================================
-    
     /**
-     * Calculate score for a visitor
-     * Main entry point for score calculation
+     * Calculate visitor score based on rules
      * 
      * @param int $visitor_id Visitor ID
      * @param int $client_id Client ID
-     * @param bool $cache Whether to cache results (default true)
-     * @return array|false Score data or false on error
+     * @param bool $cache_result Whether to save score to database
+     * @return array|false Array with total_score and component_scores, or false on error
      */
-    public function calculate_score($visitor_id, $client_id, $cache = true) {
-        // Load visitor data
+    public function calculate_visitor_score($visitor_id, $client_id, $cache_result = false) {
+        // Get visitor data
         $visitor = $this->get_visitor_data($visitor_id);
         if (!$visitor) {
+            error_log("RTR Score Calculator: Visitor {$visitor_id} not found");
             return false;
         }
         
-        // Load scoring rules for client
-        $problem_rules = $this->rules_db->get_client_rules_for_room($client_id, 'problem');
-        $solution_rules = $this->rules_db->get_client_rules_for_room($client_id, 'solution');
-        $offer_rules = $this->rules_db->get_client_rules_for_room($client_id, 'offer');
-        
-        if ($problem_rules === false || $solution_rules === false || $offer_rules === false) {
-            error_log("RTR Score Calculator: Failed to load rules for client {$client_id}");
+        // Load scoring rules
+        $rules = $this->load_scoring_rules($client_id);
+        if (!$rules) {
+            error_log("RTR Score Calculator: No scoring rules found for client {$client_id}");
             return false;
         }
         
-        // Calculate scores for each room
-        $problem_score = $this->calculate_problem_score($visitor, $problem_rules);
-        $solution_score = $this->calculate_solution_score($visitor, $solution_rules);
-        $offer_score = $this->calculate_offer_score($visitor, $offer_rules);
+        // Calculate score for each room type
+        $component_scores = array(
+            'problem' => $this->calculate_room_score($visitor, 'problem', $rules['problem'] ?? array()),
+            'solution' => $this->calculate_room_score($visitor, 'solution', $rules['solution'] ?? array()),
+            'offer' => $this->calculate_room_score($visitor, 'offer', $rules['offer'] ?? array())
+        );
         
-        // Check minimum threshold for Problem Room
-        if (isset($problem_rules['minimum_threshold']['enabled']) && 
-            $problem_rules['minimum_threshold']['enabled']) {
-            $min_threshold = $problem_rules['minimum_threshold']['required_score'];
-            if ($problem_score < $min_threshold) {
-                // Visitor doesn't qualify - set all scores to 0
-                $total_score = 0;
-                $current_room = 'none';
-                $breakdown = [
-                    'problem' => 0,
-                    'solution' => 0,
-                    'offer' => 0,
-                    'failed_minimum_threshold' => true,
-                    'minimum_required' => $min_threshold,
-                    'problem_score_achieved' => $problem_score
-                ];
-            } else {
-                // Calculate total and assign room
-                $total_score = $problem_score + $solution_score + $offer_score;
-                $current_room = $this->assign_room($total_score, $client_id);
-                $breakdown = [
-                    'problem' => $problem_score,
-                    'solution' => $solution_score,
-                    'offer' => $offer_score
-                ];
-            }
-        } else {
-            // No minimum threshold check
-            $total_score = $problem_score + $solution_score + $offer_score;
-            $current_room = $this->assign_room($total_score, $client_id);
-            $breakdown = [
-                'problem' => $problem_score,
-                'solution' => $solution_score,
-                'offer' => $offer_score
-            ];
+        // Calculate total score
+        $total_score = array_sum($component_scores);
+        
+        // Cap at 100
+        $total_score = min($total_score, 100);
+        
+        // Determine current room based on score and thresholds
+        $current_room = $this->determine_room($total_score, $client_id);
+        
+        // Update database if caching enabled
+        if ($cache_result) {
+            $this->update_visitor_score($visitor_id, $total_score, $current_room);
         }
         
-        $score_data = [
+        return array(
             'total_score' => $total_score,
-            'current_room' => $current_room,
-            'breakdown' => $breakdown,
-            'calculated_at' => current_time('mysql')
-        ];
-        
-        // Cache score if requested
-        if ($cache) {
-            $this->cache_score($visitor_id, $score_data);
-        }
-        
-        return $score_data;
+            'component_scores' => $component_scores,
+            'current_room' => $current_room
+        );
     }
     
-    // ===========================================
-    // PROBLEM ROOM SCORING (FIRMOGRAPHICS)
-    // ===========================================
+    /**
+     * Load scoring rules for a client
+     * 
+     * @param int $client_id Client ID
+     * @return array|false Array of rules by room type
+     */
+    private function load_scoring_rules($client_id) {
+        // Check cache
+        if (isset($this->rules_cache[$client_id])) {
+            return $this->rules_cache[$client_id];
+        }
+        
+        $rules = array();
+        
+        // Load global rules
+        $global_rules = $this->wpdb->get_results(
+            "SELECT room_type, rules_config FROM {$this->tables['global_rules']}",
+            ARRAY_A
+        );
+        
+        if ($global_rules) {
+            foreach ($global_rules as $rule) {
+                $rules[$rule['room_type']] = json_decode($rule['rules_config'], true);
+            }
+        }
+        
+        // Override with client-specific rules if they exist
+        if ($client_id > 0) {
+            $client_rules = $this->wpdb->get_results(
+                $this->wpdb->prepare(
+                    "SELECT room_type, rules_config FROM {$this->tables['client_rules']} WHERE client_id = %d",
+                    $client_id
+                ),
+                ARRAY_A
+            );
+            
+            if ($client_rules) {
+                foreach ($client_rules as $rule) {
+                    $rules[$rule['room_type']] = json_decode($rule['rules_config'], true);
+                }
+            }
+        }
+        
+        // Cache results
+        $this->rules_cache[$client_id] = $rules;
+        
+        return $rules;
+    }
     
     /**
-     * Calculate Problem Room score
-     * Based on firmographics: revenue, company size, industry, location, visits, role
+     * Get visitor data
+     * 
+     * @param int $visitor_id Visitor ID
+     * @return object|false Visitor object or false
+     */
+    private function get_visitor_data($visitor_id) {
+        $visitor = $this->wpdb->get_row(
+            $this->wpdb->prepare(
+                "SELECT * FROM {$this->tables['visitors']} WHERE id = %d",
+                $visitor_id
+            )
+        );
+        
+        return $visitor;
+    }
+    
+    /**
+     * Calculate score for a specific room type
      * 
      * @param object $visitor Visitor data
-     * @param array $rules Problem Room rules
+     * @param string $room_type Room type (problem, solution, offer)
+     * @param array $rules Rules configuration
+     * @return int Score for this room
+     */
+    private function calculate_room_score($visitor, $room_type, $rules) {
+        if (empty($rules)) {
+            return 0;
+        }
+        
+        $score = 0;
+        
+        switch ($room_type) {
+            case 'problem':
+                $score = $this->calculate_problem_score($visitor, $rules);
+                break;
+                
+            case 'solution':
+                $score = $this->calculate_solution_score($visitor, $rules);
+                break;
+                
+            case 'offer':
+                $score = $this->calculate_offer_score($visitor, $rules);
+                break;
+        }
+        
+        return $score;
+    }
+    
+    /**
+     * Calculate problem room score (qualification)
+     * 
+     * @param object $visitor Visitor data
+     * @param array $rules Problem room rules
      * @return int Score
      */
     private function calculate_problem_score($visitor, $rules) {
         $score = 0;
-        $details = [];
         
-        // Revenue
-        if ($rules['revenue']['enabled'] && !empty($rules['revenue']['values'])) {
-            $visitor_revenue = isset($visitor->revenue) ? $visitor->revenue : '';
-            if (!empty($visitor_revenue) && in_array($visitor_revenue, $rules['revenue']['values'])) {
-                $score += intval($rules['revenue']['points']);
-                $details['revenue'] = intval($rules['revenue']['points']);
-            } else {
-                $details['revenue'] = 0;
+        // Revenue match
+        if (!empty($rules['revenue']['enabled']) && !empty($rules['revenue']['values'])) {
+            if ($this->check_revenue_match($visitor->estimated_revenue ?? '', $rules['revenue']['values'])) {
+                $score += intval($rules['revenue']['points'] ?? 0);
             }
         }
         
-        // Company Size
-        if ($rules['company_size']['enabled'] && !empty($rules['company_size']['values'])) {
-            $visitor_size = isset($visitor->company_size) ? $visitor->company_size : '';
-            if (!empty($visitor_size) && in_array($visitor_size, $rules['company_size']['values'])) {
-                $score += intval($rules['company_size']['points']);
-                $details['company_size'] = intval($rules['company_size']['points']);
-            } else {
-                $details['company_size'] = 0;
+        // Company size match
+        if (!empty($rules['company_size']['enabled']) && !empty($rules['company_size']['values'])) {
+            if ($this->check_company_size_match($visitor->estimated_employee_count ?? '', $rules['company_size']['values'])) {
+                $score += intval($rules['company_size']['points'] ?? 0);
             }
         }
         
-        // Industry Alignment
-        if ($rules['industry_alignment']['enabled'] && !empty($rules['industry_alignment']['values'])) {
-            $visitor_industry = isset($visitor->industry) ? $visitor->industry : '';
-            if (!empty($visitor_industry) && in_array($visitor_industry, $rules['industry_alignment']['values'])) {
-                $score += intval($rules['industry_alignment']['points']);
-                $details['industry_alignment'] = intval($rules['industry_alignment']['points']);
-            } else {
-                $details['industry_alignment'] = 0;
+        // Industry alignment
+        if (!empty($rules['industry_alignment']['enabled']) && !empty($rules['industry_alignment']['values'])) {
+            if ($this->check_industry_match($visitor->industry ?? '', $rules['industry_alignment']['values'])) {
+                $score += intval($rules['industry_alignment']['points'] ?? 0);
             }
         }
         
-        // Target States
-        if ($rules['target_states']['enabled'] && !empty($rules['target_states']['values'])) {
-            $visitor_state = isset($visitor->state) ? $visitor->state : '';
-            if (!empty($visitor_state) && in_array($visitor_state, $rules['target_states']['values'])) {
-                $score += intval($rules['target_states']['points']);
-                $details['target_states'] = intval($rules['target_states']['points']);
-            } else {
-                $details['target_states'] = 0;
+        // Target states
+        if (!empty($rules['target_states']['enabled']) && !empty($rules['target_states']['values'])) {
+            if ($this->check_state_match($visitor->state ?? '', $rules['target_states']['values'])) {
+                $score += intval($rules['target_states']['points'] ?? 0);
             }
         }
         
-        // Visited Target Pages
-        if ($rules['visited_target_pages']['enabled']) {
-            // TODO: Implement when target pages feature is ready
-            $details['visited_target_pages'] = 0;
-        }
-        
-        // Multiple Visits
-        if ($rules['multiple_visits']['enabled']) {
-            $visit_count = $this->get_visitor_visit_count($visitor->id);
-            $min_visits = intval($rules['multiple_visits']['minimum_visits']);
-            if ($visit_count >= $min_visits) {
-                $score += intval($rules['multiple_visits']['points']);
-                $details['multiple_visits'] = intval($rules['multiple_visits']['points']);
-            } else {
-                $details['multiple_visits'] = 0;
+        // Role match
+        if (!empty($rules['role_match']['enabled']) && !empty($rules['role_match']['target_roles'])) {
+            if ($this->check_role_match($visitor->job_title ?? '', $rules['role_match'])) {
+                $score += intval($rules['role_match']['points'] ?? 0);
             }
         }
         
-        // Role Match
-        if ($rules['role_match']['enabled']) {
-            $visitor_title = isset($visitor->job_title) ? strtolower($visitor->job_title) : '';
-            if (!empty($visitor_title) && isset($rules['role_match']['target_roles'])) {
-                foreach ($rules['role_match']['target_roles'] as $role_group) {
-                    foreach ($role_group as $keyword) {
-                        if (stripos($visitor_title, strtolower($keyword)) !== false) {
-                            $score += intval($rules['role_match']['points']);
-                            $details['role_match'] = intval($rules['role_match']['points']);
-                            break 2;
-                        }
-                    }
-                }
-            }
-            if (!isset($details['role_match'])) {
-                $details['role_match'] = 0;
+        // Multiple visits
+        if (!empty($rules['multiple_visits']['enabled'])) {
+            $minimum_visits = intval($rules['multiple_visits']['minimum_visits'] ?? 2);
+            $actual_visits = intval($visitor->all_time_page_views ?? 0);
+            if ($actual_visits >= $minimum_visits) {
+                $score += intval($rules['multiple_visits']['points'] ?? 0);
             }
         }
         
-        return ['score' => $score, 'details' => $details];
+        // Visited target pages (from content links)
+        if (!empty($rules['visited_target_pages']['enabled'])) {
+            $page_score = $this->calculate_target_page_score(
+                $visitor->recent_page_urls ?? '[]',
+                $visitor->client_id ?? 0,
+                'problem',
+                $rules['visited_target_pages']
+            );
+            $score += $page_score;
+        }
+        
+        // Check minimum threshold
+        if (!empty($rules['minimum_threshold']['enabled'])) {
+            $required_score = intval($rules['minimum_threshold']['required_score'] ?? 0);
+            if ($score < $required_score) {
+                return 0; // Visitor doesn't meet minimum qualification
+            }
+        }
+        
+        return $score;
     }
     
-    // ===========================================
-    // SOLUTION ROOM SCORING (ENGAGEMENT)
-    // ===========================================
-    
     /**
-     * Calculate Solution Room score
-     * Based on engagement: email opens, clicks, page visits
+     * Calculate solution room score (engagement)
      * 
      * @param object $visitor Visitor data
-     * @param array $rules Solution Room rules
+     * @param array $rules Solution room rules
      * @return int Score
      */
     private function calculate_solution_score($visitor, $rules) {
         $score = 0;
         
-        // Get engagement data
-        $engagement = $this->get_visitor_engagement($visitor->id);
-        
-        // Email Opens
-        if (isset($rules['email_open']['enabled']) && $rules['email_open']['enabled']) {
-            $score += $engagement['email_opens'] * (int)$rules['email_open']['points'];
+        // Page visit scoring
+        if (!empty($rules['page_visit']['enabled'])) {
+            $points_per_visit = intval($rules['page_visit']['points_per_visit'] ?? 3);
+            $max_points = intval($rules['page_visit']['max_points'] ?? 15);
+            $page_count = intval($visitor->recent_page_count ?? 0);
+            $page_score = min($page_count * $points_per_visit, $max_points);
+            $score += $page_score;
         }
         
-        // Email Clicks
-        if (isset($rules['email_click']['enabled']) && $rules['email_click']['enabled']) {
-            $score += $engagement['email_clicks'] * (int)$rules['email_click']['points'];
-        }
-        
-        // Email Multiple Clicks
-        if (isset($rules['email_multiple_click']['enabled']) && $rules['email_multiple_click']['enabled']) {
-            $minimum_clicks = (int)$rules['email_multiple_click']['minimum_clicks'];
-            if ($engagement['email_clicks'] >= $minimum_clicks) {
-                $score += (int)$rules['email_multiple_click']['points'];
+        // Key page visits
+        if (!empty($rules['key_page_visit']['enabled']) && !empty($rules['key_page_visit']['key_pages'])) {
+            if ($this->check_key_page_visits($visitor->recent_page_urls ?? '[]', $rules['key_page_visit']['key_pages'])) {
+                $score += intval($rules['key_page_visit']['points'] ?? 0);
             }
         }
         
-        // Page Visits
-        if (isset($rules['page_visit']['enabled']) && $rules['page_visit']['enabled']) {
-            $points_per_visit = (int)$rules['page_visit']['points_per_visit'];
-            $max_points = (int)$rules['page_visit']['max_points'];
-            $visit_points = $engagement['page_visits'] * $points_per_visit;
-            $score += min($visit_points, $max_points);
-        }
-        
-        // Key Page Visits
-        if (isset($rules['key_page_visit']['enabled']) && $rules['key_page_visit']['enabled']) {
-            if ($this->visited_key_pages($visitor->id, $rules['key_page_visit']['key_pages'])) {
-                $score += (int)$rules['key_page_visit']['points'];
+        // Ad engagement (check referrer for UTM sources)
+        if (!empty($rules['ad_engagement']['enabled']) && !empty($rules['ad_engagement']['utm_sources'])) {
+            if ($this->check_ad_engagement($visitor->most_recent_referrer ?? '', $rules['ad_engagement']['utm_sources'])) {
+                $score += intval($rules['ad_engagement']['points'] ?? 0);
             }
         }
         
-        // Ad Engagement (UTM tracking)
-        if (isset($rules['ad_engagement']['enabled']) && $rules['ad_engagement']['enabled']) {
-            if ($this->has_ad_engagement($visitor->id, $rules['ad_engagement']['utm_sources'])) {
-                $score += (int)$rules['ad_engagement']['points'];
-            }
-        }
+        // Email engagement (if data available in future)
+        // Currently not implemented as email tracking data not in visitor table
         
         return $score;
     }
     
-    // ===========================================
-    // OFFER ROOM SCORING (PURCHASE SIGNALS)
-    // ===========================================
-    
     /**
-     * Calculate Offer Room score
-     * Based on purchase signals: demo requests, pricing visits, contact forms
+     * Calculate offer room score (intent signals)
      * 
      * @param object $visitor Visitor data
-     * @param array $rules Offer Room rules
+     * @param array $rules Offer room rules
      * @return int Score
      */
     private function calculate_offer_score($visitor, $rules) {
         $score = 0;
+        $recent_urls = json_decode($visitor->recent_page_urls ?? '[]', true);
+        if (!is_array($recent_urls)) {
+            $recent_urls = array();
+        }
         
-        // Demo Request
-        if (isset($rules['demo_request']['enabled']) && $rules['demo_request']['enabled']) {
-            if ($this->detect_action($visitor->id, $rules['demo_request'])) {
-                $score += (int)$rules['demo_request']['points'];
+        // Demo request
+        if (!empty($rules['demo_request']['enabled']) && !empty($rules['demo_request']['patterns'])) {
+            foreach ($rules['demo_request']['patterns'] as $pattern) {
+                foreach ($recent_urls as $url) {
+                    if ($this->url_matches_pattern($url, $pattern)) {
+                        $score += intval($rules['demo_request']['points'] ?? 0);
+                        break 2; // Only award once
+                    }
+                }
             }
         }
         
-        // Contact Form
-        if (isset($rules['contact_form']['enabled']) && $rules['contact_form']['enabled']) {
-            if ($this->detect_action($visitor->id, $rules['contact_form'])) {
-                $score += (int)$rules['contact_form']['points'];
+        // Contact form
+        if (!empty($rules['contact_form']['enabled'])) {
+            // Check for form submission indicators in URLs or referrer
+            if ($this->check_contact_form_submission($visitor, $rules['contact_form'])) {
+                $score += intval($rules['contact_form']['points'] ?? 0);
             }
         }
         
-        // Pricing Page Visit
-        if (isset($rules['pricing_page']['enabled']) && $rules['pricing_page']['enabled']) {
-            if ($this->visited_pages($visitor->id, $rules['pricing_page']['page_urls'])) {
-                $score += (int)$rules['pricing_page']['points'];
+        // Pricing page visits
+        if (!empty($rules['pricing_page']['enabled']) && !empty($rules['pricing_page']['page_urls'])) {
+            foreach ($rules['pricing_page']['page_urls'] as $pricing_url) {
+                foreach ($recent_urls as $url) {
+                    if ($this->url_matches_pattern($url, $pricing_url)) {
+                        $score += intval($rules['pricing_page']['points'] ?? 0);
+                        break 2; // Only award once
+                    }
+                }
             }
         }
         
-        // Pricing Question
-        if (isset($rules['pricing_question']['enabled']) && $rules['pricing_question']['enabled']) {
-            if ($this->detect_action($visitor->id, $rules['pricing_question'])) {
-                $score += (int)$rules['pricing_question']['points'];
-            }
-        }
-        
-        // Partner Referral
-        if (isset($rules['partner_referral']['enabled']) && $rules['partner_referral']['enabled']) {
-            if ($this->detect_action($visitor->id, $rules['partner_referral'])) {
-                $score += (int)$rules['partner_referral']['points'];
-            }
-        }
-        
-        // Webinar Attendance (future)
-        if (isset($rules['webinar_attendance']['enabled']) && $rules['webinar_attendance']['enabled']) {
-            if ($this->detect_action($visitor->id, $rules['webinar_attendance'])) {
-                $score += (int)$rules['webinar_attendance']['points'];
+        // Partner referral
+        if (!empty($rules['partner_referral']['enabled']) && !empty($rules['partner_referral']['utm_sources'])) {
+            if ($this->check_partner_referral($visitor->most_recent_referrer ?? '', $rules['partner_referral']['utm_sources'])) {
+                $score += intval($rules['partner_referral']['points'] ?? 0);
             }
         }
         
         return $score;
     }
     
-    // ===========================================
-    // ROOM ASSIGNMENT
-    // ===========================================
-    
     /**
-     * Assign room based on total score and thresholds
+     * Check if visitor revenue matches target values
      * 
-     * @param int $total_score Total lead score
-     * @param int $client_id Client ID
-     * @return string Room type: 'none', 'problem', 'solution', 'offer'
+     * @param string $visitor_revenue Visitor's estimated revenue
+     * @param array $target_values Target revenue ranges
+     * @return bool True if matches
      */
-    private function assign_room($total_score, $client_id) {
-        return $this->thresholds_db->get_room_for_score($total_score, $client_id);
+    private function check_revenue_match($visitor_revenue, $target_values) {
+        if (empty($visitor_revenue)) {
+            return false;
+        }
+        
+        // Normalize the visitor revenue
+        $visitor_revenue = trim($visitor_revenue);
+        
+        // Check for exact match first
+        if (in_array($visitor_revenue, $target_values)) {
+            return true;
+        }
+        
+        // Check for "Above $50M" matching "$100M+"
+        if (stripos($visitor_revenue, 'above') !== false || stripos($visitor_revenue, '50m') !== false) {
+            foreach ($target_values as $value) {
+                if (stripos($value, '100m+') !== false || stripos($value, '50m') !== false) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
     
-    // ===========================================
-    // SCORE CACHING
-    // ===========================================
+    /**
+     * Check if visitor company size matches target values
+     * 
+     * @param string $visitor_size Visitor's estimated employee count
+     * @param array $target_values Target size ranges
+     * @return bool True if matches
+     */
+    private function check_company_size_match($visitor_size, $target_values) {
+        if (empty($visitor_size)) {
+            return false;
+        }
+        
+        $visitor_size = trim($visitor_size);
+        
+        // Check for exact match
+        if (in_array($visitor_size, $target_values)) {
+            return true;
+        }
+        
+        // Check for "5001+" matching "1000+"
+        if (stripos($visitor_size, '5001+') !== false || stripos($visitor_size, '5000+') !== false) {
+            foreach ($target_values as $value) {
+                if (stripos($value, '1000+') !== false) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
     
     /**
-     * Cache score in visitors table
-     * Updates lead_score, current_room, score_calculated_at
+     * Check if visitor industry matches target industries
+     * 
+     * @param string $visitor_industry Visitor's industry
+     * @param array $target_industries Target industries (may include pipe-separated values)
+     * @return bool True if matches
+     */
+    private function check_industry_match($visitor_industry, $target_industries) {
+        if (empty($visitor_industry)) {
+            return false;
+        }
+        
+        $visitor_industry = strtolower(trim($visitor_industry));
+        
+        foreach ($target_industries as $target) {
+            // Split pipe-separated values
+            $industries = explode('|', $target);
+            foreach ($industries as $industry) {
+                $industry = strtolower(trim($industry));
+                if (stripos($visitor_industry, $industry) !== false) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if visitor state matches target states
+     * 
+     * @param string $visitor_state Visitor's state
+     * @param array $target_states Target state codes
+     * @return bool True if matches
+     */
+    private function check_state_match($visitor_state, $target_states) {
+        if (empty($visitor_state) || empty($target_states)) {
+            return false;
+        }
+        
+        return in_array(strtoupper(trim($visitor_state)), array_map('strtoupper', $target_states));
+    }
+    
+    /**
+     * Check if visitor job title matches target roles
+     * 
+     * @param string $visitor_title Visitor's job title
+     * @param array $rule_config Role match configuration
+     * @return bool True if matches
+     */
+    private function check_role_match($visitor_title, $rule_config) {
+        if (empty($visitor_title) || empty($rule_config['target_roles'])) {
+            return false;
+        }
+        
+        $visitor_title = strtolower($visitor_title);
+        $match_type = $rule_config['match_type'] ?? 'contains';
+        
+        // Check all role categories
+        foreach ($rule_config['target_roles'] as $category => $keywords) {
+            foreach ($keywords as $keyword) {
+                $keyword = strtolower($keyword);
+                
+                if ($match_type === 'contains') {
+                    if (stripos($visitor_title, $keyword) !== false) {
+                        return true;
+                    }
+                } else {
+                    // Exact match
+                    if ($visitor_title === $keyword) {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Calculate score for target page visits
+     * 
+     * @param string $recent_urls JSON array of recent URLs
+     * @param int $client_id Client ID
+     * @param string $room_type Room type
+     * @param array $rule_config Page visit rule configuration
+     * @return int Score
+     */
+    private function calculate_target_page_score($recent_urls, $client_id, $room_type, $rule_config) {
+        $urls = json_decode($recent_urls, true);
+        if (!is_array($urls) || empty($urls)) {
+            return 0;
+        }
+        
+        // This would ideally check against rtr_room_content_links
+        // For now, award points per URL visited, capped at max_points
+        $points_per_page = intval($rule_config['points'] ?? 10);
+        $max_points = intval($rule_config['max_points'] ?? 30);
+        
+        $score = min(count($urls) * $points_per_page, $max_points);
+        
+        return $score;
+    }
+    
+    /**
+     * Check if visitor visited key pages
+     * 
+     * @param string $recent_urls JSON array of recent URLs
+     * @param array $key_pages Array of key page patterns
+     * @return bool True if any key page was visited
+     */
+    private function check_key_page_visits($recent_urls, $key_pages) {
+        $urls = json_decode($recent_urls, true);
+        if (!is_array($urls) || empty($urls)) {
+            return false;
+        }
+        
+        foreach ($urls as $url) {
+            foreach ($key_pages as $pattern) {
+                if ($this->url_matches_pattern($url, $pattern)) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if visitor engaged with ads
+     * 
+     * @param string $referrer Most recent referrer
+     * @param array $utm_sources Target UTM sources
+     * @return bool True if ad engagement detected
+     */
+    private function check_ad_engagement($referrer, $utm_sources) {
+        if (empty($referrer)) {
+            return false;
+        }
+        
+        $referrer = strtolower($referrer);
+        
+        foreach ($utm_sources as $source) {
+            $source = strtolower($source);
+            if (stripos($referrer, $source) !== false) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check for contact form submission
+     * 
+     * @param object $visitor Visitor data
+     * @param array $rule_config Contact form rule configuration
+     * @return bool True if form submission detected
+     */
+    private function check_contact_form_submission($visitor, $rule_config) {
+        $detection_method = $rule_config['detection_method'] ?? 'utm_parameter';
+        
+        if ($detection_method === 'utm_parameter') {
+            $utm_content = $rule_config['utm_content'] ?? '';
+            $referrer = strtolower($visitor->most_recent_referrer ?? '');
+            
+            if (!empty($utm_content) && stripos($referrer, strtolower($utm_content)) !== false) {
+                return true;
+            }
+        }
+        
+        // Could also check URLs for thank-you pages
+        $urls = json_decode($visitor->recent_page_urls ?? '[]', true);
+        if (is_array($urls)) {
+            foreach ($urls as $url) {
+                if (stripos($url, 'thank') !== false || stripos($url, 'contact') !== false) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check for partner referral
+     * 
+     * @param string $referrer Most recent referrer
+     * @param array $utm_sources Partner UTM sources
+     * @return bool True if partner referral detected
+     */
+    private function check_partner_referral($referrer, $utm_sources) {
+        if (empty($referrer)) {
+            return false;
+        }
+        
+        $referrer = strtolower($referrer);
+        
+        foreach ($utm_sources as $source) {
+            if (stripos($referrer, strtolower($source)) !== false) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if URL matches a pattern
+     * 
+     * @param string $url URL to check
+     * @param string $pattern Pattern (may contain regex or simple string)
+     * @return bool True if matches
+     */
+    private function url_matches_pattern($url, $pattern) {
+        $url = strtolower($url);
+        $pattern = strtolower(str_replace('\\/', '/', $pattern)); // Handle escaped slashes from JSON
+        
+        // Simple contains check
+        if (stripos($url, $pattern) !== false) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Determine which room a visitor should be in based on score
+     * 
+     * @param int $score Total score
+     * @param int $client_id Client ID
+     * @return string Room name (none, problem, solution, offer)
+     */
+    private function determine_room($score, $client_id) {
+        // Get thresholds for this client
+        $thresholds = $this->get_room_thresholds($client_id);
+        
+        if ($score === 0) {
+            return 'none';
+        } elseif ($score <= $thresholds['problem_max']) {
+            return 'problem';
+        } elseif ($score <= $thresholds['solution_max']) {
+            return 'solution';
+        } else {
+            return 'offer';
+        }
+    }
+    
+    /**
+     * Get room thresholds for a client
+     * 
+     * @param int $client_id Client ID
+     * @return array Thresholds
+     */
+    private function get_room_thresholds($client_id) {
+        // Try to get client-specific thresholds
+        $thresholds = $this->wpdb->get_row(
+            $this->wpdb->prepare(
+                "SELECT problem_max, solution_max, offer_min FROM {$this->tables['thresholds']} WHERE client_id = %d",
+                $client_id
+            ),
+            ARRAY_A
+        );
+        
+        // Fall back to global thresholds if no client-specific ones
+        if (!$thresholds) {
+            $thresholds = $this->wpdb->get_row(
+                "SELECT problem_max, solution_max, offer_min FROM {$this->tables['thresholds']} WHERE client_id IS NULL LIMIT 1",
+                ARRAY_A
+            );
+        }
+        
+        // Default thresholds if none found
+        if (!$thresholds) {
+            $thresholds = array(
+                'problem_max' => 40,
+                'solution_max' => 60,
+                'offer_min' => 61
+            );
+        }
+        
+        return $thresholds;
+    }
+    
+    /**
+     * Update visitor score in database
      * 
      * @param int $visitor_id Visitor ID
-     * @param array $score_data Score data to cache
+     * @param int $score Total score
+     * @param string $current_room Current room assignment
      * @return bool Success
      */
-    private function cache_score($visitor_id, $score_data) {
+    private function update_visitor_score($visitor_id, $score, $current_room) {
         $result = $this->wpdb->update(
-            $this->visitors_table,
-            [
-                'lead_score' => $score_data['total_score'],
-                'current_room' => $score_data['current_room'],
-                'score_calculated_at' => $score_data['calculated_at']
-            ],
-            ['id' => $visitor_id],
-            ['%d', '%s', '%s'],
-            ['%d']
+            $this->tables['visitors'],
+            array(
+                'lead_score' => $score,
+                'current_room' => $current_room,
+                'score_calculated_at' => current_time('mysql')
+            ),
+            array('id' => $visitor_id),
+            array('%d', '%s', '%s'),
+            array('%d')
         );
         
         return $result !== false;
     }
     
-    // ===========================================
-    // DATA RETRIEVAL METHODS
-    // ===========================================
-    
     /**
-     * Get visitor data from database
+     * Batch calculate scores for multiple visitors
      * 
-     * @param int $visitor_id Visitor ID
-     * @return object|false Visitor data or false
-     */
-    private function get_visitor_data($visitor_id) {
-        return $this->wpdb->get_row(
-            $this->wpdb->prepare(
-                "SELECT * FROM {$this->visitors_table} WHERE id = %d",
-                $visitor_id
-            )
-        );
-    }
-    
-    /**
-     * Get visitor engagement data
-     * Aggregates email opens, clicks, page visits
-     * 
-     * @param int $visitor_id Visitor ID
-     * @return array Engagement metrics
-     */
-    private function get_visitor_engagement($visitor_id) {
-        // Query activity table for engagement metrics
-        $activity = $this->wpdb->get_row(
-            $this->wpdb->prepare(
-                "SELECT 
-                    COUNT(CASE WHEN activity_type = 'email_open' THEN 1 END) as email_opens,
-                    COUNT(CASE WHEN activity_type = 'email_click' THEN 1 END) as email_clicks,
-                    COUNT(CASE WHEN activity_type = 'page_visit' THEN 1 END) as page_visits
-                 FROM {$this->activity_table}
-                 WHERE visitor_id = %d",
-                $visitor_id
-            ),
-            ARRAY_A
-        );
-        
-        if (!$activity) {
-            return [
-                'email_opens' => 0,
-                'email_clicks' => 0,
-                'page_visits' => 0
-            ];
-        }
-        
-        return [
-            'email_opens' => (int)$activity['email_opens'],
-            'email_clicks' => (int)$activity['email_clicks'],
-            'page_visits' => (int)$activity['page_visits']
-        ];
-    }
-    
-    /**
-     * Get visitor page visit count
-     * 
-     * @param int $visitor_id Visitor ID
-     * @return int Visit count
-     */
-    private function get_visitor_visit_count($visitor_id) {
-        $count = $this->wpdb->get_var(
-            $this->wpdb->prepare(
-                "SELECT COUNT(*) 
-                 FROM {$this->activity_table}
-                 WHERE visitor_id = %d AND activity_type = 'page_visit'",
-                $visitor_id
-            )
-        );
-        
-        return $count ? (int)$count : 0;
-    }
-    
-    // ===========================================
-    // MATCHING METHODS
-    // ===========================================
-    
-    /**
-     * Check if value matches any in the target values array
-     * 
-     * @param mixed $value Value to check
-     * @param array $target_values Array of target values
-     * @return bool Match found
-     */
-    private function matches_value($value, $target_values) {
-        if (empty($value) || empty($target_values)) {
-            return false;
-        }
-        
-        return in_array($value, $target_values);
-    }
-    
-    /**
-     * Check if industry matches any target industry
-     * Handles "Category|Sub-Category" format
-     * 
-     * @param string $industry Visitor's industry
-     * @param array $target_industries Target industry strings
-     * @return bool Match found
-     */
-    private function matches_industry($industry, $target_industries) {
-        if (empty($industry) || empty($target_industries)) {
-            return false;
-        }
-        
-        // Exact match
-        if (in_array($industry, $target_industries)) {
-            return true;
-        }
-        
-        // Check if industry matches category or sub-category
-        foreach ($target_industries as $target) {
-            if (strpos($target, '|') !== false) {
-                // Target is "Category|Sub-Category"
-                list($category, $subcategory) = explode('|', $target, 2);
-                
-                // Check if visitor industry matches either part
-                if (strpos($industry, $category) !== false || 
-                    strpos($industry, $subcategory) !== false) {
-                    return true;
-                }
-            } else {
-                // Target is just category, match broadly
-                if (strpos($industry, $target) !== false) {
-                    return true;
-                }
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Check if job title matches target roles
-     * 
-     * @param string $job_title Visitor's job title
-     * @param array $role_config Role matching configuration
-     * @return bool Match found
-     */
-    private function matches_role($job_title, $role_config) {
-        if (empty($job_title) || empty($role_config['target_roles'])) {
-            return false;
-        }
-        
-        $job_title_lower = strtolower($job_title);
-        $match_type = isset($role_config['match_type']) ? $role_config['match_type'] : 'contains';
-        
-        // Check all role categories
-        foreach ($role_config['target_roles'] as $category => $keywords) {
-            foreach ($keywords as $keyword) {
-                $keyword_lower = strtolower($keyword);
-                
-                if ($match_type === 'contains') {
-                    if (strpos($job_title_lower, $keyword_lower) !== false) {
-                        return true;
-                    }
-                } else {
-                    // Exact match
-                    if ($job_title_lower === $keyword_lower) {
-                        return true;
-                    }
-                }
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Check if visitor visited any key pages
-     * 
-     * @param int $visitor_id Visitor ID
-     * @param array $key_pages Array of key page URLs
-     * @return bool Visited at least one key page
-     */
-    private function visited_key_pages($visitor_id, $key_pages) {
-        if (empty($key_pages)) {
-            return false;
-        }
-        
-        foreach ($key_pages as $page) {
-            $count = $this->wpdb->get_var(
-                $this->wpdb->prepare(
-                    "SELECT COUNT(*) 
-                     FROM {$this->activity_table}
-                     WHERE visitor_id = %d 
-                     AND activity_type = 'page_visit'
-                     AND page_url LIKE %s",
-                    $visitor_id,
-                    '%' . $this->wpdb->esc_like($page) . '%'
-                )
-            );
-            
-            if ($count > 0) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Check if visitor visited specific pages
-     * 
-     * @param int $visitor_id Visitor ID
-     * @param array $page_urls Array of page URLs
-     * @return bool Visited at least one page
-     */
-    private function visited_pages($visitor_id, $page_urls) {
-        return $this->visited_key_pages($visitor_id, $page_urls);
-    }
-    
-    /**
-     * Check if visitor has ad engagement from specified sources
-     * 
-     * @param int $visitor_id Visitor ID
-     * @param array $utm_sources Array of UTM source values
-     * @return bool Has ad engagement
-     */
-    private function has_ad_engagement($visitor_id, $utm_sources) {
-        if (empty($utm_sources)) {
-            return false;
-        }
-        
-        foreach ($utm_sources as $source) {
-            $count = $this->wpdb->get_var(
-                $this->wpdb->prepare(
-                    "SELECT COUNT(*) 
-                     FROM {$this->activity_table}
-                     WHERE visitor_id = %d 
-                     AND utm_source = %s",
-                    $visitor_id,
-                    $source
-                )
-            );
-            
-            if ($count > 0) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Detect action based on rule configuration
-     * Supports URL patterns and UTM parameters
-     * 
-     * @param int $visitor_id Visitor ID
-     * @param array $rule_config Rule configuration
-     * @return bool Action detected
-     */
-    private function detect_action($visitor_id, $rule_config) {
-        $detection_method = isset($rule_config['detection_method']) 
-            ? $rule_config['detection_method'] 
-            : 'url_pattern';
-        
-        if ($detection_method === 'url_pattern') {
-            // Check URL patterns
-            $patterns = isset($rule_config['patterns']) ? $rule_config['patterns'] : [];
-            if (empty($patterns)) {
-                return false;
-            }
-            
-            foreach ($patterns as $pattern) {
-                $count = $this->wpdb->get_var(
-                    $this->wpdb->prepare(
-                        "SELECT COUNT(*) 
-                         FROM {$this->activity_table}
-                         WHERE visitor_id = %d 
-                         AND page_url LIKE %s",
-                        $visitor_id,
-                        '%' . $this->wpdb->esc_like($pattern) . '%'
-                    )
-                );
-                
-                if ($count > 0) {
-                    return true;
-                }
-            }
-            
-        } elseif ($detection_method === 'utm_parameter') {
-            // Check UTM content
-            if (isset($rule_config['utm_content'])) {
-                $count = $this->wpdb->get_var(
-                    $this->wpdb->prepare(
-                        "SELECT COUNT(*) 
-                         FROM {$this->activity_table}
-                         WHERE visitor_id = %d 
-                         AND utm_content = %s",
-                        $visitor_id,
-                        $rule_config['utm_content']
-                    )
-                );
-                
-                if ($count > 0) {
-                    return true;
-                }
-            }
-            
-        } elseif ($detection_method === 'utm_source') {
-            // Check UTM source
-            $utm_sources = isset($rule_config['utm_sources']) ? $rule_config['utm_sources'] : [];
-            return $this->has_ad_engagement($visitor_id, $utm_sources);
-        }
-        
-        return false;
-    }
-    
-    // ===========================================
-    // BULK OPERATIONS
-    // ===========================================
-    
-    /**
-     * Recalculate scores for all visitors of a client
-     * 
+     * @param array $visitor_ids Array of visitor IDs
      * @param int $client_id Client ID
-     * @param int $limit Batch size (default 100)
-     * @return array Results
+     * @param bool $cache_result Whether to save scores to database
+     * @return array Results keyed by visitor ID
      */
-    public function recalculate_all($client_id, $limit = 100) {
-        // Get all visitors for client
-        $visitors = $this->wpdb->get_col(
-            $this->wpdb->prepare(
-                "SELECT id FROM {$this->visitors_table} WHERE client_id = %d LIMIT %d",
-                $client_id,
-                $limit
-            )
-        );
+    public function batch_calculate_scores($visitor_ids, $client_id, $cache_result = true) {
+        $results = array();
         
-        if (empty($visitors)) {
-            return [
-                'success' => true,
-                'processed' => 0,
-                'message' => 'No visitors found'
-            ];
-        }
-        
-        $results = [
-            'success' => true,
-            'total' => count($visitors),
-            'processed' => 0,
-            'failed' => 0,
-            'details' => []
-        ];
-        
-        foreach ($visitors as $visitor_id) {
-            $score_data = $this->calculate_score($visitor_id, $client_id);
-            
-            if ($score_data !== false) {
-                $results['processed']++;
-            } else {
-                $results['failed']++;
-            }
+        foreach ($visitor_ids as $visitor_id) {
+            $results[$visitor_id] = $this->calculate_visitor_score($visitor_id, $client_id, $cache_result);
         }
         
         return $results;
     }
-    
-    /**
-     * Get cached score for visitor
-     * 
-     * @param int $visitor_id Visitor ID
-     * @return array|false Cached score data or false
-     */
-    public function get_cached_score($visitor_id) {
-        $visitor = $this->wpdb->get_row(
-            $this->wpdb->prepare(
-                "SELECT lead_score, current_room, score_calculated_at 
-                 FROM {$this->visitors_table} 
-                 WHERE id = %d",
-                $visitor_id
-            ),
-            ARRAY_A
-        );
-        
-        if (!$visitor) {
-            return false;
-        }
-        
-        return [
-            'total_score' => (int)$visitor['lead_score'],
-            'current_room' => $visitor['current_room'],
-            'calculated_at' => $visitor['score_calculated_at']
-        ];
-    }
 }
-
-/**
- * Initialize Score Calculator
- * 
- * @return RTR_Score_Calculator
- */
-function rtr_score_calculator() {
-    static $instance = null;
-    
-    if ($instance === null) {
-        $instance = new RTR_Score_Calculator();
-    }
-    
-    return $instance;
-}
-
-// Initialize on plugins_loaded
-add_action('plugins_loaded', 'rtr_score_calculator', 20);

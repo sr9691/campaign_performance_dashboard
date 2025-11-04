@@ -96,7 +96,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
                         return is_numeric( $param ) && $param > 0;
                     },
                 ),
-                'force_regenerate' => array(         // ← ADD THIS
+                'force_regenerate' => array(         
                     'required' => false,
                     'type' => 'boolean',
                     'default' => false,

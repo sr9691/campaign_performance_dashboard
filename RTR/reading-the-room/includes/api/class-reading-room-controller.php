@@ -385,6 +385,37 @@ final class Reading_Room_Controller extends WP_REST_Controller
         }
     }
 
+    private function get_room_thresholds(?int $client_id = null): array
+    {
+        global $wpdb;
+        $table = $wpdb->prefix . 'rtr_room_thresholds';
+        
+        // Try client-specific first, then global (NULL), then hardcoded defaults
+        $thresholds = $wpdb->get_row($wpdb->prepare(
+            "SELECT problem_max, solution_max, offer_min 
+            FROM {$table} 
+            WHERE client_id = %d OR client_id IS NULL 
+            ORDER BY client_id DESC 
+            LIMIT 1",
+            $client_id
+        ), ARRAY_A);
+        
+        // If no database entry exists, use hardcoded defaults
+        if (!$thresholds) {
+            return [
+                'problem_max'   => 40,
+                'solution_max'  => 60,
+                'offer_min'     => 61,
+            ];
+        }
+        
+        return [
+            'problem_max'   => (int) $thresholds['problem_max'],
+            'solution_max'  => (int) $thresholds['solution_max'],
+            'offer_min'     => (int) $thresholds['offer_min'],
+        ];
+    }
+
     /**
      * Get campaign statistics for a room.
      *
@@ -518,7 +549,7 @@ final class Reading_Room_Controller extends WP_REST_Controller
      */
     private function determine_prospect_room(array $prospect): string
     {
-        // Check explicit room in attributes
+        // Check explicit room in attributes first
         if (!empty($prospect['attributes'])) {
             $attrs = json_decode($prospect['attributes'], true);
             if (isset($attrs['room']) && in_array($attrs['room'], ['problem', 'solution', 'offer', 'sales'])) {
@@ -526,16 +557,26 @@ final class Reading_Room_Controller extends WP_REST_Controller
             }
         }
 
-        // Fallback: Use lead score
+        // Get client_id from prospect data
+        $client_id = isset($prospect['client_id']) ? (int) $prospect['client_id'] : null;
+        
+        // Get thresholds from database (client-specific or global)
+        $thresholds = $this->get_room_thresholds($client_id);
+        
+        // Use lead score to determine room
         $score = (int) ($prospect['lead_score'] ?? 0);
         
-        if ($score >= 80) {
+        // Room assignment logic based on database thresholds
+        if ($score >= $thresholds['offer_min']) {
             return 'offer';
-        } elseif ($score >= 50) {
+        } elseif ($score > $thresholds['problem_max'] && $score <= $thresholds['solution_max']) {
             return 'solution';
-        } else {
+        } elseif ($score >= 1 && $score <= $thresholds['problem_max']) {
             return 'problem';
         }
+        
+        // Score of 0 or doesn't fit any room = 'none'
+        return 'none';
     }
 
     /**

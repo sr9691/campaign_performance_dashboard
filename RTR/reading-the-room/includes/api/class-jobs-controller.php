@@ -489,7 +489,7 @@ class Jobs_Controller extends WP_REST_Controller {
         // Get unmatched visitors (those without campaign assignments)
         $where_clause = $mode === self::MODE_FULL
             ? "" 
-            : "WHERE v.visitor_id NOT IN (SELECT visitor_id FROM {$wpdb->prefix}cpd_visitor_campaigns)";
+            : "WHERE v.id NOT IN (SELECT visitor_id FROM {$wpdb->prefix}cpd_visitor_campaigns)";
 
         $visitors = $wpdb->get_results("
             SELECT v.* 
@@ -540,7 +540,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Internal score calculation logic
-     * PHASE 2.1: Database-driven scoring using rtr_client_scoring_rules
      *
      * @return array{calculated: int, total: int} Results.
      */
@@ -548,11 +547,24 @@ class Jobs_Controller extends WP_REST_Controller {
         global $wpdb;
 
         $calculated = 0;
+        $failed = 0;
         $total = 0;
 
-        // Get visitors with campaign assignments
+        // Check if RTR_Score_Calculator is available
+        if (!class_exists('\RTR_Score_Calculator')) {
+            $this->log_job('score_calculator_unavailable', 
+                'RTR_Score_Calculator class not found. Scoring system module may not be loaded.', 
+                'error'
+            );
+            return [
+                'calculated' => 0,
+                'total' => 0,
+            ];
+        }
+
+        // Get visitors with campaign assignments that need scoring
         $visitors = $wpdb->get_results("
-            SELECT DISTINCT v.*, vc.campaign_id, cs.client_id
+            SELECT DISTINCT v.id, v.visitor_id, vc.campaign_id, cs.client_id
             FROM {$wpdb->prefix}cpd_visitors v
             INNER JOIN {$wpdb->prefix}cpd_visitor_campaigns vc ON v.id = vc.visitor_id
             INNER JOIN {$wpdb->prefix}dr_campaign_settings cs ON vc.campaign_id = cs.id
@@ -561,170 +573,98 @@ class Jobs_Controller extends WP_REST_Controller {
 
         $total = count($visitors);
 
+        if ($total === 0) {
+            $this->log_job('score_calculation_none', 'No visitors need score calculation');
+            return [
+                'calculated' => 0,
+                'total' => 0,
+            ];
+        }
+
         $this->log_job('score_calculation_start', sprintf(
-            'Starting score calculation for %d visitors',
+            'Starting score calculation for %d visitors using RTR_Score_Calculator',
             $total
         ));
 
+        // Instantiate the score calculator
+        try {
+            $score_calculator = new \RTR_Score_Calculator();
+        } catch (\Exception $e) {
+            $this->log_job('score_calculator_init_failed', 
+                'Failed to initialize RTR_Score_Calculator: ' . $e->getMessage(), 
+                'error'
+            );
+            return [
+                'calculated' => 0,
+                'total' => $total,
+            ];
+        }
+
         foreach ($visitors as $visitor) {
             try {
-                $client_id = $visitor->client_id;
+                $client_id = (int) $visitor->client_id;
+                $visitor_id = (int) $visitor->id;
                 
-                // Get scoring rules for this client (cached)
-                $rules = $this->get_scoring_rules($client_id);
+                // Suppress errors and warnings from Score Calculator
+                $old_error_level = error_reporting();
+                error_reporting(0); // Temporarily disable error reporting
                 
-                if (empty($rules)) {
-                    $this->log_job('score_calculation_no_rules', sprintf(
-                        'No scoring rules found for client %d (visitor %d)',
-                        $client_id,
-                        $visitor->id
-                    ), 'warning');
-                    continue;
+                // Use the Score Calculator to calculate and cache score
+                $score_data = @$score_calculator->calculate_visitor_score($visitor_id, $client_id, true);
+                
+                
+                // Restore error reporting
+                error_reporting($old_error_level);
+                
+                if ($score_data !== false && isset($score_data['total_score'])) {
+                    $calculated++;
+                    $this->job_stats['scores_calculated']++;
+                } else {
+                    $failed++;
                 }
 
-                // Calculate base score from visitor data
-                $score = $this->calculate_visitor_score($visitor, $rules);
-
-                // Update visitor with calculated score
-                $wpdb->update(
-                    $wpdb->prefix . 'cpd_visitors',
-                    [
-                        'lead_score' => $score,
-                        'updated_at' => current_time('mysql'),
-                    ],
-                    ['id' => $visitor->id],
-                    ['%d', '%s'],
-                    ['%d']
-                );
-
-                $calculated++;
-
-            } catch (\Exception $e) {
+            } catch (\Error $e) {
+                // Catch PHP Fatal Errors (like TypeError)
+                $failed++;
                 $this->job_stats['errors']++;
-                $this->log_job('score_calculation_visitor_error', sprintf(
-                    'Score calculation failed for visitor %d: %s',
-                    $visitor->id,
-                    $e->getMessage()
-                ), 'error');
+                
+                // Only log first few errors to avoid log spam
+                if ($failed <= 3) {
+                    $this->log_job('score_calculation_error', sprintf(
+                        'Fatal error calculating score for visitor %d: %s',
+                        $visitor->id,
+                        $e->getMessage()
+                    ), 'error');
+                }
+            } catch (\Exception $e) {
+                // Catch all other exceptions
+                $failed++;
+                $this->job_stats['errors']++;
+                
+                // Only log first few errors
+                if ($failed <= 3) {
+                    $this->log_job('score_calculation_exception', sprintf(
+                        'Exception calculating score for visitor %d: %s',
+                        $visitor->id,
+                        $e->getMessage()
+                    ), 'error');
+                }
             }
         }
+
+        $this->log_job('score_calculation_complete', sprintf(
+            'Score calculation finished. Success: %d, Failed: %d, Total: %d',
+            $calculated,
+            $failed,
+            $total
+        ));
 
         return [
             'calculated' => $calculated,
-            'total'      => $total,
+            'total' => $total,
         ];
     }
 
-    /**
-     * Get scoring rules for a client
-     * PHASE 2.1: Query rtr_client_scoring_rules table
-     * FIXED: Added return type
-     *
-     * @param int $client_id Client ID.
-     * @return array<int,array> Scoring rules.
-     */
-    private function get_scoring_rules(int $client_id): array {
-        // FIXED: Check cache with TTL
-        if (isset($this->scoring_rules_cache[$client_id])) {
-            $cached_at = $this->cache_timestamps['rules_' . $client_id] ?? 0;
-            if (time() - $cached_at < self::CACHE_TTL) {
-                return $this->scoring_rules_cache[$client_id];
-            }
-        }
-
-        global $wpdb;
-
-        // Query scoring rules for this client
-        $rules = $wpdb->get_results($wpdb->prepare("
-            SELECT *
-            FROM {$wpdb->prefix}rtr_client_scoring_rules
-            WHERE client_id = %d
-            ORDER BY priority ASC
-        ", $client_id), ARRAY_A);
-
-        // Cache the rules with timestamp
-        $this->scoring_rules_cache[$client_id] = $rules;
-        $this->cache_timestamps['rules_' . $client_id] = time();
-
-        return $rules;
-    }
-
-    /**
-     * Calculate visitor score based on rules
-     * PHASE 2.1: Apply database-driven scoring rules
-     * FIXED: Added return type and parameter types
-     *
-     * @param object $visitor Visitor data.
-     * @param array<int,array>  $rules   Scoring rules.
-     * @return int Calculated score.
-     */
-    private function calculate_visitor_score(object $visitor, array $rules): int {
-        $score = 0;
-
-        foreach ($rules as $rule) {
-            $rule_type = $rule['rule_type'];
-            $points = (int) $rule['points'];
-
-            switch ($rule_type) {
-                case 'page_visit':
-                    // Award points for page visits
-                    $visit_count = (int) ($visitor->visit_count ?? 0);
-                    $score += $visit_count * $points;
-                    break;
-
-                case 'email_open':
-                    // Award points for email opens
-                    if (!empty($visitor->email_opened)) {
-                        $score += $points;
-                    }
-                    break;
-
-                case 'email_click':
-                    // Award points for email clicks
-                    if (!empty($visitor->email_clicked)) {
-                        $score += $points;
-                    }
-                    break;
-
-                case 'form_submission':
-                    // Award points for form submissions
-                    if (!empty($visitor->form_submitted)) {
-                        $score += $points;
-                    }
-                    break;
-
-                case 'recency':
-                    // Recency decay - recent visits score higher
-                    if (!empty($visitor->last_visit)) {
-                        $days_ago = (strtotime('now') - strtotime($visitor->last_visit)) / DAY_IN_SECONDS;
-                        
-                        if ($days_ago <= 7) {
-                            $score += $points;
-                        } elseif ($days_ago <= 30) {
-                            $score += floor($points * 0.5);
-                        }
-                    }
-                    break;
-
-                case 'engagement_multiplier':
-                    // Apply multiplier based on engagement level
-                    $engagement_level = $visitor->engagement_level ?? 0;
-                    $multiplier = (float) ($rule['multiplier'] ?? 1);
-                    
-                    if ($engagement_level > 0) {
-                        $score = floor($score * $multiplier);
-                    }
-                    break;
-
-                default:
-                    // Unknown rule type - log warning
-                    error_log(self::LOG_PREFIX . " Unknown scoring rule type: {$rule_type}");
-                    break;
-            }
-        }
-
-        return max(0, $score); // Ensure score is never negative
-    }
 
     /**
      * Internal prospect creation logic
@@ -747,7 +687,7 @@ class Jobs_Controller extends WP_REST_Controller {
             $where_client = $wpdb->prepare('AND cs.client_id = %d', $client_id);
         }
 
-        // Get eligible visitors
+        // Get visitors with campaign matches - GROUP BY ensures one per visitor
         $visitors = $wpdb->get_results("
             SELECT v.*, vc.campaign_id, cs.client_id
             FROM {$wpdb->prefix}cpd_visitors v
@@ -757,6 +697,7 @@ class Jobs_Controller extends WP_REST_Controller {
             AND v.email != ''
             AND v.lead_score > 0
             {$where_client}
+            GROUP BY v.id
             ORDER BY v.lead_score DESC, v.last_seen_at DESC
         ");
 
@@ -767,7 +708,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
         foreach ($visitors as $visitor) {
             try {
-                // Check if prospect already exists
                 $existing = $wpdb->get_row($wpdb->prepare("
                     SELECT *
                     FROM {$wpdb->prefix}rtr_prospects
@@ -778,7 +718,6 @@ class Jobs_Controller extends WP_REST_Controller {
                 ", $visitor->id, $visitor->campaign_id));
 
                 if (!$existing) {
-                    // Create new prospect
                     $thresholds = $this->get_room_thresholds($visitor->campaign_id);
                     $initial_room = $this->calculate_room_assignment($visitor->lead_score ?? 0, $thresholds);
 
@@ -787,18 +726,17 @@ class Jobs_Controller extends WP_REST_Controller {
                         [
                             'visitor_id'              => $visitor->id,
                             'campaign_id'             => $visitor->campaign_id,
-                            'client_id'               => $visitor->client_id,
-                            'email'                   => $visitor->email,
-                            'company'                 => $visitor->company ?? '',
+                            'contact_email'           => $visitor->email ?? '',
+                            'company_name'            => $visitor->company_name ?? '',
+                            'contact_name'            => trim(($visitor->first_name ?? '') . ' ' . ($visitor->last_name ?? '')),
                             'lead_score'              => $visitor->lead_score ?? 0,
                             'current_room'            => $initial_room,
-                            'room_entered_at'         => current_time('mysql'),
+                            'days_in_room'            => 0,
                             'email_sequence_position' => 0,
-                            'is_hot_list'             => 0,
                             'created_at'              => current_time('mysql'),
                             'updated_at'              => current_time('mysql'),
                         ],
-                        ['%d', '%d', '%d', '%s', '%s', '%d', '%s', '%s', '%d', '%d', '%s', '%s']
+                        ['%d', '%d', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%s', '%s']
                     );
 
                     $created++;
@@ -812,46 +750,28 @@ class Jobs_Controller extends WP_REST_Controller {
                     ));
 
                 } else {
-                    // Update existing prospect if score changed significantly
                     $score_diff = abs(($visitor->lead_score ?? 0) - ($existing->lead_score ?? 0));
                     
                     if ($score_diff >= 5) {
-                        $update_fields = [
-                            'lead_score' => $visitor->lead_score ?? 0,
-                        ];
-
-                        // Calculate new room but don't apply yet - that's done by assign_rooms_internal()
-                        $thresholds = $this->get_room_thresholds($visitor->campaign_id);
-                        $new_room = $this->calculate_room_assignment(
-                            $visitor->lead_score ?? 0,
-                            $thresholds
+                        $wpdb->update(
+                            $wpdb->prefix . 'rtr_prospects',
+                            [
+                                'lead_score' => $visitor->lead_score ?? 0,
+                                'updated_at' => current_time('mysql')
+                            ],
+                            ['id' => $existing->id],
+                            ['%d', '%s'],
+                            ['%d']
                         );
-
-                        $needs_update = ($new_room !== $existing->current_room);
-
-                        if ($needs_update) {
-                            $update_fields['updated_at'] = current_time('mysql');
-                            
-                            $wpdb->update(
-                                $wpdb->prefix . 'rtr_prospects',
-                                $update_fields,
-                                ['id' => $existing->id],
-                                array_fill(0, count($update_fields), '%s'),
-                                ['%d']
-                            );
-                            
-                            $updated++;
-                            
-                            $this->log_job(
-                                'prospect_updated',
-                                sprintf(
-                                    'Updated prospect %d (visitor: %d, new score: %d)',
-                                    $existing->id,
-                                    $visitor->id,
-                                    $visitor->lead_score
-                                )
-                            );
-                        }
+                        
+                        $updated++;
+                        
+                        $this->log_job('prospect_updated', sprintf(
+                            'Updated prospect %d (visitor: %d, new score: %d)',
+                            $existing->id,
+                            $visitor->id,
+                            $visitor->lead_score
+                        ));
                     } else {
                         $skipped++;
                     }
@@ -870,15 +790,12 @@ class Jobs_Controller extends WP_REST_Controller {
         return [
             'created' => $created,
             'updated' => $updated,
-            'skipped' => $skipped,
-            'total'   => count($visitors),
+            'skipped' => $skipped
         ];
     }
 
     /**
      * Internal room assignment logic
-     * PHASE 5.7: Immediate transitions, no delays
-     * FIXED: Added return type
      *
      * @return array{transitions: int, delayed: int, total: int} Results.
      */
@@ -926,7 +843,6 @@ class Jobs_Controller extends WP_REST_Controller {
                         $wpdb->prefix . 'rtr_prospects',
                         [
                             'current_room'     => $calculated_room,
-                            'room_entered_at'  => current_time('mysql'), // Reset entry time
                             'updated_at'       => current_time('mysql'),
                         ],
                         [
@@ -1166,7 +1082,7 @@ class Jobs_Controller extends WP_REST_Controller {
                 'from_room'   => $from_room,
                 'to_room'     => $to_room,
                 'reason'      => $reason,
-                'created_at'  => current_time('mysql'),
+                'transitioned_at'  => current_time('mysql'),
             ],
             ['%d', '%d', '%s', '%s', '%s', '%s']
         );
