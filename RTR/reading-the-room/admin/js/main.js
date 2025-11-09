@@ -12,6 +12,7 @@ import EmailModalManager from './modules/email-modal-manager.js';
 import EmailHistoryManager from './modules/email-history-manager.js';
 import AnalyticsManager from './modules/analytics-manager.js';
 import EmailStatusPoller from './modules/email-status-poller.js';
+import ProspectInfoModal from './modules/prospect-info-modal.js';
 
 class RTRDashboard {
     constructor() {
@@ -41,6 +42,9 @@ class RTRDashboard {
             
             // NEW: Initialize email status poller
             this.managers.emailPoller = new EmailStatusPoller(this.config);
+
+            // Initialize prospect info modal
+            this.managers.prospectInfo = new ProspectInfoModal(this.config);
 
             // Set up global event listeners
             this.setupGlobalEvents();
@@ -115,7 +119,7 @@ class RTRDashboard {
             this.onEmailGenerated(e.detail);
         });
 
-        // NEW: Handle email state updates from poller
+        // Handle email state updates from poller
         document.addEventListener('rtr:email-states-updated', (e) => {
             this.onEmailStatesUpdated(e.detail);
         });
@@ -222,7 +226,7 @@ class RTRDashboard {
     }
 
     /**
-     * NEW: Handle email state updates from poller
+     * Handle email state updates from poller
      * @param {Object} data - { changes: Array of state change objects }
      */
     onEmailStatesUpdated(data) {

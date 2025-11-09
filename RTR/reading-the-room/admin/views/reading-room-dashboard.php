@@ -44,6 +44,8 @@ wp_enqueue_style('directreach-email-history-modal', plugin_dir_url(__FILE__) . '
 wp_enqueue_style('directreach-charts', plugin_dir_url(__FILE__) . '../css/charts.css', [], '2.0.0');
 wp_enqueue_style('directreach-ui-utilities', plugin_dir_url(__FILE__) . '../css/ui.css', [], '2.0.0');
 wp_enqueue_style('directreach-responsive', plugin_dir_url(__FILE__) . '../css/responsive.css', [], '2.0.0');
+wp_enqueue_style('directreach-prospect-info-modal', plugin_dir_url(__FILE__) . '../css/prospect-info-modal.css', [], '2.0.0');
+
 wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', [], '5.15.4');
 wp_enqueue_script('chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js', array(), '4.4.0', true);
 
@@ -63,9 +65,9 @@ wp_localize_script(
     array(
         'siteUrl'      => esc_url(get_site_url()),
         'nonce'        => wp_create_nonce('wp_rest'),
-        'restUrl'      => esc_url(rest_url('directreach/v1/reading-room')), // ← FIX: change to v1/reading-room
+        'restUrl'      => esc_url(rest_url('directreach/v1/reading-room')), // change to v1/reading-room
         'apiUrl'       => esc_url(rest_url('directreach/v1/reading-room')),
-        'emailApiUrl'  => esc_url(rest_url('directreach/v2')),              // ← ADD: for email endpoints
+        'emailApiUrl'  => esc_url(rest_url('directreach/v2')),              // for email endpoints
         'ajaxUrl'      => admin_url('admin-ajax.php'),
         'userId'       => get_current_user_id(),
         'userIsAdmin'  => current_user_can('manage_options'),

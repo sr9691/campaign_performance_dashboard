@@ -132,6 +132,21 @@ final class Reading_Room_Controller extends WP_REST_Controller
             ],
         ]);
 
+        // Prospect details by visitor ID
+        register_rest_route($this->namespace, '/prospects/(?P<visitor_id>[\w-]+)/details', array(
+            'methods' => 'GET',
+            'callback' => array($this, 'get_prospect_details'),
+            'permission_callback' => array($this, 'check_permission'),
+            'args' => array(
+                'visitor_id' => array(
+                    'required' => true,
+                    'type' => 'string',
+                    'sanitize_callback' => 'sanitize_text_field',
+                    'description' => 'The visitor ID to fetch details for',
+                ),
+            ),
+        ));
+
 
 
     }
@@ -326,6 +341,139 @@ final class Reading_Room_Controller extends WP_REST_Controller
             ], 500);
         }
     }
+
+    /**
+     * Get detailed prospect information
+     * 
+     * Fetches comprehensive data from both rtr_prospects and cpd_visitors tables
+     * 
+     * @param WP_REST_Request $request Request object
+     * @return WP_REST_Response|WP_Error Response object or error
+     */
+    public function get_prospect_details($request) {
+        $visitor_id = $request->get_param('visitor_id');
+        
+        if (empty($visitor_id)) {
+            return new WP_Error(
+                'missing_visitor_id', 
+                'Visitor ID is required', 
+                array('status' => 400)
+            );
+        }
+        
+        global $wpdb;
+        
+        // Table names
+        $prospects_table = $wpdb->prefix . 'rtr_prospects';
+        $visitors_table = $wpdb->prefix . 'cpd_visitors';
+        $campaigns_table = $wpdb->prefix . 'dr_campaign_settings';
+        
+        try {
+            // Get visitor data first
+            $visitor = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM {$visitors_table} WHERE id = %s",
+                $visitor_id
+            ), ARRAY_A);
+            
+            // Get prospect data with campaign information - use visitor's lead_score and current_room
+            $prospect = $wpdb->get_row($wpdb->prepare(
+                "SELECT 
+                    p.*,
+                    c.campaign_name,
+                    c.campaign_type,
+                    v.lead_score,
+                    v.current_room
+                FROM {$prospects_table} p
+                LEFT JOIN {$campaigns_table} c ON p.campaign_id = c.id
+                LEFT JOIN {$visitors_table} v ON p.visitor_id = v.id
+                WHERE p.visitor_id = %s 
+                AND p.archived_at IS NULL
+                ORDER BY p.id DESC
+                LIMIT 1",
+                $visitor_id
+            ), ARRAY_A);
+            
+            // Get intelligence data
+            $intelligence = $wpdb->get_row($wpdb->prepare(
+                "SELECT response_data, status, processing_time, created_at
+                FROM {$wpdb->prefix}cpd_visitor_intelligence 
+                WHERE visitor_id = %s 
+                AND status = 'completed'
+                ORDER BY id DESC 
+                LIMIT 1",
+                $visitor_id
+            ), ARRAY_A);
+            
+            // If neither exists, return 404
+            if (!$prospect && !$visitor) {
+                return new WP_Error(
+                    'not_found', 
+                    'Prospect not found', 
+                    array('status' => 404)
+                );
+            }
+            
+            // Parse JSON fields in prospect data
+            if ($prospect) {
+                $json_fields = array('email_states', 'engagement_data', 'urls_sent', 'handoff_notes');
+                foreach ($json_fields as $field) {
+                    if (!empty($prospect[$field]) && is_string($prospect[$field])) {
+                        $decoded = json_decode($prospect[$field], true);
+                        if (json_last_error() === JSON_ERROR_NONE) {
+                            $prospect[$field] = $decoded;
+                        }
+                    }
+                }
+            }
+            
+            // Parse JSON fields in visitor data
+            if ($visitor) {
+                $json_fields = array('recent_page_urls', 'tags', 'filter_matches');
+                foreach ($json_fields as $field) {
+                    if (!empty($visitor[$field]) && is_string($visitor[$field])) {
+                        $decoded = json_decode($visitor[$field], true);
+                        if (json_last_error() === JSON_ERROR_NONE) {
+                            $visitor[$field] = $decoded;
+                        }
+                    }
+                }
+            }
+            
+            // Parse intelligence response_data
+            if ($intelligence && !empty($intelligence['response_data'])) {
+                $decoded = json_decode($intelligence['response_data'], true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $intelligence['response_data'] = $decoded;
+                }
+            }
+            
+            // Compile response
+            $response_data = array(
+                'success' => true,
+                'data' => array(
+                    'prospect' => $prospect ?: array(),
+                    'visitor' => $visitor ?: array(),
+                    'intelligence' => $intelligence ?: array()
+                )
+            );
+            
+            // Log the access (optional)
+            if (defined('RTR_LOG_PROSPECT_VIEWS') && RTR_LOG_PROSPECT_VIEWS === true) {
+                $this->log_prospect_view($visitor_id, $request);
+            }
+            
+            return rest_ensure_response($response_data);
+            
+        } catch (Exception $e) {
+            error_log('Error fetching prospect details: ' . $e->getMessage());
+            return new WP_Error(
+                'database_error',
+                'Failed to fetch prospect details',
+                array('status' => 500)
+            );
+        }
+    }
+
 
     /**
      * Get room counts with filters.

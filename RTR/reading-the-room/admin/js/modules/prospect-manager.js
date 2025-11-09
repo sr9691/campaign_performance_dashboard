@@ -447,6 +447,16 @@ export default class ProspectManager {
         const actionsContainer = document.createElement('div');
         actionsContainer.className = 'rtr-prospect-actions';
 
+        // Info Button
+        const infoBtn = document.createElement('button');
+        infoBtn.className = 'rtr-action-btn rtr-info-btn';
+        infoBtn.innerHTML = '<i class="fas fa-info-circle"></i>';
+        infoBtn.title = 'View Prospect Details';
+        infoBtn.dataset.visitorId = prospect.visitor_id || prospect.id;
+        infoBtn.dataset.prospectId = prospect.id;
+        infoBtn.dataset.room = room;
+        actionsContainer.appendChild(infoBtn);
+
         // Archive Button
         const archiveBtn = document.createElement('button');
         archiveBtn.className = 'rtr-action-btn rtr-archive-btn';

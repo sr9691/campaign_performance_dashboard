@@ -1,0 +1,569 @@
+/**
+ * Prospect Info Modal Styles
+ * Displays detailed information about prospects from rtr_prospects and cpd_visitors tables
+ */
+
+/* Modal Content Adjustments for Prospect Info */
+.prospect-info-modal-content {
+    max-width: 900px;
+    width: 90%;
+}
+
+.prospect-info-body {
+    max-height: calc(90vh - 120px);
+    overflow-y: auto;
+}
+
+/* Prospect Info Container */
+.prospect-info-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* Info Sections */
+.info-section {
+    background: #f9fafb;
+    border-radius: 8px;
+    padding: 1.25rem;
+    border: 1px solid #e5e7eb;
+}
+
+.info-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2937;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.info-section-title i {
+    color: #6b7280;
+    font-size: 1.125rem;
+}
+
+/* Info Grid */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.info-item.full-width {
+    grid-column: 1 / -1;
+}
+
+.info-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.info-value {
+    font-size: 0.9375rem;
+    color: #1f2937;
+    word-break: break-word;
+}
+
+.info-value a {
+    color: #3b82f6;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.info-value a:hover {
+    color: #2563eb;
+    text-decoration: underline;
+}
+
+.info-value a i {
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
+}
+
+.info-value.code {
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 0.875rem;
+    background: #f3f4f6;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+/* Room Badge */
+.room-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: white;
+    text-transform: capitalize;
+}
+
+.room-badge-problem {
+    background: #ef4444;
+}
+
+.room-badge-solution {
+    background: #f59e0b;
+}
+
+.room-badge-offer {
+    background: #10b981;
+}
+
+.room-badge-sales {
+    background: #8b5cf6;
+}
+
+.room-badge-none {
+    background: #9ca3af;
+}
+
+/* Lead Score Badge */
+.lead-score-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: white;
+    min-width: 40px;
+    text-align: center;
+}
+
+/* Recent Pages List */
+.recent-pages-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.recent-page-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    transition: all 0.2s ease;
+}
+
+.recent-page-item:hover {
+    background: #f9fafb;
+    border-color: #3b82f6;
+}
+
+.recent-page-item i.fa-link {
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.recent-page-item a {
+    flex: 1;
+    color: #3b82f6;
+    text-decoration: none;
+    font-size: 0.875rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.recent-page-item a:hover {
+    text-decoration: underline;
+}
+
+.recent-page-item a i.fa-external-link-alt {
+    font-size: 0.75rem;
+    margin-left: 0.25rem;
+}
+
+/* Email States Grid */
+.email-states-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+}
+
+.email-state-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+}
+
+.email-number {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+}
+
+.email-status {
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    text-align: center;
+    text-transform: capitalize;
+}
+
+.email-status.pending {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.email-status.generating {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.email-status.ready {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.email-status.sent {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.email-status.opened {
+    background: #ddd6fe;
+    color: #5b21b6;
+}
+
+.email-status.failed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.email-timestamp {
+    font-size: 0.75rem;
+    color: #9ca3af;
+}
+
+/* Loading State */
+.prospect-info-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    text-align: center;
+}
+
+.prospect-info-loading i {
+    font-size: 2.5rem;
+    color: #3b82f6;
+    margin-bottom: 1rem;
+}
+
+.prospect-info-loading p {
+    font-size: 1rem;
+    color: #6b7280;
+    margin: 0;
+}
+
+/* Error State */
+.prospect-info-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    text-align: center;
+}
+
+.prospect-info-error i {
+    font-size: 2.5rem;
+    color: #ef4444;
+    margin-bottom: 1rem;
+}
+
+.prospect-info-error p {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0 0 0.5rem 0;
+}
+
+.prospect-info-error small {
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+/* Info Button Styling */
+.rtr-info-btn {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+}
+
+.rtr-info-btn:hover {
+    background: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.rtr-info-btn:active {
+    transform: translateY(0);
+}
+
+.rtr-info-btn i {
+    font-size: 1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .prospect-info-modal-content {
+        width: 95%;
+        max-width: 100%;
+    }
+
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .email-states-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .recent-page-item a {
+        white-space: normal;
+        word-break: break-all;
+    }
+}
+
+@media (max-width: 480px) {
+    .prospect-info-modal-content {
+        width: 100%;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+    }
+
+    .prospect-info-body {
+        max-height: calc(100vh - 120px);
+    }
+
+    .info-section {
+        padding: 1rem;
+    }
+
+    .info-section-title {
+        font-size: 0.9375rem;
+    }
+
+    .info-value {
+        font-size: 0.875rem;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .rtr-modal-overlay {
+        display: none;
+    }
+
+    .rtr-modal-close {
+        display: none;
+    }
+
+    .prospect-info-modal-content {
+        box-shadow: none;
+        max-width: 100%;
+        max-height: none;
+    }
+
+    .prospect-info-body {
+        max-height: none;
+        overflow: visible;
+    }
+
+    .info-section {
+        break-inside: avoid;
+    }
+}
+
+/* AI Intelligence Section */
+.intelligence-content {
+    background: white;
+    border-radius: 6px;
+    padding: 1rem;
+}
+
+.intelligence-text {
+    font-size: 0.9375rem;
+    color: #1f2937;
+    line-height: 1.6;
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.intelligence-section {
+    margin-bottom: 1rem;
+}
+
+.intelligence-section:last-child {
+    margin-bottom: 0;
+}
+
+.intelligence-item {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    align-items: flex-start;
+}
+
+.intelligence-key {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #4b5563;
+    min-width: fit-content;
+    flex-shrink: 0;
+}
+
+.intelligence-value {
+    font-size: 0.875rem;
+    color: #1f2937;
+    word-break: break-word;
+}
+
+.intelligence-list {
+    margin: 0.25rem 0 0 0;
+    padding-left: 1.5rem;
+    list-style: disc;
+}
+
+.intelligence-list li {
+    font-size: 0.875rem;
+    color: #1f2937;
+    margin-bottom: 0.25rem;
+}
+
+.intelligence-meta {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e5e7eb;
+    font-size: 0.8125rem;
+    color: #6b7280;
+    font-style: italic;
+}
+
+/* Force Light Mode - Override any dark mode styles */
+@media (prefers-color-scheme: dark) {
+    #prospect-info-modal .rtr-modal-content,
+    #prospect-info-modal .prospect-info-modal-content {
+        background: #ffffff !important;
+        color: #1f2937 !important;
+    }
+
+    #prospect-info-modal .rtr-modal-header,
+    #prospect-info-modal .rtr-modal-footer {
+        background: #f9fafb !important;
+        border-color: #e5e7eb !important;
+        color: #1f2937 !important;
+    }
+
+    #prospect-info-modal .rtr-modal-header h3 {
+        color: #1f2937 !important;
+    }
+
+    #prospect-info-modal .rtr-modal-close {
+        color: #6b7280 !important;
+    }
+
+    #prospect-info-modal .rtr-modal-close:hover {
+        background: #e5e7eb !important;
+        color: #1f2937 !important;
+    }
+
+    #prospect-info-modal .info-section {
+        background: #f9fafb !important;
+        border-color: #e5e7eb !important;
+    }
+
+    #prospect-info-modal .info-section-title {
+        color: #1f2937 !important;
+        border-color: #e5e7eb !important;
+    }
+
+    #prospect-info-modal .info-label {
+        color: #6b7280 !important;
+    }
+
+    #prospect-info-modal .info-value {
+        color: #1f2937 !important;
+    }
+
+    #prospect-info-modal .intelligence-content {
+        background: white !important;
+    }
+
+    #prospect-info-modal .intelligence-text,
+    #prospect-info-modal .intelligence-value,
+    #prospect-info-modal .intelligence-list li {
+        color: #1f2937 !important;
+    }
+
+    #prospect-info-modal .intelligence-key {
+        color: #4b5563 !important;
+    }
+
+    #prospect-info-modal .intelligence-meta {
+        color: #6b7280 !important;
+        border-color: #e5e7eb !important;
+    }
+
+    #prospect-info-modal .recent-page-item {
+        background: white !important;
+        border-color: #e5e7eb !important;
+    }
+
+    #prospect-info-modal .recent-page-item:hover {
+        background: #f9fafb !important;
+    }
+
+    #prospect-info-modal .email-state-item {
+        background: white !important;
+        border-color: #e5e7eb !important;
+    }
+
+    #prospect-info-modal .rtr-modal-body::-webkit-scrollbar-track {
+        background: #f3f4f6 !important;
+    }
+
+    #prospect-info-modal .rtr-modal-body::-webkit-scrollbar-thumb {
+        background: #d1d5db !important;
+    }
+
+    #prospect-info-modal .rtr-modal-body::-webkit-scrollbar-thumb:hover {
+        background: #9ca3af !important;
+    }
+}
