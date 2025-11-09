@@ -568,6 +568,7 @@ class CPD_Database {
             visitor_id mediumint(9) NOT NULL,
             current_room ENUM('problem', 'solution', 'offer') NOT NULL,
             company_name VARCHAR(255) NOT NULL,
+            job_title VARCHAR(255) NULL,
             contact_name VARCHAR(255),
             contact_email VARCHAR(255),
             lead_score INT DEFAULT 0,

@@ -194,19 +194,94 @@ final class Reading_Room_Database
      */
     public function save_prospect(array $data): int
     {
+        // Build payload with only fields that exist in the actual rtr_prospects schema
         $payload = [
-            'email'       => isset($data['email']) ? (string) $data['email'] : null,
-            'phone'       => isset($data['phone']) ? (string) $data['phone'] : null,
-            'first_name'  => isset($data['first_name']) ? (string) $data['first_name'] : null,
-            'last_name'   => isset($data['last_name']) ? (string) $data['last_name'] : null,
-            'company'     => isset($data['company']) ? (string) $data['company'] : null,
-            'title'       => isset($data['title']) ? (string) $data['title'] : null,
-            'campaign_id' => isset($data['campaign_id']) ? (int) $data['campaign_id'] : null,
-            'attributes'  => isset($data['attributes']) ? wp_json_encode($data['attributes']) : null,
-            'updated_at'  => current_time('mysql'),
+            'updated_at' => current_time('mysql'),
         ];
+        
+        $formats = ['%s']; // Start with updated_at format
 
-        $formats = ['%s','%s','%s','%s','%s','%s','%d','%s','%s'];
+        // Add fields only if they're provided (match actual rtr_prospects schema)
+        if (isset($data['contact_email'])) {
+            $payload['contact_email'] = (string) $data['contact_email'];
+            $formats[] = '%s';
+        }
+        if (isset($data['contact_name'])) {
+            $payload['contact_name'] = (string) $data['contact_name'];
+            $formats[] = '%s';
+        }
+        if (isset($data['company_name'])) {
+            $payload['company_name'] = (string) $data['company_name'];
+            $formats[] = '%s';
+        }
+        if (isset($data['campaign_id'])) {
+            $payload['campaign_id'] = (int) $data['campaign_id'];
+            $formats[] = '%d';
+        }
+        if (isset($data['visitor_id'])) {
+            $payload['visitor_id'] = (int) $data['visitor_id'];
+            $formats[] = '%d';
+        }
+        if (isset($data['current_room'])) {
+            $payload['current_room'] = (string) $data['current_room'];
+            $formats[] = '%s';
+        }
+        if (isset($data['lead_score'])) {
+            $payload['lead_score'] = (int) $data['lead_score'];
+            $formats[] = '%d';
+        }
+        if (isset($data['days_in_room'])) {
+            $payload['days_in_room'] = (int) $data['days_in_room'];
+            $formats[] = '%d';
+        }
+        if (isset($data['email_sequence_position'])) {
+            $payload['email_sequence_position'] = (int) $data['email_sequence_position'];
+            $formats[] = '%d';
+        }
+        if (isset($data['email_states'])) {
+            $payload['email_states'] = is_string($data['email_states']) 
+                ? $data['email_states'] 
+                : wp_json_encode($data['email_states']);
+            $formats[] = '%s';
+        }
+        if (isset($data['email_sequence_state'])) {
+            $payload['email_sequence_state'] = is_string($data['email_sequence_state']) 
+                ? $data['email_sequence_state'] 
+                : wp_json_encode($data['email_sequence_state']);
+            $formats[] = '%s';
+        }
+        if (isset($data['urls_sent'])) {
+            $payload['urls_sent'] = is_string($data['urls_sent']) 
+                ? $data['urls_sent'] 
+                : wp_json_encode($data['urls_sent']);
+            $formats[] = '%s';
+        }
+        if (isset($data['last_email_sent'])) {
+            $payload['last_email_sent'] = $data['last_email_sent'];
+            $formats[] = '%s';
+        }
+        if (isset($data['next_email_due'])) {
+            $payload['next_email_due'] = $data['next_email_due'];
+            $formats[] = '%s';
+        }
+        if (isset($data['archived_at'])) {
+            $payload['archived_at'] = $data['archived_at'];
+            $formats[] = '%s';
+        }
+        if (isset($data['sales_handoff_at'])) {
+            $payload['sales_handoff_at'] = $data['sales_handoff_at'];
+            $formats[] = '%s';
+        }
+        if (isset($data['handoff_notes'])) {
+            $payload['handoff_notes'] = (string) $data['handoff_notes'];
+            $formats[] = '%s';
+        }
+        if (isset($data['engagement_data'])) {
+            $payload['engagement_data'] = is_string($data['engagement_data']) 
+                ? $data['engagement_data'] 
+                : wp_json_encode($data['engagement_data']);
+            $formats[] = '%s';
+        }
 
         if (!empty($data['id'])) {
             $id     = (int) $data['id'];
@@ -218,8 +293,11 @@ final class Reading_Room_Database
             return $id;
         }
 
+        // For new inserts, add created_at
         $payload['created_at'] = current_time('mysql');
-        $result = $this->db->insert($this->table_prospects, $payload, array_merge($formats, ['%s']));
+        $formats[] = '%s';
+
+        $result = $this->db->insert($this->table_prospects, $payload, $formats);
         if ($result === false) {
             error_log('[DirectReach][DB] save_prospect insert failed: ' . $this->db->last_error);
             return 0;
@@ -263,6 +341,9 @@ final class Reading_Room_Database
             $params[] = (int) $args['days'];
         }        
 
+        $where[] = 'p.archived_at IS NULL';
+        
+        
         $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
         $sql = "
             SELECT p.*, c.campaign_name AS campaign_name, c.client_id as client_id

@@ -239,8 +239,23 @@ export default class ProspectManager {
         // Store current selection
         const currentValue = campaignFilter.value;
 
-        // Populate dropdown
-        // ... [LINES 223-306 UNCHANGED - Campaign dropdown population logic]
+        // Clear existing options except "All Campaigns"
+        campaignFilter.innerHTML = '<option value="">All Campaigns</option>';
+
+        // Add campaign options sorted by name
+        Array.from(campaigns.entries())
+            .sort((a, b) => a[1].localeCompare(b[1]))
+            .forEach(([id, name]) => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = name;
+                campaignFilter.appendChild(option);
+            });
+
+        // Restore previous selection if it still exists
+        if (currentValue && campaigns.has(currentValue)) {
+            campaignFilter.value = currentValue;
+        }
     }
 
     showLoadingState(container, room) {
@@ -309,15 +324,24 @@ export default class ProspectManager {
         nameEl.textContent = prospectName;
         infoSection.appendChild(nameEl);
 
-        // Company
+        // Job Title
+        const jobTitle = prospect.job_title || prospect.title || '';
+        if (jobTitle) {
+            const titleEl = document.createElement('p');
+            titleEl.className = 'rtr-prospect-title';
+            titleEl.textContent = jobTitle;
+            infoSection.appendChild(titleEl);
+        }
+
+        // Company (with ellipsis)
         const companyName = prospect.company_name || prospect.company || '';
         if (companyName) {
             const companyEl = document.createElement('p');
             companyEl.className = 'rtr-company';
             companyEl.textContent = companyName;
+            companyEl.title = companyName; // Show full name on hover
             infoSection.appendChild(companyEl);
         }
-
         // Campaign Badges
         const campaignName = prospect.campaign_name || '';
         if (campaignName) {
@@ -361,7 +385,7 @@ export default class ProspectManager {
         emailSequence.className = 'rtr-email-sequence';
 
         const emailStates = prospect.email_states || {};
-        const emailCount = 6;
+        const emailCount = 5;
 
         for (let i = 1; i <= emailCount; i++) {
             const emailKey = `email_${i}`;
@@ -428,9 +452,19 @@ export default class ProspectManager {
         archiveBtn.className = 'rtr-action-btn rtr-archive-btn';
         archiveBtn.innerHTML = '<i class="fas fa-archive"></i>';
         archiveBtn.title = 'Archive Prospect';
-        archiveBtn.dataset.visitorId = prospect.visitor_id || prospect.id;
+        archiveBtn.dataset.visitorId = prospect.id;
         archiveBtn.dataset.room = room;
         actionsContainer.appendChild(archiveBtn);
+
+        // Sales Handoff Button (Offer Room only)
+        if (room === 'offer') {
+            const handoffBtn = document.createElement('button');
+            handoffBtn.className = 'rtr-action-btn rtr-handoff-btn';
+            handoffBtn.innerHTML = '<i class="fas fa-handshake"></i>';
+            handoffBtn.title = 'Hand Off to Sales';
+            handoffBtn.dataset.visitorId = prospect.id;
+            actionsContainer.appendChild(handoffBtn);
+        }
 
         rightSection.appendChild(actionsContainer);
         row.appendChild(rightSection);
@@ -492,43 +526,6 @@ export default class ProspectManager {
         }
     }
 
-    /**
-     * Generate email buttons for all 5 emails with independent states
-     * @param {Object} prospect - Prospect object with email_states
-     * @param {String} room - Current room
-     * @returns {String} HTML for 5 email buttons
-     */
-    generateEmailButtons(prospect, room) {
-        const buttons = [];
-        
-        // Generate 5 independent email buttons
-        for (let i = 1; i <= 5; i++) {
-            const emailKey = `email_${i}`;
-            const emailState = prospect.email_states?.[emailKey] || { state: 'pending', timestamp: null };
-            
-            const buttonClass = this.getEmailButtonClass(emailState.state);
-            const icon = this.getEmailButtonIcon(emailState.state);
-            const tooltip = this.getEmailButtonTooltip(emailState.state, i, emailState.timestamp);
-            const disabled = emailState.state === 'generating' ? 'disabled' : '';
-            
-            buttons.push(`
-                <button class="rtr-email-btn ${buttonClass}" 
-                        data-prospect-id="${prospect.id}"
-                        data-visitor-id="${prospect.visitor_id || prospect.id}"
-                        data-room="${room}"
-                        data-email-number="${i}"
-                        data-email-state="${emailState.state}"
-                        title="${tooltip}"
-                        ${disabled}>
-                    <i class="${icon}"></i>
-                    ${emailState.state === 'sent' ? '<span class="rtr-sent-badge">✓</span>' : ''}
-                    ${emailState.state === 'opened' ? '<span class="rtr-opened-badge">👁</span>' : ''}
-                </button>
-            `);
-        }
-        
-        return buttons.join('');
-    }
 
     /**
      * Get CSS class for email button based on state
@@ -944,7 +941,7 @@ export default class ProspectManager {
         if (!confirmed) return;
 
         try {
-            const response = await fetch(`${this.apiUrl}/prospects/${visitorId}/handoff-sales`, {
+            const response = await fetch(`${this.apiUrl}/prospects/${visitorId}/handoff`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -976,7 +973,7 @@ export default class ProspectManager {
     }
 
     removeProspect(visitorId, room) {
-        const card = document.querySelector(`#rtr-room-${room} .rtr-prospect-row[data-visitor-id="${visitorId}"]`);
+        const card = document.querySelector(`#rtr-room-${room} .rtr-prospect-row[data-prospect-id="${visitorId}"]`);
         if (card) {
             card.style.transition = 'all 0.3s ease';
             card.style.opacity = '0';
@@ -985,7 +982,7 @@ export default class ProspectManager {
         }
 
         if (this.prospects[room]) {
-            this.prospects[room] = this.prospects[room].filter(p => p.visitor_id != visitorId);
+            this.prospects[room] = this.prospects[room].filter(p => p.id != visitorId);
             this.updateRoomBadge(room, this.prospects[room].length);
         }
     }

@@ -138,13 +138,18 @@ class AnalyticsManager {
 
             // Check for successful response
             if (data.success) {
-                // Render chart with data
-                this.renderChart(data.data || data);
+                // Transform API data format
+                const chartData = {
+                    dates: (data.data || []).map(item => item.date),
+                    counts: (data.data || []).map(item => item.count),
+                    room: data.room
+                };
+                
+                // Render chart with transformed data
+                this.renderChart(chartData);
 
                 // Update summary stats
                 this.updateSummaryStats(data.summary || {});
-            } else {
-                throw new Error(data.message || 'Failed to load analytics');
             }
 
         } catch (error) {
@@ -170,18 +175,19 @@ class AnalyticsManager {
             return;
         }
 
-        // Destroy existing chart if any
+        // Destroy existing chart
         if (this.chart) {
             this.chart.destroy();
+            this.chart = null;
         }
-
-        const canvas = chartContainer.querySelector('canvas') || document.createElement('canvas');
-
-        if (!chartContainer.querySelector('canvas')) {
-            chartContainer.innerHTML = '';
-            chartContainer.appendChild(canvas);
-        }
-
+        
+        // Clear container
+        chartContainer.innerHTML = '';
+        
+        // Create new canvas
+        const canvas = document.createElement('canvas');
+        chartContainer.appendChild(canvas);
+        
         const ctx = canvas.getContext('2d');
 
         this.chart = new Chart(ctx, {

@@ -227,7 +227,7 @@ class CPD_Email_Tracking_Manager {
         // Find the tracking record
         $tracking = $this->wpdb->get_row(
             $this->wpdb->prepare(
-                "SELECT id, status FROM {$this->table_name} WHERE tracking_token = %s LIMIT 1",
+                "SELECT id, status, opened_at FROM {$this->table_name} WHERE tracking_token = %s LIMIT 1",
                 $tracking_token
             )
         );
@@ -240,33 +240,36 @@ class CPD_Email_Tracking_Manager {
             return false;
         }
 
-        // Only update if not already opened
+        // Update opened_at every time (tracks most recent open)
+        $update_data = array( 'opened_at' => current_time( 'mysql' ) );
+        
+        // Only change status if not already opened
         if ( $tracking->status !== 'opened' ) {
-            $result = $this->wpdb->update(
-                $this->table_name,
-                array(
-                    'status' => 'opened',
-                    'opened_at' => current_time( 'mysql' ),
-                ),
-                array( 'id' => $tracking->id ),
-                array( '%s', '%s' ),
-                array( '%d' )
-            );
-
-            if ( $result === false ) {
-                error_log( sprintf(
-                    '[DirectReach] Failed to mark tracking %d as opened. DB Error: %s',
-                    $tracking->id,
-                    $this->wpdb->last_error
-                ) );
-                return false;
-            }
-
-            error_log( sprintf(
-                '[DirectReach] Marked tracking record %d as opened',
-                $tracking->id
-            ) );
+            $update_data['status'] = 'opened';
         }
+
+        $result = $this->wpdb->update(
+            $this->table_name,
+            $update_data,
+            array( 'id' => $tracking->id ),
+            array_fill( 0, count( $update_data ), '%s' ),
+            array( '%d' )
+        );
+
+        if ( $result === false ) {
+            error_log( sprintf(
+                '[DirectReach] Failed to update tracking %d. DB Error: %s',
+                $tracking->id,
+                $this->wpdb->last_error
+            ) );
+            return false;
+        }
+
+        error_log( sprintf(
+            '[DirectReach] Updated tracking record %d (opened: %s)',
+            $tracking->id,
+            $tracking->status === 'opened' ? 'already' : 'now'
+        ) );
 
         return true;
     }

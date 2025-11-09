@@ -729,6 +729,7 @@ class Jobs_Controller extends WP_REST_Controller {
                             'contact_email'           => $visitor->email ?? '',
                             'company_name'            => $visitor->company_name ?? '',
                             'contact_name'            => trim(($visitor->first_name ?? '') . ' ' . ($visitor->last_name ?? '')),
+                            'job_title'               => $visitor->job_title ?? '',
                             'lead_score'              => $visitor->lead_score ?? 0,
                             'current_room'            => $initial_room,
                             'days_in_room'            => 0,
@@ -736,7 +737,7 @@ class Jobs_Controller extends WP_REST_Controller {
                             'created_at'              => current_time('mysql'),
                             'updated_at'              => current_time('mysql'),
                         ],
-                        ['%d', '%d', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%s', '%s']
+                        ['%d', '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%d', '%d', '%s', '%s']
                     );
 
                     $created++;

@@ -111,6 +111,18 @@ final class Reading_Room_Controller extends WP_REST_Controller
             ],
         ]);
 
+        register_rest_route($this->namespace, '/analytics/room-trends', [
+            [
+                'methods'             => WP_REST_Server::READABLE,
+                'callback'            => [$this, 'get_room_trends'],
+                'permission_callback' => [$this, 'check_permission'],
+                'args'                => [
+                    'room' => ['type' => 'string', 'required' => true],
+                    'days' => ['type' => 'integer', 'default' => 30],
+                ],
+            ],
+        ]);
+        
         // Campaigns endpoint
         register_rest_route($this->namespace, '/campaigns', [
             [
@@ -119,6 +131,9 @@ final class Reading_Room_Controller extends WP_REST_Controller
                 'permission_callback' => [$this, 'check_permission'],
             ],
         ]);
+
+
+
     }
 
 
@@ -170,6 +185,13 @@ final class Reading_Room_Controller extends WP_REST_Controller
                     return ($prospect['room'] ?? '') === $requested_room;
                 }));
             }
+
+            // Sort by lead_score descending (highest scores first)
+            usort($prospects, function($a, $b) {
+                $score_a = (int) ($a['lead_score'] ?? 0);
+                $score_b = (int) ($b['lead_score'] ?? 0);
+                return $score_b - $score_a; // Descending order
+            });            
 
             return new WP_REST_Response([
                 'success' => true,
@@ -228,7 +250,7 @@ final class Reading_Room_Controller extends WP_REST_Controller
         $id = (int) $request->get_param('id');
         
         try {
-            // Update prospect status to archived
+            // Get the prospect
             $prospect = $this->db->get_prospect($id);
             if (!$prospect) {
                 return new WP_REST_Response([
@@ -237,17 +259,10 @@ final class Reading_Room_Controller extends WP_REST_Controller
                 ], 404);
             }
 
-            // Parse attributes
-            $attributes = !empty($prospect['attributes']) 
-                ? json_decode($prospect['attributes'], true) 
-                : [];
-            
-            $attributes['status'] = 'archived';
-            $attributes['archived_at'] = current_time('mysql');
-
+            // Update prospect with archived_at timestamp
             $result = $this->db->save_prospect([
-                'id'         => $id,
-                'attributes' => $attributes,
+                'id'          => $id,
+                'archived_at' => current_time('mysql'),
             ]);
 
             if (!$result) {
@@ -269,6 +284,7 @@ final class Reading_Room_Controller extends WP_REST_Controller
         }
     }
 
+
     /**
      * Hand off prospect to sales.
      */
@@ -285,30 +301,16 @@ final class Reading_Room_Controller extends WP_REST_Controller
                 ], 404);
             }
 
-            // Parse attributes
-            $attributes = !empty($prospect['attributes']) 
-                ? json_decode($prospect['attributes'], true) 
-                : [];
-            
-            // Update room to sales
-            $attributes['room'] = 'sales';
-            $attributes['handed_off_at'] = current_time('mysql');
-
             $result = $this->db->save_prospect([
-                'id'         => $id,
-                'attributes' => $attributes,
+                'id'                => $id,
+                'current_room'      => 'sales',
+                'sales_handoff_at'  => current_time('mysql'),
+                'handoff_notes'     => 'Handed off from dashboard',
             ]);
 
             if (!$result) {
                 throw new \Exception('Failed to update prospect');
             }
-
-            // Log the handoff event
-            $this->db->log_event([
-                'prospect_id' => $id,
-                'event_key'   => 'sales_handoff',
-                'event_value' => json_encode(['status' => 'handed_off']),
-            ]);
 
             return new WP_REST_Response([
                 'success' => true,
@@ -328,11 +330,12 @@ final class Reading_Room_Controller extends WP_REST_Controller
     /**
      * Get room counts with filters.
      *
-     * FIX: Proper counting logic based on prospect attributes
      */
     public function get_room_counts(WP_REST_Request $request): WP_REST_Response
     {
         try {
+            global $wpdb;
+            
             $filters = [];
             
             if ($request->has_param('client_id') && !empty($request->get_param('client_id'))) {
@@ -345,33 +348,206 @@ final class Reading_Room_Controller extends WP_REST_Controller
 
             $prospects = $this->db->get_prospects($filters);
 
-            // FIX: Count prospects by room
+            // Initialize counts and analytics
             $counts = [
                 'problem'  => 0,
                 'solution' => 0,
                 'offer'    => 0,
                 'sales'    => 0,
             ];
+            
+            $analytics = [
+                'problem' => [
+                    'new_today' => 0,
+                    'progress_rate' => 0,
+                ],
+                'solution' => [
+                    'high_scores' => 0,
+                    'open_rate' => 0,
+                ],
+                'offer' => [
+                    'high_scores' => 0,
+                    'click_rate' => 0,
+                ],
+                'sales' => [
+                    'this_week' => 0,
+                    'avg_days' => 0,
+                ],
+            ];
+            
+            // Track prospects by room for calculations
+            $room_prospects = [
+                'problem' => [],
+                'solution' => [],
+                'offer' => [],
+                'sales' => [],
+            ];
+            
+            $today = date('Y-m-d');
+            $week_ago = date('Y-m-d', strtotime('-7 days'));
 
             foreach ($prospects as $prospect) {
                 // Skip archived prospects
-                if (!empty($prospect['attributes'])) {
-                    $attrs = json_decode($prospect['attributes'], true);
-                    if (isset($attrs['status']) && $attrs['status'] === 'archived') {
-                        continue;
-                    }
+                if (!empty($prospect['archived_at'])) {
+                    continue;
                 }
 
                 // Determine room
                 $room = $this->determine_prospect_room($prospect);
-                if (isset($counts[$room])) {
-                    $counts[$room]++;
+                
+                if (!isset($counts[$room])) {
+                    continue;
+                }
+                
+                $counts[$room]++;
+                $room_prospects[$room][] = $prospect;
+                
+                // Calculate room-specific analytics
+                $created_date = substr($prospect['created_at'], 0, 10);
+                
+                switch ($room) {
+                    case 'problem':
+                        // Count new today
+                        if ($created_date === $today) {
+                            $analytics['problem']['new_today']++;
+                        }
+                        break;
+                        
+                    case 'solution':
+                        // Count high scores (>=50)
+                        if (!empty($prospect['lead_score']) && $prospect['lead_score'] >= 50) {
+                            $analytics['solution']['high_scores']++;
+                        }
+                        break;
+                        
+                    case 'offer':
+                        // Count high scores (>=70)
+                        if (!empty($prospect['lead_score']) && $prospect['lead_score'] >= 70) {
+                            $analytics['offer']['high_scores']++;
+                        }
+                        break;
+                        
+                    case 'sales':
+                        // Count handoffs this week
+                        if (!empty($prospect['sales_handoff_at'])) {
+                            $handoff_date = substr($prospect['sales_handoff_at'], 0, 10);
+                            if ($handoff_date >= $week_ago) {
+                                $analytics['sales']['this_week']++;
+                            }
+                        }
+                        break;
+                }
+            }
+            
+            // Calculate progress rate for Problem room
+            // (prospects that moved from problem to solution)
+            if ($counts['problem'] > 0) {
+                $table_progression = $wpdb->prefix . 'rtr_room_progression';
+                $progress_count = $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(DISTINCT visitor_id) 
+                    FROM {$table_progression} 
+                    WHERE from_room = 'problem' 
+                    AND to_room = 'solution'
+                    AND transitioned_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)" // Change created_at to transitioned_at
+                ));
+                
+                if ($progress_count) {
+                    $analytics['problem']['progress_rate'] = round(
+                        ($progress_count / ($counts['problem'] + $progress_count)) * 100
+                    );
+                }
+            }
+            
+            // Calculate email open rate for Solution room
+            if ($counts['solution'] > 0) {
+                $solution_visitor_ids = array_column($room_prospects['solution'], 'visitor_id');
+                
+                if (!empty($solution_visitor_ids)) {
+                    $placeholders = implode(',', array_fill(0, count($solution_visitor_ids), '%d'));
+                    $table_tracking = $wpdb->prefix . 'rtr_email_tracking';
+                    
+                    $email_stats = $wpdb->get_row($wpdb->prepare(
+                        "SELECT 
+                            COUNT(DISTINCT visitor_id) as total_sent,
+                            COUNT(DISTINCT CASE WHEN opened_at IS NOT NULL THEN visitor_id END) as total_opened
+                        FROM {$table_tracking}
+                        WHERE visitor_id IN ({$placeholders})
+                        AND room_type = 'solution'
+                        AND status IN ('sent', 'opened', 'clicked')",
+                        $solution_visitor_ids
+                    ));
+                    
+                    if ($email_stats && $email_stats->total_sent > 0) {
+                        $analytics['solution']['open_rate'] = round(
+                            ($email_stats->total_opened / $email_stats->total_sent) * 100
+                        );
+                    }
+                }
+            }
+            
+            // Calculate email click rate for Offer room
+            if ($counts['offer'] > 0) {
+                $offer_visitor_ids = array_column($room_prospects['offer'], 'visitor_id');
+                
+                if (!empty($offer_visitor_ids)) {
+                    $placeholders = implode(',', array_fill(0, count($offer_visitor_ids), '%d'));
+                    $table_tracking = $wpdb->prefix . 'rtr_email_tracking';
+                    
+                    $email_stats = $wpdb->get_row($wpdb->prepare(
+                        "SELECT 
+                            COUNT(DISTINCT visitor_id) as total_sent,
+                            COUNT(DISTINCT CASE WHEN clicked_at IS NOT NULL THEN visitor_id END) as total_clicked
+                        FROM {$table_tracking}
+                        WHERE visitor_id IN ({$placeholders})
+                        AND room_type = 'offer'
+                        AND status IN ('sent', 'opened', 'clicked')",
+                        $offer_visitor_ids
+                    ));
+                    
+                    if ($email_stats && $email_stats->total_sent > 0) {
+                        $analytics['offer']['click_rate'] = round(
+                            ($email_stats->total_clicked / $email_stats->total_sent) * 100
+                        );
+                    }
+                }
+            }
+            
+            // Calculate average days for Sales room
+            if ($counts['sales'] > 0) {
+                $sales_visitor_ids = array_column($room_prospects['sales'], 'visitor_id');
+                
+                if (!empty($sales_visitor_ids)) {
+                    $placeholders = implode(',', array_fill(0, count($sales_visitor_ids), '%d'));
+                    $table_progression = $wpdb->prefix . 'rtr_room_progression';
+                    
+                    $avg_days = $wpdb->get_var($wpdb->prepare(
+                        "SELECT AVG(DATEDIFF(
+                            (SELECT transitioned_at FROM {$table_progression} p2 
+                            WHERE p2.visitor_id = p1.visitor_id 
+                            AND p2.to_room = 'sales' 
+                            ORDER BY p2.transitioned_at DESC LIMIT 1),
+                            (SELECT transitioned_at FROM {$table_progression} p3 
+                            WHERE p3.visitor_id = p1.visitor_id 
+                            AND p3.to_room = 'offer' 
+                            ORDER BY p3.transitioned_at ASC LIMIT 1)
+                        )) as avg_days
+                        FROM {$table_progression} p1
+                        WHERE p1.visitor_id IN ({$placeholders})
+                        AND p1.to_room = 'sales'
+                        GROUP BY p1.visitor_id",
+                        $sales_visitor_ids
+                    ));
+                    
+                    if ($avg_days) {
+                        $analytics['sales']['avg_days'] = round($avg_days, 1);
+                    }
                 }
             }
 
             return new WP_REST_Response([
                 'success' => true,
                 'data'    => $counts,
+                'analytics' => $analytics,
                 'total'   => array_sum($counts),
             ], 200);
 
@@ -384,6 +560,72 @@ final class Reading_Room_Controller extends WP_REST_Controller
             ], 500);
         }
     }
+
+
+    public function get_room_trends(WP_REST_Request $request): WP_REST_Response
+    {
+        $room = $request->get_param('room');
+        $days = (int) $request->get_param('days') ?: 30;
+        
+        global $wpdb;
+        $table = $wpdb->prefix . 'rtr_prospects';
+        
+        // For sales room, check sales_handoff_at
+        if ($room === 'sales') {
+            $where = "sales_handoff_at IS NOT NULL AND archived_at IS NULL";
+        } else {
+            $where = $wpdb->prepare(
+                "current_room = %s AND archived_at IS NULL AND sales_handoff_at IS NULL",
+                $room
+            );
+        }
+
+        $trends = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT DATE(created_at) as date, COUNT(*) as count
+                FROM {$table}
+                WHERE {$where}
+                AND created_at >= DATE_SUB(NOW(), INTERVAL %d DAY)
+                GROUP BY DATE(created_at)
+                ORDER BY date ASC",
+                $days
+            ),
+            ARRAY_A
+        );
+
+        // Same for summary stats
+        $summary = $wpdb->get_row(
+            "SELECT 
+                COUNT(*) as total,
+                AVG(lead_score) as avg_score
+            FROM {$table}
+            WHERE {$where}",
+            ARRAY_A
+        );
+        
+        // Calculate conversion rate (prospects moved to next room)
+        $moved_count = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(DISTINCT visitor_id)
+            FROM {$wpdb->prefix}rtr_room_progression
+            WHERE from_room = %s
+            AND transitioned_at >= DATE_SUB(NOW(), INTERVAL %d DAY)",
+            $room,
+            $days
+        ));
+        
+        $total = (int) ($summary['total'] ?? 0);
+        $summary['conversion_rate'] = $total > 0 ? round((float)$moved_count / $total * 100, 1) : 0;
+        $summary['avg_score'] = round((float)($summary['avg_score'] ?? 0), 1);
+        
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => $trends,
+            'summary' => $summary,
+            'room' => $room,
+            'days' => $days,
+        ], 200);
+    }
+
 
     private function get_room_thresholds(?int $client_id = null): array
     {
@@ -545,16 +787,17 @@ final class Reading_Room_Controller extends WP_REST_Controller
     /**
      * Helper: Determine which room a prospect belongs to.
      *
-     * FIX: Consistent room determination logic matching JS side
      */
     private function determine_prospect_room(array $prospect): string
     {
-        // Check explicit room in attributes first
-        if (!empty($prospect['attributes'])) {
-            $attrs = json_decode($prospect['attributes'], true);
-            if (isset($attrs['room']) && in_array($attrs['room'], ['problem', 'solution', 'offer', 'sales'])) {
-                return $attrs['room'];
-            }
+        // Check if handed off to sales
+        if (!empty($prospect['sales_handoff_at'])) {
+            return 'sales';
+        }
+        
+        // Check current_room column
+        if (!empty($prospect['current_room']) && in_array($prospect['current_room'], ['problem', 'solution', 'offer', 'sales'])) {
+            return $prospect['current_room'];
         }
 
         // Get client_id from prospect data
@@ -575,7 +818,6 @@ final class Reading_Room_Controller extends WP_REST_Controller
             return 'problem';
         }
         
-        // Score of 0 or doesn't fit any room = 'none'
         return 'none';
     }
 

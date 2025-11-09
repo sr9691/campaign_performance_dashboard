@@ -83,12 +83,14 @@ export default class RoomManager {
 
             const apiResponse = await response.json();
             
-            // API returns: { success: true, data: { problem: 0, solution: 0, ... }, total: 0 }
+            // API now returns: { success: true, data: {...counts}, analytics: {...stats}, total: 0 }
             if (!apiResponse.success || !apiResponse.data) {
                 throw new Error('Invalid API response format');
             }
             
             this.currentData = apiResponse.data;
+            this.currentAnalytics = apiResponse.analytics || {}; // Store analytics data
+            
             this.renderRoomCards(apiResponse.data);
         } catch (error) {
             console.error('Failed to load room counts:', error);
@@ -97,6 +99,7 @@ export default class RoomManager {
             }));
             
             // Render empty cards on error
+            this.currentAnalytics = {};
             this.renderRoomCards({
                 problem: 0,
                 solution: 0,
@@ -112,6 +115,10 @@ export default class RoomManager {
             console.error('Room cards container not found');
             return;
         }
+
+        // Extract counts and analytics from API response
+        const counts = data;
+        const analytics = this.currentAnalytics || {}; // Will be set by loadRoomCounts
 
         const rooms = ['problem', 'solution', 'offer', 'sales'];
         const roomConfig = {
@@ -147,13 +154,44 @@ export default class RoomManager {
 
         const html = rooms.map(room => {
             const config = roomConfig[room];
-            const count = data[room] || 0;
+            const count = counts[room] || 0;
+            const roomAnalytics = analytics[room] || {};
+
+            // Get stat values based on room type
+            let stat1Value, stat1Label, stat2Value, stat2Label;
+
+            switch(room) {
+                case 'problem':
+                    stat1Value = roomAnalytics.new_today || 0;
+                    stat1Label = 'New Today';
+                    stat2Value = (roomAnalytics.progress_rate || 0) + '%';
+                    stat2Label = 'Progress Rate';
+                    break;
+                case 'solution':
+                    stat1Value = roomAnalytics.high_scores || 0;
+                    stat1Label = 'High Scores';
+                    stat2Value = (roomAnalytics.open_rate || 0) + '%';
+                    stat2Label = 'Open Rate';
+                    break;
+                case 'offer':
+                    stat1Value = roomAnalytics.high_scores || 0;
+                    stat1Label = 'High Scores';
+                    stat2Value = (roomAnalytics.click_rate || 0) + '%';
+                    stat2Label = 'Click Rate';
+                    break;
+                case 'sales':
+                    stat1Value = roomAnalytics.this_week || 0;
+                    stat1Label = 'This Week';
+                    stat2Value = (roomAnalytics.avg_days || 0);
+                    stat2Label = 'Avg Days';
+                    break;
+            }
 
             return `
                 <div class="rtr-room-card rtr-room-${config.color}" 
-                     data-room="${room}"
-                     role="article"
-                     aria-label="${config.title}">
+                    data-room="${room}"
+                    role="article"
+                    aria-label="${config.title}">
                     <div class="rtr-room-card-inner">
                         <div class="rtr-room-header">
                             <div class="rtr-room-icon">
@@ -183,12 +221,12 @@ export default class RoomManager {
                         <div class="rtr-room-stats">
                             <div class="rtr-stats-grid">
                                 <div class="rtr-stat-item">
-                                    <span class="rtr-stat-value">0</span>
-                                    <span class="rtr-stat-label">${room === 'problem' ? 'New Today' : room === 'sales' ? 'This Week' : 'High Scores'}</span>
+                                    <span class="rtr-stat-value">${stat1Value}</span>
+                                    <span class="rtr-stat-label">${stat1Label}</span>
                                 </div>
                                 <div class="rtr-stat-item">
-                                    <span class="rtr-stat-value">0%</span>
-                                    <span class="rtr-stat-label">${room === 'problem' ? 'Progress Rate' : room === 'sales' ? 'Avg Days' : room === 'solution' ? 'Open Rate' : 'Click Rate'}</span>
+                                    <span class="rtr-stat-value">${stat2Value}</span>
+                                    <span class="rtr-stat-label">${stat2Label}</span>
                                 </div>
                             </div>
                         </div>

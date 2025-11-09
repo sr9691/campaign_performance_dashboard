@@ -255,7 +255,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
             "SELECT p.*, c.client_id, c.id as campaign_id
             FROM {$prospects_table} p
             INNER JOIN {$wpdb->prefix}dr_campaign_settings c ON p.campaign_id = c.id
-            WHERE p.id = %d AND p.archived_at IS NULL",
+            WHERE p.visitor_id = %d AND p.archived_at IS NULL",
             $prospect_id
         ) );
         
@@ -267,6 +267,9 @@ class Email_Generation_Controller extends WP_REST_Controller {
             );
         }
         
+        $actual_prospect_id = (int) $prospect->id;
+        error_log( sprintf( '[DirectReach] ID: visitor=%d -> prospect=%d', $prospect_id, $actual_prospect_id ) );
+
         // Parse email states JSON
         $email_states = json_decode( $prospect->email_states, true );
         if ( ! is_array( $email_states ) ) {
@@ -284,7 +287,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
         // Check if email is already in "ready" state (skip if force_regenerate is true)
         if ( !$force_regenerate && isset( $email_states[ $state_key ] ) && $email_states[ $state_key ] === 'ready' ) {
             // Try to get existing email from tracking
-            $existing_email = $this->get_existing_email( $prospect_id, $room_type, $email_number );
+            $existing_email = $this->get_existing_email( $actual_prospect_id, $room_type, $email_number );
             
             if ( $existing_email ) {
                 // Return cached email
@@ -301,7 +304,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
             $wpdb->update(
                 $prospects_table,
                 array( 'email_states' => wp_json_encode( $email_states ) ),
-                array( 'id' => $prospect_id ),
+                array( 'id' => $actual_prospect_id ),
                 array( '%s' ),
                 array( '%d' )
             );
@@ -312,7 +315,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
         $wpdb->update(
             $prospects_table,
             array( 'email_states' => wp_json_encode( $email_states ) ),
-            array( 'id' => $prospect_id ),
+            array( 'id' => $actual_prospect_id ),
             array( '%s' ),
             array( '%d' )
         );
@@ -320,7 +323,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
         try {
             // Call AI generator
             $result = $this->generator->generate_email(
-                $prospect_id,
+                $actual_prospect_id,
                 $prospect->campaign_id,
                 $room_type,
                 $email_number
@@ -347,7 +350,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
             
             // Prepare tracking data with all required fields
             $tracking_data = array(
-                'prospect_id' => $prospect_id,
+                'prospect_id' => $actual_prospect_id,  
                 'visitor_id' => $prospect->visitor_id,
                 'room_type' => $room_type,
                 'email_number' => $email_number,
@@ -397,7 +400,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
             $wpdb->update(
                 $prospects_table,
                 array( 'email_states' => wp_json_encode( $email_states ) ),
-                array( 'id' => $prospect_id ),
+                array( 'id' => $actual_prospect_id ),
                 array( '%s' ),
                 array( '%d' )
             );
@@ -428,7 +431,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
             $wpdb->update(
                 $prospects_table,
                 array( 'email_states' => wp_json_encode( $email_states ) ),
-                array( 'id' => $prospect_id ),
+                array( 'id' => $actual_prospect_id ),
                 array( '%s' ),
                 array( '%d' )
             );
@@ -626,20 +629,43 @@ class Email_Generation_Controller extends WP_REST_Controller {
     public function track_open( $request ) {
         $token = sanitize_text_field( $request->get_param( 'token' ) );
 
+        if ( empty( $token ) ) {
+            error_log( '[DirectReach] Track open called with empty token' );
+            return $this->return_tracking_pixel();
+        }
+
         // Update tracking record (delegates to tracking manager)
         // The tracking manager handles checking if already opened
-        $this->tracking->record_open( $token );
-
-        // Return 1x1 transparent GIF
-        header( 'Content-Type: image/gif' );
-        header( 'Content-Length: 43' );
-        header( 'Cache-Control: no-cache, no-store, must-revalidate, max-age=0' );
-        header( 'Pragma: no-cache' );
-        header( 'Expires: 0' );
+        $this->tracking->mark_as_opened( $token );
         
-        // 1x1 transparent GIF in base64
-        echo base64_decode( 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' );
-        exit;
+        if ( ! $result ) {
+            error_log( sprintf(
+                '[DirectReach] Failed to mark email as opened for token: %s',
+                $token
+            ) );
+        }        
+
+        return $this->return_tracking_pixel();
+    }
+
+    /**
+     * Return a 1x1 transparent tracking pixel
+     *
+     * @return WP_REST_Response
+     */
+    private function return_tracking_pixel() {
+        // 1x1 transparent GIF (43 bytes)
+        $pixel_data = base64_decode( 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' );
+        
+        $response = new WP_REST_Response( $pixel_data );
+        $response->set_status( 200 );
+        $response->header( 'Content-Type', 'image/gif' );
+        $response->header( 'Content-Length', strlen( $pixel_data ) );
+        $response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
+        $response->header( 'Pragma', 'no-cache' );
+        $response->header( 'Expires', '0' );
+        
+        return $response;
     }
 
     /**
@@ -706,7 +732,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
         $result = $wpdb->update(
             $table,
             array( 'urls_sent' => wp_json_encode( $sent_urls ) ),
-            array( 'id' => $prospect_id ),
+            array( 'id' => $actual_prospect_id ),
             array( '%s' ),
             array( '%d' )
         );
@@ -758,7 +784,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
                 'last_email_sent' => current_time( 'mysql' ),
                 'email_sequence_position' => $new_position
             ),
-            array( 'id' => $prospect_id ),
+            array( 'id' => $actual_prospect_id ),
             array( '%s', '%d' ),
             array( '%d' )
         );
@@ -987,17 +1013,39 @@ class Email_Generation_Controller extends WP_REST_Controller {
     public function get_email_states( $request ) {
         global $wpdb;
         
-        $prospect_id = (int) $request->get_param( 'prospect_id' );
+        // Frontend sends visitor_id as 'prospect_id'
+        $visitor_id = (int) $request->get_param( 'prospect_id' );
         
-        if ( ! $prospect_id ) {
+        if ( ! $visitor_id ) {
             return new WP_Error(
-                'missing_prospect_id',
-                'prospect_id is required',
+                'missing_visitor_id',
+                'visitor_id is required',
                 array( 'status' => 400 )
             );
         }
         
-        // Get all email tracking records for prospect
+        // GET THE ACTUAL PROSPECT_ID FROM VISITOR_ID
+        $prospects_table = $wpdb->prefix . 'rtr_prospects';
+        $prospect = $wpdb->get_row( 
+            $wpdb->prepare(
+                "SELECT * FROM {$prospects_table} WHERE visitor_id = %d AND archived_at IS NULL LIMIT 1",
+                $visitor_id
+            ),
+            ARRAY_A
+        );
+        
+        if ( ! $prospect ) {
+            return new WP_Error(
+                'prospect_not_found',
+                'No active prospect found for this visitor',
+                array( 'status' => 404 )
+            );
+        }
+        
+        // Extract actual prospect_id
+        $actual_prospect_id = (int) $prospect['id'];
+        
+        // Get all email tracking records using ACTUAL prospect_id
         $tracking_table = $wpdb->prefix . 'rtr_email_tracking';
         $email_states = $wpdb->get_results( 
             $wpdb->prepare(
@@ -1020,17 +1068,10 @@ class Email_Generation_Controller extends WP_REST_Controller {
                 FROM {$tracking_table}
                 WHERE prospect_id = %d
                 ORDER BY email_number ASC, created_at DESC",
-                $prospect_id
+                $actual_prospect_id
             ), 
             ARRAY_A 
         );
-        
-        // Get prospect summary
-        $prospect = $this->get_prospect( $prospect_id );
-        
-        if ( is_wp_error( $prospect ) ) {
-            return $prospect;
-        }
         
         // Parse urls_sent JSON
         $urls_sent = array();
@@ -1061,7 +1102,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
         return rest_ensure_response( array(
             'success' => true,
             'data' => array(
-                'prospect_id' => $prospect_id,
+                'prospect_id' => $actual_prospect_id,
                 'email_sequence_position' => (int) $prospect['email_sequence_position'],
                 'last_email_sent' => $prospect['last_email_sent'],
                 'urls_sent' => $urls_sent,
@@ -1069,7 +1110,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
                 'summary' => $summary,
             ),
         ));
-    }    
+    } 
 
     /**
      * Check if user has admin permissions
@@ -1219,10 +1260,11 @@ class Email_Generation_Controller extends WP_REST_Controller {
         // Get most recent tracking record for this prospect/email combination
         $tracking = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT * FROM {$table} 
-                WHERE prospect_id = %d 
-                AND email_number = %d 
-                ORDER BY id DESC 
+                "SELECT et.* FROM {$table} et
+                INNER JOIN {$wpdb->prefix}rtr_prospects p ON et.prospect_id = p.id
+                WHERE p.visitor_id = %d 
+                AND et.email_number = %d 
+                ORDER BY et.id DESC 
                 LIMIT 1",
                 $prospect_id,
                 $email_number

@@ -57,6 +57,7 @@ function dr_rtr_require_files(): void
         }
     }
     
+    
     $loaded = true;
 }
 
@@ -192,6 +193,9 @@ add_action('rest_api_init', function() {
         }
     }
 }, 10);
+
+
+
 
 /**
  * Rewrite rules
