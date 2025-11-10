@@ -85,6 +85,19 @@ final class Reading_Room_Controller extends WP_REST_Controller
             ],
         ]);
 
+        register_rest_route($this->namespace, '/prospects/(?P<id>\d+)/update-contact', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'update_prospect_contact'],
+                'permission_callback' => [$this, 'check_permission'],
+                'args'                => [
+                    'contact_name'  => ['type' => 'string', 'required' => true],
+                    'contact_email' => ['type' => 'string', 'required' => false],
+                    'job_title'     => ['type' => 'string', 'required' => false],
+                ],
+            ],
+        ]);
+
         // Analytics endpoints
         register_rest_route($this->namespace, '/analytics/room-counts', [
             [
@@ -967,6 +980,92 @@ final class Reading_Room_Controller extends WP_REST_Controller
         }
         
         return 'none';
+    }
+
+
+    /**
+     * Update prospect contact information.
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response|WP_Error
+     */
+    public function update_prospect_contact(WP_REST_Request $request)
+    {
+        global $wpdb;
+        
+        $visitor_id = (int) $request->get_param('id');
+        $contact_name = sanitize_text_field($request->get_param('contact_name'));
+        $contact_email = sanitize_email($request->get_param('contact_email'));
+        $job_title = sanitize_text_field($request->get_param('job_title'));
+
+        // Validate email if provided
+        if (!empty($contact_email) && !is_email($contact_email)) {
+            return new WP_Error(
+                'invalid_email',
+                'Invalid email address provided',
+                ['status' => 400]
+            );
+        }
+
+        // Update cpd_visitors table
+        $visitor_update = [];
+        
+        // Parse name into first_name and last_name
+        $name_parts = explode(' ', $contact_name, 2);
+        $visitor_update['first_name'] = $name_parts[0];
+        $visitor_update['last_name'] = isset($name_parts[1]) ? $name_parts[1] : '';
+        
+        if (!empty($contact_email)) {
+            $visitor_update['email'] = $contact_email;
+        }
+        
+        if (!empty($job_title)) {
+            $visitor_update['job_title'] = $job_title;
+        }
+
+        $visitor_updated = $wpdb->update(
+            $wpdb->prefix . 'cpd_visitors',
+            $visitor_update,
+            ['id' => $visitor_id],
+            ['%s', '%s', '%s', '%s'],
+            ['%d']
+        );
+
+        // Update rtr_prospects table
+        $prospect_update = [
+            'contact_name' => $contact_name,
+            'updated_at' => current_time('mysql')
+        ];
+        
+        if (!empty($contact_email)) {
+            $prospect_update['contact_email'] = $contact_email;
+        }
+
+        $prospect_updated = $wpdb->update(
+            $wpdb->prefix . 'rtr_prospects',
+            $prospect_update,
+            ['visitor_id' => $visitor_id],
+            ['%s', '%s', '%s'],
+            ['%d']
+        );
+
+        if ($visitor_updated === false || $prospect_updated === false) {
+            return new WP_Error(
+                'update_failed',
+                'Failed to update contact information',
+                ['status' => 500]
+            );
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'Contact information updated successfully',
+            'data' => [
+                'contact_name' => $contact_name,
+                'contact_email' => $contact_email,
+                'job_title' => $job_title
+            ]
+        ], 200);
     }
 
     /**

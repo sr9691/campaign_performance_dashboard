@@ -45,6 +45,7 @@ wp_enqueue_style('directreach-charts', plugin_dir_url(__FILE__) . '../css/charts
 wp_enqueue_style('directreach-ui-utilities', plugin_dir_url(__FILE__) . '../css/ui.css', [], '2.0.0');
 wp_enqueue_style('directreach-responsive', plugin_dir_url(__FILE__) . '../css/responsive.css', [], '2.0.0');
 wp_enqueue_style('directreach-prospect-info-modal', plugin_dir_url(__FILE__) . '../css/prospect-info-modal.css', [], '2.0.0');
+wp_enqueue_style('directreach-score-breakdown-modal', plugin_dir_url(__FILE__) . '../css/score-breakdown-modal.css', [], '2.0.0');
 
 wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css', [], '5.15.4');
 wp_enqueue_script('chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js', array(), '4.4.0', true);

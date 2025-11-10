@@ -13,6 +13,7 @@ import EmailHistoryManager from './modules/email-history-manager.js';
 import AnalyticsManager from './modules/analytics-manager.js';
 import EmailStatusPoller from './modules/email-status-poller.js';
 import ProspectInfoModal from './modules/prospect-info-modal.js';
+import ScoreBreakdownModal from './modules/score-breakdown-modal.js';
 
 class RTRDashboard {
     constructor() {
@@ -39,12 +40,9 @@ class RTRDashboard {
             this.managers.emailModal = new EmailModalManager(this.managers.apiClient, this.config);
             this.managers.emailHistory = new EmailHistoryManager(this.config);
             this.managers.analytics = new AnalyticsManager(this.config);
-            
-            // NEW: Initialize email status poller
             this.managers.emailPoller = new EmailStatusPoller(this.config);
-
-            // Initialize prospect info modal
             this.managers.prospectInfo = new ProspectInfoModal(this.config);
+            this.managers.scoreBreakdown = new ScoreBreakdownModal(this.config);
 
             // Set up global event listeners
             this.setupGlobalEvents();
@@ -129,6 +127,14 @@ class RTRDashboard {
             this.managers.ui.notify(e.detail.message, 'error');
         });
 
+        // Handle prospect scoring info modal open
+        document.addEventListener('rtr:openScoreBreakdown', (e) => {
+            const { visitorId, clientId, prospectName } = e.detail;
+            if (this.managers.scoreBreakdown) {
+                this.managers.scoreBreakdown.open(visitorId, clientId, prospectName);
+            }
+        });
+
         // Global click handler for modals
         document.addEventListener('click', (e) => {
             // Close dropdowns
@@ -149,6 +155,9 @@ class RTRDashboard {
                 this.handleEscape();
             }
         });
+
+
+
     }
 
     setupKeyboardShortcuts() {

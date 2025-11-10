@@ -180,6 +180,23 @@
     line-height: 1;
 }
 
+.rtr-score-clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.rtr-score-clickable:hover {
+    background: rgba(245, 158, 11, 0.1);
+    transform: scale(1.05);
+}
+
+.rtr-score-clickable:active {
+    transform: scale(0.98);
+}
+
 /* Score colors for different rooms */
 .problem-score .score-value {
     color: #ef4444;

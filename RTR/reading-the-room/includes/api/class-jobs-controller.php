@@ -229,6 +229,33 @@ class Jobs_Controller extends WP_REST_Controller {
             ],
         ]);
 
+        // GET /calculate-score - Get score breakdown for a single visitor
+        register_rest_route($this->namespace, '/calculate-score', [
+            [
+                'methods'             => WP_REST_Server::READABLE,
+                'callback'            => [$this, 'get_score_breakdown'],
+                'permission_callback' => '__return_true', // Allow authenticated users
+                'args'                => [
+                    'visitor_id' => [
+                        'required'          => true,
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                        'validate_callback' => function($param) {
+                            return is_numeric($param) && $param > 0;
+                        },
+                    ],
+                    'client_id' => [
+                        'required'          => true,
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
+                        'validate_callback' => function($param) {
+                            return is_numeric($param) && $param > 0;
+                        },
+                    ],
+                ],
+            ],
+        ]);        
+
         error_log(self::LOG_PREFIX . ' Jobs_Controller routes registered successfully');
     }
 
@@ -668,8 +695,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Internal prospect creation logic
-     * PHASE 2.2: Clean pipeline for cpd_visitors -> rtr_prospects
-     * FIXED: Added return type and parameter type
      *
      * @param int|null $client_id Optional client filter.
      * @return array{created: int, updated: int, skipped: int, total: int} Results.
@@ -885,7 +910,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Check if room change is downward movement (score dropped)
-     * FIXED: Uses class constant and added return type
      *
      * @param string $from_room Current room.
      * @param string $to_room   Target room.
@@ -900,8 +924,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Get room thresholds for a campaign
-     * PHASE 2.3: Enhanced with validation, caching with TTL
-     * FIXED: Added cache expiration and return type
      *
      * @param int $campaign_id Campaign ID.
      * @return array{problem_max: int, solution_max: int, offer_min: int} Thresholds.
@@ -985,7 +1007,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Validate room thresholds
-     * FIXED: New comprehensive validation method
      *
      * @param array{problem_max: int, solution_max: int, offer_min: int} $thresholds Thresholds to validate.
      * @return array{valid: bool, errors: array<string>} Validation result.
@@ -1027,8 +1048,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Calculate room assignment based on score
-     * PHASE 2.3: Verified correct logic
-     * FIXED: Improved edge case handling and return type
      *
      * @param int   $lead_score Lead score (0-100+).
      * @param array{problem_max: int, solution_max: int, offer_min: int} $thresholds Room thresholds.
@@ -1041,7 +1060,6 @@ class Jobs_Controller extends WP_REST_Controller {
             return 'none';
         }
         
-        // FIXED: Improved logic to handle edge cases
         // Offer room: score >= offer_min (default: 61+)
         if ($lead_score >= $thresholds['offer_min']) {
             return 'offer';
@@ -1062,8 +1080,57 @@ class Jobs_Controller extends WP_REST_Controller {
     }
 
     /**
+     * Get score breakdown for a single visitor
+     * 
+     * This endpoint returns the detailed scoring breakdown for a prospect,
+     * showing points earned in each room category and the criteria details.
+     *
+     * @param WP_REST_Request $request Request object with visitor_id and client_id
+     * @return WP_REST_Response|WP_Error Score breakdown or error
+     */
+    public function get_score_breakdown($request) {
+        $visitor_id = (int) $request->get_param('visitor_id');
+        $client_id = (int) $request->get_param('client_id');
+
+        // Check if RTR_Score_Calculator is available
+        if (!class_exists('\RTR_Score_Calculator')) {
+            return new WP_Error(
+                'score_calculator_unavailable',
+                'Score calculator module is not available',
+                ['status' => 503]
+            );
+        }
+
+        try {
+            // Instantiate the score calculator
+            $score_calculator = new \RTR_Score_Calculator();
+            
+            // Calculate score with full breakdown (3rd parameter = true)
+            $score_data = $score_calculator->calculate_visitor_score($visitor_id, $client_id, true);
+            
+            if ($score_data === false || !isset($score_data['total_score'])) {
+                return new WP_Error(
+                    'score_calculation_failed',
+                    'Failed to calculate score for this visitor',
+                    ['status' => 500]
+                );
+            }
+            
+            // Return the score breakdown
+            return new WP_REST_Response($score_data, 200);
+
+        } catch (\Exception $e) {
+            error_log('[RTR] Score breakdown error: ' . $e->getMessage());
+            return new WP_Error(
+                'score_breakdown_error',
+                'Error retrieving score breakdown: ' . $e->getMessage(),
+                ['status' => 500]
+            );
+        }
+    }    
+
+    /**
      * Log room transition
-     * FIXED: Added return types
      *
      * @param int    $visitor_id  Visitor ID.
      * @param int    $campaign_id Campaign ID.
@@ -1091,8 +1158,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Log job action
-     * ENHANCED: Better formatting and context
-     * FIXED: Conditional error_log based on WP_DEBUG
      *
      * @param string $action_type Action type.
      * @param string $description Description.
@@ -1123,7 +1188,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Check API key authentication
-     * FIXED: Added return type
      *
      * @param WP_REST_Request $request Request object.
      * @return bool|WP_Error True if authenticated, WP_Error otherwise.

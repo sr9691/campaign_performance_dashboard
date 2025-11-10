@@ -138,6 +138,27 @@ export default class ProspectManager {
                 const room = historyBtn.dataset.room;
                 this.handleEmailHistoryClick(visitorId, room);
             }
+
+            // Edit contact button
+            const editContactBtn = e.target.closest('.rtr-edit-contact-btn');
+            if (editContactBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const visitorId = editContactBtn.dataset.visitorId;
+                const room = editContactBtn.dataset.room;
+                this.handleEditContact(visitorId, room);
+            }
+
+            // Event Delegation - Lead Score Click
+            const scoreValue = e.target.closest('.rtr-score-clickable');
+            if (scoreValue) {
+                e.preventDefault();
+                const visitorId = scoreValue.dataset.visitorId;
+                const clientId = scoreValue.dataset.clientId;
+                const prospectName = scoreValue.dataset.prospectName;
+                this.handleScoreClick(visitorId, clientId, prospectName);
+            }
+
         });
     }
 
@@ -314,14 +335,26 @@ export default class ProspectManager {
         const infoSection = document.createElement('div');
         infoSection.className = 'rtr-prospect-info';
 
-        // Name - handle multiple field formats
+        // Name - handle multiple field formats with edit button for Unknown
         const nameEl = document.createElement('h3');
         nameEl.className = 'rtr-prospect-name';
         const prospectName = prospect.contact_name || 
                             `${prospect.first_name || ''} ${prospect.last_name || ''}`.trim() ||
                             prospect.name ||
-                            'Unknown';
+                            'Name Unknown';
         nameEl.textContent = prospectName;
+        
+        // Add edit button for Unknown prospects
+        if (prospectName === 'Name Unknown') {
+            const editBtn = document.createElement('button');
+            editBtn.className = 'rtr-edit-contact-btn';
+            editBtn.innerHTML = '<i class="fas fa-user-edit"></i>';
+            editBtn.title = 'Add contact information';
+            editBtn.dataset.visitorId = prospect.visitor_id || prospect.id;
+            editBtn.dataset.room = room;
+            nameEl.appendChild(editBtn);
+        }
+        
         infoSection.appendChild(nameEl);
 
         // Job Title
@@ -334,7 +367,7 @@ export default class ProspectManager {
         }
 
         // Company (with ellipsis)
-        const companyName = prospect.company_name || prospect.company || '';
+        const companyName = prospect.company_name || prospect.company || 'Company Unknown';
         if (companyName) {
             const companyEl = document.createElement('p');
             companyEl.className = 'rtr-company';
@@ -373,9 +406,17 @@ export default class ProspectManager {
         scoreLabel.textContent = 'Lead Score:';
         
         const scoreValue = document.createElement('span');
-        scoreValue.className = 'rtr-score-value';
+        scoreValue.className = 'rtr-score-value rtr-score-clickable';
         scoreValue.textContent = prospect.lead_score || '0';
-        
+        scoreValue.title = 'Click to view score breakdown';
+        scoreValue.style.cursor = 'pointer';
+        scoreValue.dataset.visitorId = prospect.visitor_id || prospect.id;
+        scoreValue.dataset.clientId = prospect.client_id || '';
+        scoreValue.dataset.prospectName = prospect.contact_name || 
+                            `${prospect.first_name || ''} ${prospect.last_name || ''}`.trim() ||
+                            prospect.name ||
+                            'Unknown';
+                                    
         scoreContainer.appendChild(scoreLabel);
         scoreContainer.appendChild(scoreValue);
         rightSection.appendChild(scoreContainer);
@@ -981,6 +1022,129 @@ export default class ProspectManager {
             detail: { visitorId, room }
         }));
     }
+
+    /**
+     * Handle score breakdown click
+     * Opens the score breakdown modal with detailed scoring criteria
+     */
+    handleScoreClick(visitorId, clientId, prospectName) {
+        console.log(`Opening score breakdown for visitor ${visitorId}, client ${clientId}`);
+        
+        // Dispatch event to open score breakdown modal
+        document.dispatchEvent(new CustomEvent('rtr:openScoreBreakdown', {
+            detail: { 
+                visitorId, 
+                clientId,
+                prospectName 
+            }
+        }));
+    }    
+
+    async handleEditContact(visitorId, room) {
+        if (!this.uiManager) {
+            console.error('UI Manager not set');
+            return;
+        }
+
+        // Create modal HTML
+        const modalHtml = `
+            <div class="rtr-contact-edit-modal">
+                <h4>Add Contact Information</h4>
+                <form id="contact-edit-form">
+                    <div class="form-group">
+                        <label for="contact-name">Name *</label>
+                        <input type="text" id="contact-name" name="contact_name" required 
+                               placeholder="John Doe" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="contact-email">Email</label>
+                        <input type="email" id="contact-email" name="contact_email" 
+                               placeholder="john@example.com" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="job-title">Job Title</label>
+                        <input type="text" id="job-title" name="job_title" 
+                               placeholder="Marketing Director" class="form-control">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-cancel">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Contact</button>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        // Create modal container
+        const modal = document.createElement('div');
+        modal.className = 'rtr-modal-overlay active';
+        modal.innerHTML = modalHtml;
+        document.body.appendChild(modal);
+
+        // Handle form submission
+        const form = modal.querySelector('#contact-edit-form');
+        const cancelBtn = modal.querySelector('.btn-cancel');
+
+        const closeModal = () => {
+            modal.classList.remove('active');
+            setTimeout(() => modal.remove(), 300);
+        };
+
+        cancelBtn.onclick = closeModal;
+        modal.onclick = (e) => {
+            if (e.target === modal) closeModal();
+        };
+
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                contact_name: form.querySelector('#contact-name').value.trim(),
+                contact_email: form.querySelector('#contact-email').value.trim(),
+                job_title: form.querySelector('#job-title').value.trim()
+            };
+
+            if (!formData.contact_name) {
+                this.uiManager.notify('Name is required', 'error');
+                return;
+            }
+
+            try {
+                this.uiManager.showLoader('Saving contact information...');
+
+                const response = await fetch(`${this.apiUrl}/prospects/${visitorId}/update-contact`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-WP-Nonce': this.nonce
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Failed to update contact');
+                }
+
+                this.uiManager.notify('Contact information saved successfully', 'success');
+                closeModal();
+                
+                // Reload the room to show updated data
+                await this.loadRoomProspects(room);
+
+            } catch (error) {
+                console.error('Failed to update contact:', error);
+                this.uiManager.notify(error.message || 'Failed to save contact information', 'error');
+            } finally {
+                this.uiManager.hideLoader();
+            }
+        };
+
+        // Focus on name field
+        setTimeout(() => {
+            modal.querySelector('#contact-name').focus();
+        }, 100);
+    }    
 
     removeProspect(visitorId, room) {
         const card = document.querySelector(`#rtr-room-${room} .rtr-prospect-row[data-prospect-id="${visitorId}"]`);

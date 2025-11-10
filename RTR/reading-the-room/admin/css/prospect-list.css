@@ -433,6 +433,136 @@
     }
 }
 
+
+/* Edit Contact Button */
+.rtr-edit-contact-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 8px;
+    padding: 4px 8px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    vertical-align: middle;
+}
+
+.rtr-edit-contact-btn:hover {
+    background: #2563eb;
+    transform: scale(1.05);
+}
+
+.rtr-edit-contact-btn:active {
+    transform: scale(0.95);
+}
+
+.rtr-edit-contact-btn i {
+    font-size: 14px;
+}
+
+/* Contact Edit Modal */
+.rtr-contact-edit-modal {
+    background: white;
+    border-radius: 12px;
+    padding: 2rem;
+    width: 90%;
+    max-width: 500px;
+    position: relative;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.rtr-contact-edit-modal h4 {
+    margin: 0 0 1.5rem 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.rtr-contact-edit-modal .form-group {
+    margin-bottom: 1.25rem;
+}
+
+.rtr-contact-edit-modal label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 0.5rem;
+}
+
+.rtr-contact-edit-modal .form-control {
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    font-family: inherit;
+}
+
+.rtr-contact-edit-modal .form-control:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.rtr-contact-edit-modal .form-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    margin-top: 2rem;
+}
+
+.rtr-contact-edit-modal .btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.rtr-contact-edit-modal .btn-cancel {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.rtr-contact-edit-modal .btn-cancel:hover {
+    background: #e5e7eb;
+}
+
+.rtr-contact-edit-modal .btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.rtr-contact-edit-modal .btn-primary:hover {
+    background: #2563eb;
+}
+
+/* Modal Overlay */
+.rtr-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.rtr-modal-overlay.active {
+    opacity: 1;
+}
+
 @media print {
     .rtr-prospect-actions,
     .rtr-email-sequence {
