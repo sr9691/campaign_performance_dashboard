@@ -24,6 +24,7 @@ define('DR_RTR_ADMIN_DIR', DR_RTR_PLUGIN_DIR . 'admin/');
 define('DR_RTR_ADMIN_VIEWS', DR_RTR_ADMIN_DIR . 'views/');
 define('DR_RTR_ASSETS_URL', DR_RTR_PLUGIN_URL . 'assets/');
 
+
 /**
  * Load all required files
  */
@@ -47,6 +48,7 @@ function dr_rtr_require_files(): void
     $api_files = [
         $api_dir . 'class-reading-room-controller.php',
         $api_dir . 'class-jobs-controller.php',
+        $api_dir . 'class-aleads-enrichment.php',
     ];
     
     foreach (array_merge($files, $api_files) as $file) {

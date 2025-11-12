@@ -1046,25 +1046,42 @@ export default class ProspectManager {
             return;
         }
 
+        // Fetch current prospect data
+        const prospect = this.findProspectById(visitorId);
+        const companyName = prospect?.company_name || '';
+        const currentName = prospect?.contact_name || '';
+        const currentEmail = prospect?.contact_email || '';
+        const currentTitle = prospect?.job_title || '';
+
+        // Determine if enrichment search should be shown
+        const showEnrichmentSearch = companyName && (!currentName || !currentEmail);
+
         // Create modal HTML
         const modalHtml = `
             <div class="rtr-contact-edit-modal">
                 <h4>Add Contact Information</h4>
+                ${showEnrichmentSearch ? `
+                <div class="enrichment-search-section">
+                    <button type="button" class="btn btn-enrichment" id="search-contact-btn">
+                        <i class="fas fa-search"></i> Search for Contact at ${this.escapeHtml(companyName)}
+                    </button>
+                </div>
+                ` : ''}
                 <form id="contact-edit-form">
                     <div class="form-group">
                         <label for="contact-name">Name *</label>
                         <input type="text" id="contact-name" name="contact_name" required 
-                               placeholder="John Doe" class="form-control">
+                               placeholder="John Doe" class="form-control" value="${this.escapeHtml(currentName)}">
                     </div>
                     <div class="form-group">
                         <label for="contact-email">Email</label>
                         <input type="email" id="contact-email" name="contact_email" 
-                               placeholder="john@example.com" class="form-control">
+                               placeholder="john@example.com" class="form-control" value="${this.escapeHtml(currentEmail)}">
                     </div>
                     <div class="form-group">
                         <label for="job-title">Job Title</label>
                         <input type="text" id="job-title" name="job_title" 
-                               placeholder="Marketing Director" class="form-control">
+                               placeholder="Marketing Director" class="form-control" value="${this.escapeHtml(currentTitle)}">
                     </div>
                     <div class="form-actions">
                         <button type="button" class="btn btn-cancel">Cancel</button>
@@ -1079,6 +1096,14 @@ export default class ProspectManager {
         modal.className = 'rtr-modal-overlay active';
         modal.innerHTML = modalHtml;
         document.body.appendChild(modal);
+
+        // Handle enrichment search if button exists
+        const searchBtn = modal.querySelector('#search-contact-btn');
+        if (searchBtn) {
+            searchBtn.addEventListener('click', async () => {
+                await this.handleEnrichmentSearch(modal, companyName, visitorId);
+            });
+        }
 
         // Handle form submission
         const form = modal.querySelector('#contact-edit-form');
@@ -1144,6 +1169,183 @@ export default class ProspectManager {
         setTimeout(() => {
             modal.querySelector('#contact-name').focus();
         }, 100);
+    }    
+
+    async handleEnrichmentSearch(parentModal, companyName, visitorId) {
+        try {
+            // Show loading state
+            const searchBtn = parentModal.querySelector('#search-contact-btn');
+            const originalBtnText = searchBtn.innerHTML;
+            searchBtn.disabled = true;
+            searchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+
+            // Call real API
+            const response = await fetch(`${this.apiUrl}/prospects/${visitorId}/enrich-contact`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-WP-Nonce': this.nonce
+                },
+                body: JSON.stringify({
+                    company_name: companyName
+                })
+            });
+
+            const data = await response.json();
+
+            // Reset button
+            searchBtn.disabled = false;
+            searchBtn.innerHTML = originalBtnText;
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Failed to search for contacts');
+            }
+
+            if (!data.success || !data.contacts || data.contacts.length === 0) {
+                if (this.uiManager) {
+                    this.uiManager.notify('No contacts found for this company', 'warning');
+                }
+                return;
+            }
+
+            // Show contact selector modal
+            this.showContactSelectorModal(data.contacts, parentModal, visitorId);
+
+        } catch (error) {
+            console.error('Enrichment search failed:', error);
+            
+            // Reset button on error
+            const searchBtn = parentModal.querySelector('#search-contact-btn');
+            if (searchBtn) {
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = searchBtn.innerHTML.replace(
+                    '<i class="fas fa-spinner fa-spin"></i> Searching...',
+                    '<i class="fas fa-search"></i> Search for Contact'
+                );
+            }
+            
+            if (this.uiManager) {
+                this.uiManager.notify(
+                    error.message || 'Failed to search for contacts', 
+                    'error'
+                );
+            }
+        }
+    }
+
+    showContactSelectorModal(contacts, parentModal, visitorId) {
+        // Filter contacts with valid business emails (backend already filters, but double-check)
+        const validContacts = contacts.filter(c => c.email && c.email.includes('@'));
+
+        if (validContacts.length === 0) {
+            if (this.uiManager) {
+                this.uiManager.notify('No contacts with valid business emails found', 'warning');
+            }
+            return;
+        }
+
+        // Create selector modal HTML
+        const selectorHtml = `
+            <div class="rtr-contact-selector-modal">
+                <div class="selector-header">
+                    <h4>Select Contact</h4>
+                    <button class="selector-close">&times;</button>
+                </div>
+                <div class="selector-info">
+                    Found ${validContacts.length} contact${validContacts.length > 1 ? 's' : ''} with valid business email addresses
+                </div>
+                <div class="contacts-list">
+                    ${validContacts.map((contact, index) => `
+                        <div class="contact-item" data-index="${index}">
+                            <div class="contact-main">
+                                <div class="contact-info">
+                                    <div class="contact-name">${this.escapeHtml(contact.name)}</div>
+                                    <div class="contact-title">${this.escapeHtml(contact.job_title || 'No title available')}</div>
+                                    ${contact.department ? `<div class="contact-department"><i class="fas fa-building"></i> ${this.escapeHtml(contact.department)}</div>` : ''}
+                                    ${contact.seniority ? `<div class="contact-seniority"><i class="fas fa-user-tie"></i> ${this.escapeHtml(contact.seniority)}</div>` : ''}
+                                    <div class="contact-email">
+                                        <i class="fas fa-envelope"></i> ${this.escapeHtml(contact.email)}
+                                    </div>
+                                    ${contact.linkedin ? `
+                                        <div class="contact-linkedin">
+                                            <i class="fab fa-linkedin"></i> 
+                                            <a href="${this.escapeHtml(contact.linkedin)}" target="_blank" rel="noopener">LinkedIn Profile</a>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                                <div class="contact-actions">
+                                    <button class="btn btn-select" data-index="${index}">
+                                        Select
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+
+        // Create selector overlay
+        const selectorOverlay = document.createElement('div');
+        selectorOverlay.className = 'rtr-modal-overlay rtr-selector-overlay active';
+        selectorOverlay.innerHTML = selectorHtml;
+        document.body.appendChild(selectorOverlay);
+
+        // Handle contact selection
+        const selectBtns = selectorOverlay.querySelectorAll('.btn-select');
+        selectBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const index = parseInt(btn.dataset.index);
+                const selectedContact = validContacts[index];
+                this.applySelectedContact(selectedContact, parentModal);
+                
+                // Close selector modal
+                selectorOverlay.classList.remove('active');
+                setTimeout(() => selectorOverlay.remove(), 300);
+            });
+        });
+
+        // Handle close button
+        const closeBtn = selectorOverlay.querySelector('.selector-close');
+        closeBtn.addEventListener('click', () => {
+            selectorOverlay.classList.remove('active');
+            setTimeout(() => selectorOverlay.remove(), 300);
+        });
+
+        // Close on overlay click
+        selectorOverlay.addEventListener('click', (e) => {
+            if (e.target === selectorOverlay) {
+                selectorOverlay.classList.remove('active');
+                setTimeout(() => selectorOverlay.remove(), 300);
+            }
+        });
+    }
+
+    applySelectedContact(contact, parentModal) {
+        // Auto-fill the form fields
+        const nameInput = parentModal.querySelector('#contact-name');
+        const emailInput = parentModal.querySelector('#contact-email');
+        const titleInput = parentModal.querySelector('#job-title');
+
+        if (nameInput) nameInput.value = contact.name;
+        if (emailInput) emailInput.value = contact.email;
+        if (titleInput) titleInput.value = contact.job_title;
+
+        // Show success notification
+        if (this.uiManager) {
+            this.uiManager.notify('Contact information filled. Review and save.', 'success');
+        }
+
+        // Highlight the fields briefly
+        [nameInput, emailInput, titleInput].forEach(input => {
+            if (input) {
+                input.style.transition = 'background-color 0.3s ease';
+                input.style.backgroundColor = '#dbeafe';
+                setTimeout(() => {
+                    input.style.backgroundColor = '';
+                }, 2000);
+            }
+        });
     }    
 
     removeProspect(visitorId, room) {

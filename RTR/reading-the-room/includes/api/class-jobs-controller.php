@@ -229,7 +229,8 @@ class Jobs_Controller extends WP_REST_Controller {
             ],
         ]);
 
-        // GET /calculate-score - Get score breakdown for a single visitor
+        // GET /calculate-score - Get score breakdown for a single visitor or prospect
+        // Accepts either visitor_id (cpd_visitors.id) or prospect_id (rtr_prospects.id)
         register_rest_route($this->namespace, '/calculate-score', [
             [
                 'methods'             => WP_REST_Server::READABLE,
@@ -237,12 +238,16 @@ class Jobs_Controller extends WP_REST_Controller {
                 'permission_callback' => '__return_true', // Allow authenticated users
                 'args'                => [
                     'visitor_id' => [
-                        'required'          => true,
+                        'required'          => false,
                         'type'              => 'integer',
+                        'default'           => 0,
                         'sanitize_callback' => 'absint',
-                        'validate_callback' => function($param) {
-                            return is_numeric($param) && $param > 0;
-                        },
+                    ],
+                    'prospect_id' => [
+                        'required'          => false,
+                        'type'              => 'integer',
+                        'default'           => 0,
+                        'sanitize_callback' => 'absint',
                     ],
                     'client_id' => [
                         'required'          => true,
@@ -590,12 +595,20 @@ class Jobs_Controller extends WP_REST_Controller {
         }
 
         // Get visitors with campaign assignments that need scoring
+        // Recalculate scores for:
+        // 1. Visitors with no score (NULL or 0)
+        // 2. Visitors with new activity since last score calculation
+        // 3. Visitors whose scores are stale (>7 days old)
         $visitors = $wpdb->get_results("
             SELECT DISTINCT v.id, v.visitor_id, vc.campaign_id, cs.client_id
             FROM {$wpdb->prefix}cpd_visitors v
             INNER JOIN {$wpdb->prefix}cpd_visitor_campaigns vc ON v.id = vc.visitor_id
             INNER JOIN {$wpdb->prefix}dr_campaign_settings cs ON vc.campaign_id = cs.id
-            WHERE v.lead_score IS NULL OR v.lead_score = 0
+            WHERE v.lead_score IS NULL 
+                OR v.lead_score = 0
+                OR v.score_calculated_at IS NULL
+                OR v.last_seen_at > v.score_calculated_at
+                OR v.score_calculated_at < DATE_SUB(NOW(), INTERVAL 7 DAY)
         ");
 
         $total = count($visitors);
@@ -609,7 +622,7 @@ class Jobs_Controller extends WP_REST_Controller {
         }
 
         $this->log_job('score_calculation_start', sprintf(
-            'Starting score calculation for %d visitors using RTR_Score_Calculator',
+            'Starting score calculation for %d visitors (new visitors, visitors with new activity, and stale scores >7 days)',
             $total
         ));
 
@@ -646,8 +659,29 @@ class Jobs_Controller extends WP_REST_Controller {
                 if ($score_data !== false && isset($score_data['total_score'])) {
                     $calculated++;
                     $this->job_stats['scores_calculated']++;
+                    
+                    // Log first 5 calculations for debugging
+                    if ($calculated <= 5) {
+                        error_log(sprintf(
+                            '[RTR Nightly Job] Calculated score %d for visitor_id: %d (RB2B: %s), client_id: %d',
+                            $score_data['total_score'],
+                            $visitor_id,
+                            $visitor->visitor_id ?? 'unknown',
+                            $client_id
+                        ));
+                    }
                 } else {
                     $failed++;
+                    
+                    // Log first few failures
+                    if ($failed <= 3) {
+                        error_log(sprintf(
+                            '[RTR Nightly Job] Failed to calculate score for visitor_id: %d (RB2B: %s), client_id: %d',
+                            $visitor_id,
+                            $visitor->visitor_id ?? 'unknown',
+                            $client_id
+                        ));
+                    }
                 }
 
             } catch (\Error $e) {
@@ -1080,17 +1114,60 @@ class Jobs_Controller extends WP_REST_Controller {
     }
 
     /**
-     * Get score breakdown for a single visitor
+     * Get score breakdown for a single visitor or prospect
      * 
      * This endpoint returns the detailed scoring breakdown for a prospect,
      * showing points earned in each room category and the criteria details.
+     * Accepts either visitor_id (cpd_visitors.id) or prospect_id (rtr_prospects.id).
      *
-     * @param WP_REST_Request $request Request object with visitor_id and client_id
+     * @param WP_REST_Request $request Request object with visitor_id/prospect_id and client_id
      * @return WP_REST_Response|WP_Error Score breakdown or error
      */
     public function get_score_breakdown($request) {
+        global $wpdb;
+        
         $visitor_id = (int) $request->get_param('visitor_id');
+        $prospect_id = (int) $request->get_param('prospect_id');
         $client_id = (int) $request->get_param('client_id');
+
+        // If prospect_id is provided, resolve it to visitor_id
+        if ($prospect_id > 0 && $visitor_id === 0) {
+            $prospect = $wpdb->get_row($wpdb->prepare(
+                "SELECT visitor_id FROM {$wpdb->prefix}rtr_prospects WHERE id = %d",
+                $prospect_id
+            ));
+            
+            if ($prospect && $prospect->visitor_id) {
+                $visitor_id = (int) $prospect->visitor_id;
+                error_log(sprintf(
+                    '[RTR Score Breakdown] Resolved prospect_id %d to visitor_id %d',
+                    $prospect_id,
+                    $visitor_id
+                ));
+            } else {
+                return new WP_Error(
+                    'prospect_not_found',
+                    sprintf('Prospect %d not found', $prospect_id),
+                    ['status' => 404]
+                );
+            }
+        }
+
+        if ($visitor_id === 0) {
+            return new WP_Error(
+                'missing_visitor_id',
+                'Either visitor_id or prospect_id must be provided',
+                ['status' => 400]
+            );
+        }
+
+        // Log what we're calculating
+        error_log(sprintf(
+            '[RTR Score Breakdown] Calculating score for visitor_id: %d, client_id: %d, prospect_id: %d',
+            $visitor_id,
+            $client_id,
+            $prospect_id
+        ));
 
         // Check if RTR_Score_Calculator is available
         if (!class_exists('\RTR_Score_Calculator')) {
@@ -1115,6 +1192,19 @@ class Jobs_Controller extends WP_REST_Controller {
                     ['status' => 500]
                 );
             }
+            
+            // Add IDs to response for verification
+            $score_data['visitor_id'] = $visitor_id;
+            $score_data['prospect_id'] = $prospect_id;
+            $score_data['client_id'] = $client_id;
+            
+            // Log the result
+            error_log(sprintf(
+                '[RTR Score Breakdown] Calculated score %d for visitor_id: %d (prospect_id: %d)',
+                $score_data['total_score'],
+                $visitor_id,
+                $prospect_id
+            ));
             
             // Return the score breakdown
             return new WP_REST_Response($score_data, 200);

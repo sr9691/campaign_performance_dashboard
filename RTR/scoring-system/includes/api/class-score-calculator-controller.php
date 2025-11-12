@@ -161,7 +161,7 @@ class RTR_Score_Calculator_Controller extends WP_REST_Controller {
 
             // Calculate new score
             $start_time = microtime(true);
-            $result = $this->calculator->calculate_score($visitor_id, $client_id);
+            $result = $this->calculator->calculate_visitor_score($visitor_id, $client_id, true);
             $calculation_time = (microtime(true) - $start_time) * 1000; // Convert to milliseconds
 
             if (!$result) {

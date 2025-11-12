@@ -14,6 +14,7 @@ declare(strict_types=1);
 namespace DirectReach\ReadingTheRoom\API;
 
 use DirectReach\ReadingTheRoom\Reading_Room_Database;
+use DirectReach\ReadingTheRoom\API\ALeads_Enrichment;
 use WP_REST_Controller;
 use WP_REST_Server;
 use WP_REST_Request;
@@ -29,6 +30,9 @@ final class Reading_Room_Controller extends WP_REST_Controller
     /** @var Reading_Room_Database */
     private $db;
 
+    /** @var \DirectReach\ReadingTheRoom\API\ALeads_Enrichment */
+    private $enrichment;
+
     /** @var string */
     protected $namespace = 'directreach/v1/reading-room';
 
@@ -40,6 +44,8 @@ final class Reading_Room_Controller extends WP_REST_Controller
     public function __construct(Reading_Room_Database $db)
     {
         $this->db = $db;
+        $this->enrichment = new \DirectReach\ReadingTheRoom\API\ALeads_Enrichment();
+
     }
 
     /**
@@ -94,6 +100,17 @@ final class Reading_Room_Controller extends WP_REST_Controller
                     'contact_name'  => ['type' => 'string', 'required' => true],
                     'contact_email' => ['type' => 'string', 'required' => false],
                     'job_title'     => ['type' => 'string', 'required' => false],
+                ],
+            ],
+        ]);
+
+        register_rest_route($this->namespace, '/prospects/(?P<id>\d+)/enrich-contact', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'enrich_prospect_contact'],
+                'permission_callback' => [$this, 'check_permission'],
+                'args'                => [
+                    'company_name' => ['type' => 'string', 'required' => true],
                 ],
             ],
         ]);
@@ -1067,6 +1084,69 @@ final class Reading_Room_Controller extends WP_REST_Controller
             ]
         ], 200);
     }
+
+    /**
+     * Enrich prospect contact using A-Leads API.
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response|WP_Error
+     */
+    public function enrich_prospect_contact(WP_REST_Request $request)
+    {
+        $visitor_id = (int) $request->get_param('id');
+        $company_name = sanitize_text_field($request->get_param('company_name'));
+
+        if (empty($company_name)) {
+            return new WP_Error(
+                'missing_company',
+                'Company name is required',
+                ['status' => 400]
+            );
+        }
+
+        // Check if API is configured
+        if (!$this->enrichment->is_configured()) {
+            return new WP_Error(
+                'api_not_configured',
+                'Contact enrichment service is not configured',
+                ['status' => 500]
+            );
+        }
+
+    // Search for contacts
+        $contacts = $this->enrichment->search_contacts($company_name);
+
+        // Check if search failed (returns empty array)
+        if (empty($contacts)) {
+            // Log the attempt but return success with empty results
+            error_log(sprintf(
+                'Enrichment search for visitor %d at company "%s" returned no contacts',
+                $visitor_id,
+                $company_name
+            ));
+
+            return rest_ensure_response([
+                'success' => false,
+                'message' => 'No contacts found for this company. Please try again or enter contact details manually.',
+                'contacts' => [],
+                'count' => 0
+            ]);
+        }
+
+        // Log successful search
+        error_log(sprintf(
+            'Enrichment search for visitor %d at company "%s" returned %d contacts',
+            $visitor_id,
+            $company_name,
+            count($contacts)
+        ));
+
+        return rest_ensure_response([
+            'success' => true,
+            'contacts' => $contacts,
+            'count' => count($contacts)
+        ]);
+    }    
 
     /**
      * Helper: Get email statistics for a room.
