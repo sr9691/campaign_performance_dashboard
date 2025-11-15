@@ -113,20 +113,6 @@ final class Reading_Room_Controller extends WP_REST_Controller
             ],
         ]);
 
-        register_rest_route($this->namespace, '/prospects/(?P<id>\d+)/find-email', [
-            [
-                'methods'             => WP_REST_Server::CREATABLE,
-                'callback'            => [$this, 'find_contact_email'],
-                'permission_callback' => [$this, 'check_permission'],
-                'args'                => [
-                    'member_id'       => ['type' => 'string', 'required' => true],
-                    'first_name'      => ['type' => 'string', 'required' => true],
-                    'last_name'       => ['type' => 'string', 'required' => true],
-                    'company_domain'  => ['type' => 'string', 'required' => true],
-                ],
-            ],
-        ]);
-
         register_rest_route($this->namespace, '/prospects/(?P<id>\d+)/save-enrichment', [
             [
                 'methods'             => WP_REST_Server::CREATABLE,
@@ -139,6 +125,46 @@ final class Reading_Room_Controller extends WP_REST_Controller
                 ],
             ],
         ]);
+
+        // Find Email endpoint
+        register_rest_route($this->namespace, '/prospects/(?P<id>\d+)/find-email', [
+            'methods' => 'POST',
+            'callback' => [$this, 'find_email'],
+            'permission_callback' => [$this, 'check_permission'],
+            'args' => [
+                'id' => [
+                    'required' => true,
+                    'validate_callback' => function($param) {
+                        return is_numeric($param);
+                    }
+                ]
+            ]
+        ]);
+
+        register_rest_route(
+            'directreach/v1',
+            '/reading-room/prospects/(?P<id>\d+)/verify-email',
+            array(
+                'methods'             => 'POST',
+                'callback'            => array( $this, 'verify_email' ),
+                'permission_callback' => array( $this, 'check_permission' ),
+                'args'                => array(
+                    'id' => array(
+                        'required'          => true,
+                        'validate_callback' => function( $param ) {
+                            return is_numeric( $param );
+                        }
+                    ),
+                    'email' => array(
+                        'required'          => true,
+                        'validate_callback' => function( $param ) {
+                            return is_email( $param );
+                        },
+                        'sanitize_callback' => 'sanitize_email'
+                    )
+                )
+            )
+        );       
 
         // Analytics endpoints
         register_rest_route($this->namespace, '/analytics/room-counts', [
@@ -1157,30 +1183,282 @@ final class Reading_Room_Controller extends WP_REST_Controller
      * @param WP_REST_Request $request
      * @return WP_REST_Response|WP_Error
      */
-    public function find_contact_email(WP_REST_Request $request)
+    public function find_email($request)
     {
-        $member_id = sanitize_text_field($request->get_param('member_id'));
-        $first_name = sanitize_text_field($request->get_param('first_name'));
-        $last_name = sanitize_text_field($request->get_param('last_name'));
-        $company_domain = sanitize_text_field($request->get_param('company_domain'));
+        global $wpdb;
         
-        require_once plugin_dir_path(__FILE__) . '../class-aleads-enrichment.php';
-        $enrichment = new \DirectReach\ReadingTheRoom\API\ALeads_Enrichment();
+        $visitor_id = (int) $request['id'];
+        $body = $request->get_json_params();
         
-        $email_data = $enrichment->find_email($member_id, $first_name, $last_name, $company_domain);
-        
-        if (empty($email_data)) {
-            return new WP_Error(
-                'email_not_found',
-                'Could not find email for this contact',
-                ['status' => 404]
+        try {
+            // WORKFLOW 1: Enrichment Manager (has member_id from search)
+            if (!empty($body['member_id'])) {
+                $result = $this->enrichment->find_email_by_member_id(
+                    $body['member_id'],
+                    $body['first_name'],
+                    $body['last_name'],
+                    $body['company_domain']
+                );
+                
+                if (!empty($result['email'])) {
+                    $wpdb->update(
+                        "{$wpdb->prefix}cpd_visitors",
+                        ['email' => $result['email']],
+                        ['id' => $visitor_id],
+                        ['%s'], ['%d']
+                    );
+                    
+                    $wpdb->update(
+                        "{$wpdb->prefix}rtr_prospects",
+                        ['contact_email' => $result['email']],
+                        ['visitor_id' => $visitor_id],
+                        ['%s'], ['%d']
+                    );
+                    
+                    return new WP_REST_Response([
+                        'success' => true,
+                        'data' => [
+                            'email' => $result['email'],
+                            'confidence' => $result['confidence'] ?? null,
+                            'source' => 'aleads'
+                        ]
+                    ], 200);
+                }
+                
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'Email not found'
+                ], 404);
+            }
+            
+            // WORKFLOW 2: Prospect Info Modal
+            $visitor = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}cpd_visitors WHERE id = %d",
+                $visitor_id
+            ), ARRAY_A);
+            
+            if (!$visitor) {
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'Visitor not found'
+                ], 404);
+            }
+            
+            if (!empty($visitor['email'])) {
+                return new WP_REST_Response([
+                    'success' => true,
+                    'data' => [
+                        'email' => $visitor['email'],
+                        'source' => 'existing'
+                    ]
+                ], 200);
+            }
+            
+            if (empty($visitor['company_name'])) {
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'Company name required'
+                ], 400);
+            }
+            
+            $contacts = $this->enrichment->search_contacts($visitor['company_name']);
+            
+            if (empty($contacts)) {
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'No contacts found'
+                ], 404);
+            }
+            
+            $matched_contact = $this->match_contact($visitor, $contacts);
+            
+            if (!$matched_contact || empty($matched_contact['member_id'])) {
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'No reliable match found'
+                ], 404);
+            }
+            
+            $result = $this->enrichment->find_email_by_member_id(
+                $matched_contact['member_id'],
+                $matched_contact['first_name'] ?? $visitor['first_name'],
+                $matched_contact['last_name'] ?? $visitor['last_name'],
+                $matched_contact['domain'] ?? ''
             );
+            
+            if (!empty($result['email'])) {
+                $wpdb->update(
+                    "{$wpdb->prefix}cpd_visitors",
+                    ['email' => $result['email']],
+                    ['id' => $visitor_id],
+                    ['%s'], ['%d']
+                );
+                
+                $wpdb->update(
+                    "{$wpdb->prefix}rtr_prospects",
+                    ['contact_email' => $result['email']],
+                    ['visitor_id' => $visitor_id],
+                    ['%s'], ['%d']
+                );
+                
+                return new WP_REST_Response([
+                    'success' => true,
+                    'data' => [
+                        'email' => $result['email'],
+                        'confidence' => $result['confidence'] ?? null,
+                        'source' => 'aleads'
+                    ]
+                ], 200);
+            }
+            
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Email not found'
+            ], 404);
+            
+        } catch (\Exception $e) {
+            error_log('Find email error: ' . $e->getMessage());
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    private function match_contact($visitor, $contacts) {
+        $first_name = $visitor['first_name'] ?? '';
+        $last_name = $visitor['last_name'] ?? '';
+        $job_title = $visitor['job_title'] ?? '';
+        $linkedin_url = $visitor['linkedin_url'] ?? '';
+        
+        $matched_contact = null;
+        $best_score = 0;
+        
+        foreach ($contacts as $contact) {
+            $score = 0;
+            
+            // LinkedIn (100 pts)
+            if (!empty($linkedin_url) && !empty($contact['linkedin'])) {
+                $v_li = preg_replace('#^https?://(www\.)?linkedin\.com/in/#', '', strtolower(trim($linkedin_url)));
+                $c_li = preg_replace('#^https?://(www\.)?linkedin\.com/in/#', '', strtolower(trim($contact['linkedin'])));
+                if (rtrim($v_li, '/') === rtrim($c_li, '/')) {
+                    $score += 100;
+                }
+            }
+            
+            // Name (50 pts)
+            $first_match = !empty($first_name) && !empty($contact['first_name']) && 
+                (stripos($contact['first_name'], $first_name) !== false || stripos($first_name, $contact['first_name']) !== false);
+            $last_match = !empty($last_name) && !empty($contact['last_name']) && 
+                (stripos($contact['last_name'], $last_name) !== false || stripos($last_name, $contact['last_name']) !== false);
+            
+            if ($first_match && $last_match) {
+                $score += 50;
+            } elseif ($first_match || $last_match) {
+                $score += 25;
+            }
+            
+            // Title (40 pts)
+            if (!empty($job_title) && !empty($contact['job_title'])) {
+                $score += $this->fuzzy_match_title($job_title, $contact['job_title']);
+            }
+            
+            if ($score > $best_score) {
+                $best_score = $score;
+                $matched_contact = $contact;
+            }
         }
         
-        return new WP_REST_Response([
-            'success' => true,
-            'data' => $email_data
-        ], 200);
+        return ($best_score >= 50) ? $matched_contact : null;
+    }
+
+    private function fuzzy_match_title($t1, $t2) {
+        $t1 = strtolower(trim($t1));
+        $t2 = strtolower(trim($t2));
+        
+        if ($t1 === $t2) return 40;
+        if (strpos($t1, $t2) !== false || strpos($t2, $t1) !== false) return 35;
+        
+        $words1 = array_filter(explode(' ', preg_replace('/\b(senior|junior|lead|vp|svp|the|of|and)\b/i', ' ', $t1)));
+        $words2 = array_filter(explode(' ', preg_replace('/\b(senior|junior|lead|vp|svp|the|of|and)\b/i', ' ', $t2)));
+        
+        $matches = count(array_intersect($words1, $words2));
+        $total = max(count($words1), count($words2));
+        
+        if ($total === 0) return 0;
+        
+        $overlap = $matches / $total;
+        
+        if ($overlap >= 0.7) return 30;
+        if ($overlap >= 0.5) return 20;
+        if ($overlap >= 0.3) return 10;
+        
+        return 0;
+    }
+
+    /**
+     * Verify email address for a prospect
+     */
+    public function verify_email( WP_REST_Request $request ) {
+        try {
+            error_log('[RTR] Verify email endpoint called');
+            
+            // Get email from request body
+            $email = $request->get_param('email');
+            
+            // Also try to get from JSON body if not in params
+            if (empty($email)) {
+                $body = $request->get_json_params();
+                $email = isset($body['email']) ? $body['email'] : '';
+            }
+            
+            error_log('[RTR] Email parameter: ' . print_r($email, true));
+            
+            // Validate email parameter
+            if (empty($email) || !is_string($email)) {
+                error_log('[RTR] Invalid email parameter');
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'Valid email is required'
+                ], 400);
+            }
+            
+            // Sanitize email
+            $email = sanitize_email($email);
+            if (!is_email($email)) {
+                error_log('[RTR] Invalid email format: ' . $email);
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'Invalid email format'
+                ], 400);
+            }
+
+            error_log('[RTR] Verifying email: ' . $email);
+
+            // Initialize enrichment class if not already done
+            if (!$this->enrichment) {
+                $this->enrichment = new ALeads_Enrichment();
+            }
+
+            // Call the enrichment verify method
+            $result = $this->enrichment->verify_email($email);
+
+            error_log('[RTR] Verification result: ' . print_r($result, true));
+
+            if ($result['success']) {
+                return new WP_REST_Response($result, 200);
+            } else {
+                return new WP_REST_Response($result, 400);
+            }
+
+        } catch (Exception $e) {
+            error_log('[RTR] Verify email error: ' . $e->getMessage());
+            error_log('[RTR] Stack trace: ' . $e->getTraceAsString());
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Verification failed: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -1199,6 +1477,7 @@ final class Reading_Room_Controller extends WP_REST_Controller
         $job_title = sanitize_text_field($request->get_param('job_title'));
         $company_name = sanitize_text_field($request->get_param('company_name'));
         $linkedin_url = esc_url_raw($request->get_param('linkedin_url'));
+        $aleads_member_id = !empty($body['aleads_member_id']) ? sanitize_text_field($body['aleads_member_id']) : null;
 
         // Validate email if provided
         if (!empty($contact_email) && !is_email($contact_email)) {
@@ -1259,6 +1538,10 @@ final class Reading_Room_Controller extends WP_REST_Controller
 
         if (!empty($job_title)) {
             $prospect_update['job_title'] = $job_title;
+        }
+
+        if (!empty($aleads_member_id)) {
+            $prospect_update['aleads_member_id'] = $aleads_member_id;
         }
 
         $prospect_format = array_fill(0, count($prospect_update), '%s');

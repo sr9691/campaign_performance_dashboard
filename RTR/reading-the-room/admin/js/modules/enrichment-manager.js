@@ -297,7 +297,8 @@ export default class EnrichmentManager {
                     contact_email: contactData.email || '',
                     job_title: contactData.job_title || '',
                     company_name: contactData.company_name || '',
-                    linkedin_url: contactData.linkedin || ''
+                    linkedin_url: contactData.linkedin || '',
+                    aleads_member_id: contactData.member_id || ''
                 })
             });
 

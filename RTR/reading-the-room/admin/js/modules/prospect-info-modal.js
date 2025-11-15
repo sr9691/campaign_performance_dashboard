@@ -13,6 +13,7 @@ export default class ProspectInfoModal {
         this.modal = null;
         this.isOpen = false;
         this.listenersAttached = false;
+        this.currentProspectData = null; // Store current prospect data
         
         this.init();
     }
@@ -82,6 +83,25 @@ export default class ProspectInfoModal {
                 this.close();
             }
         });
+
+        // Delegate email enrichment button clicks
+        document.addEventListener('click', (e) => {
+            // Find Email button
+            const findEmailBtn = e.target.closest('.rtr-find-email-btn');
+            if (findEmailBtn && this.isOpen) {
+                e.preventDefault();
+                const visitorId = findEmailBtn.dataset.visitorId;
+                this.handleFindEmail(visitorId);
+            }
+
+            // Verify Email button
+            const verifyEmailBtn = e.target.closest('.rtr-verify-email-btn');
+            if (verifyEmailBtn && this.isOpen) {
+                e.preventDefault();
+                const visitorId = verifyEmailBtn.dataset.visitorId;
+                this.handleVerifyEmail(visitorId);
+            }
+        });
     }
 
     async open(visitorId, room) {
@@ -106,6 +126,7 @@ export default class ProspectInfoModal {
         try {
             // Fetch prospect details
             const prospectData = await this.fetchProspectDetails(visitorId);
+            this.currentProspectData = prospectData; // Store for enrichment operations
             
             // Render the data
             this.renderProspectInfo(prospectData);
@@ -118,6 +139,7 @@ export default class ProspectInfoModal {
     close() {
         this.modal.classList.remove('active');
         this.isOpen = false;
+        this.currentProspectData = null; // Clear stored data
         document.body.style.overflow = '';
     }
 
@@ -140,6 +162,274 @@ export default class ProspectInfoModal {
         return data.data || data;
     }
 
+    /**
+     * Handle Find Email button click
+     */
+    async handleFindEmail(visitorId) {
+        console.log(`Finding email for visitor ${visitorId}`);
+        
+        // Show loading state
+        this.setEmailEnrichmentState(visitorId, 'finding', 'Finding email address...');
+        
+        try {
+            const url = `${this.apiUrl}/prospects/${visitorId}/find-email`;
+            
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'X-WP-Nonce': this.nonce,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            
+            if (result.success && result.data && result.data.email) {
+                // Update the displayed email inline
+                this.updateEmailDisplay(result.data.email, 'found');
+                this.setEmailEnrichmentState(visitorId, 'success', `Email found: ${result.data.email}`);
+                
+                // Update stored data
+                if (this.currentProspectData) {
+                    if (!this.currentProspectData.prospect) {
+                        this.currentProspectData.prospect = {};
+                    }
+                    this.currentProspectData.prospect.contact_email = result.data.email;
+                    
+                    if (!this.currentProspectData.visitor) {
+                        this.currentProspectData.visitor = {};
+                    }
+                    this.currentProspectData.visitor.email = result.data.email;
+                }
+                
+                // Dispatch event to update prospect list
+                document.dispatchEvent(new CustomEvent('rtr:emailUpdated', {
+                    detail: { 
+                        visitorId, 
+                        email: result.data.email,
+                        source: 'find'
+                    }
+                }));
+            } else {
+                throw new Error(result.message || 'Email not found');
+            }
+            
+        } catch (error) {
+            console.error('Find email failed:', error);
+            this.setEmailEnrichmentState(visitorId, 'error', error.message);
+        }
+    }
+
+    /**
+     * Handle Verify Email button click
+     */
+    async handleVerifyEmail(visitorId) {
+        console.log('Verifying email for visitor', visitorId);
+        
+        try {
+            // Get the email from stored data or DOM
+            let email = null;
+            
+            // First try to get from stored data
+            if (this.currentProspectData) {
+                email = this.currentProspectData.prospect?.contact_email 
+                    || this.currentProspectData.visitor?.email;
+            }
+            
+            // Fallback to DOM if not in stored data
+            if (!email || email === 'N/A') {
+                const emailValueEl = document.querySelector('.info-item-email .info-value');
+                if (emailValueEl) {
+                    email = emailValueEl.textContent.trim();
+                }
+            }
+            
+            // Final validation
+            if (!email || email === 'N/A') {
+                throw new Error('No email found for verification');
+            }
+            
+            console.log('Verifying email:', email);
+            
+            // Show loading state
+            this.setEmailEnrichmentState(visitorId, 'verifying', 'Verifying email address...');
+            
+            const response = await fetch(`${this.apiUrl}/prospects/${visitorId}/verify-email`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-WP-Nonce': this.nonce
+                },
+                body: JSON.stringify({
+                    email: email
+                })
+            });
+
+            console.log('Verify response status:', response.status);
+            
+            const data = await response.json();
+            console.log('Verify response data:', data);
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Verification failed');
+            }
+
+            if (data.success) {
+                // Update UI to show verification status
+                const status = data.verified ? 'valid' : 'invalid';
+                this.updateEmailDisplay(email, status);
+                
+                // Get human readable message
+                const message = this.getVerificationMessage(status, data.data);
+                this.setEmailEnrichmentState(visitorId, 'success', message);
+                
+                // Update stored data
+                if (this.currentProspectData && this.currentProspectData.prospect) {
+                    this.currentProspectData.prospect.email_verified = data.verified ? 1 : 0;
+                }
+                
+                // Dispatch event to update prospect list
+                document.dispatchEvent(new CustomEvent('rtr:emailVerified', {
+                    detail: { 
+                        visitorId, 
+                        email: email,
+                        verified: data.verified,
+                        data: data.data
+                    }
+                }));
+            } else {
+                throw new Error(data.message || 'Verification failed');
+            }
+
+        } catch (error) {
+            console.error('Verify email failed:', error);
+            this.setEmailEnrichmentState(visitorId, 'error', `Verification failed: ${error.message}`);
+        }
+    }
+
+    updateVerificationStatus(isVerified, verificationData) {
+        const container = document.querySelector('.prospect-email')?.parentElement;
+        if (!container) return;
+        
+        // Remove any existing verification badge
+        const existingBadge = container.querySelector('.verification-badge');
+        if (existingBadge) {
+            existingBadge.remove();
+        }
+        
+        // Add new verification badge
+        const badge = document.createElement('span');
+        badge.className = `verification-badge ${isVerified ? 'verified' : 'unverified'}`;
+        badge.textContent = isVerified ? '✓ Verified' : '✗ Unverified';
+        badge.style.marginLeft = '10px';
+        badge.style.padding = '2px 8px';
+        badge.style.borderRadius = '3px';
+        badge.style.fontSize = '12px';
+        badge.style.backgroundColor = isVerified ? '#4CAF50' : '#f44336';
+        badge.style.color = 'white';
+        
+        container.appendChild(badge);
+    }    
+
+    /**
+     * Update email enrichment UI state
+     */
+    setEmailEnrichmentState(visitorId, state, message) {
+        const container = document.querySelector('.rtr-email-enrichment-container');
+        if (!container) return;
+        
+        const messageEl = container.querySelector('.rtr-enrichment-message');
+        const buttons = container.querySelectorAll('button');
+        
+        // Remove all state classes
+        container.classList.remove('state-finding', 'state-verifying', 'state-success', 'state-error');
+        
+        // Add current state class
+        if (state) {
+            container.classList.add(`state-${state}`);
+        }
+        
+        // Update message
+        if (messageEl && message) {
+            messageEl.textContent = message;
+            messageEl.style.display = 'block';
+            
+            // Auto-hide success/error messages after 5 seconds
+            if (state === 'success' || state === 'error') {
+                setTimeout(() => {
+                    messageEl.style.display = 'none';
+                }, 5000);
+            }
+        }
+        
+        // Disable buttons during loading
+        buttons.forEach(btn => {
+            btn.disabled = (state === 'finding' || state === 'verifying');
+        });
+    }
+
+    /**
+     * Update the displayed email address inline
+     */
+    updateEmailDisplay(email, status) {
+        const emailValueEl = document.querySelector('.info-item-email .info-value');
+        if (!emailValueEl) return;
+        
+        // Add verification badge if status provided
+        let badge = '';
+        if (status === 'valid' || status === 'found') {
+            badge = '<span class="email-verified-badge" title="Verified"><i class="fas fa-check-circle"></i></span>';
+        } else if (status === 'invalid') {
+            badge = '<span class="email-invalid-badge" title="Invalid"><i class="fas fa-times-circle"></i></span>';
+        } else if (status === 'risky' || status === 'unknown') {
+            badge = '<span class="email-risky-badge" title="Risky/Unknown"><i class="fas fa-exclamation-triangle"></i></span>';
+        }
+        
+        emailValueEl.innerHTML = `${this.escapeHtml(email)} ${badge}`;
+        
+        // Update the enrichment buttons visibility
+        this.updateEnrichmentButtons(email);
+    }
+
+    /**
+     * Update which enrichment buttons are visible
+     */
+    updateEnrichmentButtons(email) {
+        const findBtn = document.querySelector('.rtr-find-email-btn');
+        const verifyBtn = document.querySelector('.rtr-verify-email-btn');
+        
+        if (findBtn && verifyBtn) {
+            if (email && email !== 'N/A') {
+                // Email exists - show verify, hide find
+                findBtn.style.display = 'none';
+                verifyBtn.style.display = 'inline-flex';
+            } else {
+                // No email - show find, hide verify
+                findBtn.style.display = 'inline-flex';
+                verifyBtn.style.display = 'none';
+            }
+        }
+    }
+
+    /**
+     * Get human-readable verification message
+     */
+    getVerificationMessage(status, verification) {
+        const messages = {
+            'valid': '✓ Email is valid and deliverable',
+            'invalid': '✗ Email is invalid',
+            'risky': '⚠ Email is risky (catch-all or disposable)',
+            'unknown': '⚠ Email verification inconclusive',
+            'accept_all': '⚠ Domain accepts all emails (catch-all)'
+        };
+        
+        return messages[status] || `Email verification status: ${status}`;
+    }
+
     renderProspectInfo(data) {
         const body = this.modal.querySelector('.rtr-modal-body');
         
@@ -147,6 +437,10 @@ export default class ProspectInfoModal {
         const prospect = data.prospect || {};
         const visitor = data.visitor || {};
         const intelligence = data.intelligence || {};
+        
+        // Determine current email for enrichment buttons
+        const currentEmail = prospect.contact_email || visitor.email || '';
+        const hasEmail = currentEmail && currentEmail !== 'N/A';
         
         body.innerHTML = `
             <div class="prospect-info-container">
@@ -160,9 +454,29 @@ export default class ProspectInfoModal {
                             <span class="info-label">Name:</span>
                             <span class="info-value">${this.escapeHtml(prospect.contact_name || visitor.first_name + ' ' + visitor.last_name || 'N/A')}</span>
                         </div>
-                        <div class="info-item">
+                        <div class="info-item info-item-email">
                             <span class="info-label">Email:</span>
-                            <span class="info-value">${this.escapeHtml(prospect.contact_email || visitor.email || 'N/A')}</span>
+                            <div class="info-value-with-actions">
+                                <span class="info-value">${this.escapeHtml(currentEmail || 'N/A')}</span>
+                                <!-- Email Enrichment Buttons -->
+                                <div class="rtr-email-enrichment-container">
+                                    <button class="rtr-find-email-btn rtr-enrichment-btn" 
+                                            data-visitor-id="${visitor.id || prospect.visitor_id}"
+                                            title="Find email address"
+                                            style="${hasEmail ? 'display: none;' : ''}">
+                                        <i class="fas fa-envelope"></i>
+                                        <span>Find Email</span>
+                                    </button>
+                                    <button class="rtr-verify-email-btn rtr-enrichment-btn" 
+                                            data-visitor-id="${visitor.id || prospect.visitor_id}"
+                                            title="Verify email address"
+                                            style="${hasEmail ? '' : 'display: none;'}">
+                                        <i class="fas fa-check-circle"></i>
+                                        <span>Verify Email</span>
+                                    </button>
+                                    <div class="rtr-enrichment-message" style="display: none;"></div>
+                                </div>
+                            </div>
                         </div>
                         <div class="info-item">
                             <span class="info-label">Job Title:</span>
