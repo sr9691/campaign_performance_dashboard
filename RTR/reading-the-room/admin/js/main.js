@@ -14,6 +14,7 @@ import AnalyticsManager from './modules/analytics-manager.js';
 import EmailStatusPoller from './modules/email-status-poller.js';
 import ProspectInfoModal from './modules/prospect-info-modal.js';
 import ScoreBreakdownModal from './modules/score-breakdown-modal.js';
+import EnrichmentManager from './modules/enrichment-manager.js';
 
 class RTRDashboard {
     constructor() {
@@ -43,7 +44,12 @@ class RTRDashboard {
             this.managers.emailPoller = new EmailStatusPoller(this.config);
             this.managers.prospectInfo = new ProspectInfoModal(this.config);
             this.managers.scoreBreakdown = new ScoreBreakdownModal(this.config);
-
+            
+            // Initialize enrichment manager
+            this.managers.enrichment = new EnrichmentManager(this.config);
+            this.managers.enrichment.setUIManager(this.managers.ui);
+            this.managers.enrichment.setProspectManager(this.managers.prospect);
+            
             // Set up global event listeners
             this.setupGlobalEvents();
 
@@ -359,6 +365,14 @@ class RTRDashboard {
             this.managers.analytics.close();
             return;
         }
+
+
+        if (this.managers.enrichment && document.getElementById('enrichment-modal')) {
+            const enrichmentModal = document.getElementById('enrichment-modal');
+            enrichmentModal.classList.remove('active');
+            setTimeout(() => enrichmentModal.remove(), 300);
+            return;
+        }        
 
         this.closeAllDropdowns();
     }
