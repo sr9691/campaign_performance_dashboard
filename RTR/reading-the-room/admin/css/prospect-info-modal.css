@@ -3,6 +3,128 @@
  * Displays detailed information about prospects from rtr_prospects and cpd_visitors tables
  */
 
+/* ===== BASE MODAL STRUCTURE ===== */
+/* These are the foundational styles that the prospect-specific overrides build upon */
+
+/* Modal Container - Fixed overlay that covers the entire viewport */
+.rtr-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.rtr-modal.active {
+    display: flex;
+}
+
+/* Modal Overlay - Dark background behind the modal */
+.rtr-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    z-index: 10000;
+}
+
+/* Modal Content - The white box containing header and body */
+.rtr-modal-content {
+    position: relative;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    z-index: 10001;
+    display: flex;
+    flex-direction: column;
+    width: 90%;
+    max-width: 800px;
+    max-height: 85vh;
+    overflow: hidden;
+}
+
+/* Modal Header */
+.rtr-modal-header {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    border-bottom: 2px solid #e5e7eb;
+    background: #ef4444;
+}
+
+.rtr-modal-header h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.rtr-modal-header h3 i {
+    font-size: 1.75rem;
+}
+
+/* Modal Close Button */
+.rtr-modal-close {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: white;
+    cursor: pointer;
+    padding: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    line-height: 1;
+}
+
+.rtr-modal-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.rtr-modal-close span {
+    display: block;
+    line-height: 1;
+}
+
+/* Modal Body - THIS IS THE KEY FOR SCROLLING */
+.rtr-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 2rem;
+    background: #f9fafb;
+}
+
+/* Custom Scrollbar Styling */
+.rtr-modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.rtr-modal-body::-webkit-scrollbar-track {
+    background: #f3f4f6;
+}
+
+.rtr-modal-body::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 4px;
+}
+
+.rtr-modal-body::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+}
+
+/* ===== PROSPECT-SPECIFIC OVERRIDES ===== */
 /* Modal Content Adjustments for Prospect Info */
 .prospect-info-modal-content {
     max-width: 900px;
@@ -341,6 +463,25 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
+    /* Base Modal Responsive */
+    .rtr-modal-content {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    .rtr-modal-header {
+        padding: 1rem 1.5rem;
+    }
+
+    .rtr-modal-header h3 {
+        font-size: 1.25rem;
+    }
+
+    .rtr-modal-body {
+        padding: 1.5rem;
+    }
+
+    /* Prospect-Specific Responsive */
     .prospect-info-modal-content {
         width: 95%;
         max-width: 100%;
@@ -361,6 +502,26 @@
 }
 
 @media (max-width: 480px) {
+    /* Base Modal Responsive */
+    .rtr-modal-content {
+        width: 100%;
+        max-height: 95vh;
+        border-radius: 0;
+    }
+
+    .rtr-modal-header {
+        padding: 0.875rem 1rem;
+    }
+
+    .rtr-modal-header h3 {
+        font-size: 1.125rem;
+    }
+
+    .rtr-modal-body {
+        padding: 1rem;
+    }
+
+    /* Prospect-Specific Responsive */
     .prospect-info-modal-content {
         width: 100%;
         height: 100vh;

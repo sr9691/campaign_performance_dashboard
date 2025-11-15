@@ -104,13 +104,38 @@ final class Reading_Room_Controller extends WP_REST_Controller
             ],
         ]);
 
-        register_rest_route($this->namespace, '/prospects/(?P<id>\d+)/enrich-contact', [
+        // A-Leads Enrichment endpoints
+        register_rest_route($this->namespace, '/prospects/(?P<id>\d+)/search-contacts', [
             [
                 'methods'             => WP_REST_Server::CREATABLE,
-                'callback'            => [$this, 'enrich_prospect_contact'],
+                'callback'            => [$this, 'search_contacts_enrichment'],
+                'permission_callback' => [$this, 'check_permission'],
+            ],
+        ]);
+
+        register_rest_route($this->namespace, '/prospects/(?P<id>\d+)/find-email', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'find_contact_email'],
                 'permission_callback' => [$this, 'check_permission'],
                 'args'                => [
-                    'company_name' => ['type' => 'string', 'required' => true],
+                    'member_id'       => ['type' => 'string', 'required' => true],
+                    'first_name'      => ['type' => 'string', 'required' => true],
+                    'last_name'       => ['type' => 'string', 'required' => true],
+                    'company_domain'  => ['type' => 'string', 'required' => true],
+                ],
+            ],
+        ]);
+
+        register_rest_route($this->namespace, '/prospects/(?P<id>\d+)/save-enrichment', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'save_enriched_contact'],
+                'permission_callback' => [$this, 'check_permission'],
+                'args'                => [
+                    'contact_name'  => ['type' => 'string', 'required' => true],
+                    'contact_email' => ['type' => 'string', 'required' => false],
+                    'job_title'     => ['type' => 'string', 'required' => false],
                 ],
             ],
         ]);
@@ -1086,67 +1111,186 @@ final class Reading_Room_Controller extends WP_REST_Controller
     }
 
     /**
-     * Enrich prospect contact using A-Leads API.
+     * Search for contacts via A-Leads enrichment.
      *
      * @param WP_REST_Request $request
      * @return WP_REST_Response|WP_Error
      */
-    public function enrich_prospect_contact(WP_REST_Request $request)
+    public function search_contacts_enrichment(WP_REST_Request $request)
     {
+        global $wpdb;
+        
         $visitor_id = (int) $request->get_param('id');
-        $company_name = sanitize_text_field($request->get_param('company_name'));
-
-        if (empty($company_name)) {
+        
+        // Get visitor/prospect data
+        $visitor = $wpdb->get_row($wpdb->prepare(
+            "SELECT company_name, website FROM {$wpdb->prefix}cpd_visitors WHERE id = %d",
+            $visitor_id
+        ));
+        
+        if (!$visitor || empty($visitor->company_name)) {
             return new WP_Error(
-                'missing_company',
-                'Company name is required',
+                'no_company',
+                'No company found for this prospect',
+                ['status' => 404]
+            );
+        }
+        
+        // Search A-Leads
+        require_once __DIR__ . '/class-aleads-enrichment.php';
+        $enrichment = new \DirectReach\ReadingTheRoom\API\ALeads_Enrichment();
+        
+        $contacts = $enrichment->search_contacts($visitor->company_name);
+        
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => [
+                'company_name' => $visitor->company_name,
+                'contacts' => $contacts
+            ]
+        ], 200);
+    }
+
+    /**
+     * Find email for a specific contact.
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response|WP_Error
+     */
+    public function find_contact_email(WP_REST_Request $request)
+    {
+        $member_id = sanitize_text_field($request->get_param('member_id'));
+        $first_name = sanitize_text_field($request->get_param('first_name'));
+        $last_name = sanitize_text_field($request->get_param('last_name'));
+        $company_domain = sanitize_text_field($request->get_param('company_domain'));
+        
+        require_once plugin_dir_path(__FILE__) . '../class-aleads-enrichment.php';
+        $enrichment = new \DirectReach\ReadingTheRoom\API\ALeads_Enrichment();
+        
+        $email_data = $enrichment->find_email($member_id, $first_name, $last_name, $company_domain);
+        
+        if (empty($email_data)) {
+            return new WP_Error(
+                'email_not_found',
+                'Could not find email for this contact',
+                ['status' => 404]
+            );
+        }
+        
+        return new WP_REST_Response([
+            'success' => true,
+            'data' => $email_data
+        ], 200);
+    }
+
+    /**
+     * Save enriched contact information.
+     *
+     * @param WP_REST_Request $request
+     * @return WP_REST_Response|WP_Error
+     */
+    public function save_enriched_contact(WP_REST_Request $request)
+    {
+        global $wpdb;
+        
+        $visitor_id = (int) $request->get_param('id');
+        $contact_name = sanitize_text_field($request->get_param('contact_name'));
+        $contact_email = sanitize_email($request->get_param('contact_email'));
+        $job_title = sanitize_text_field($request->get_param('job_title'));
+        $company_name = sanitize_text_field($request->get_param('company_name'));
+        $linkedin_url = esc_url_raw($request->get_param('linkedin_url'));
+
+        // Validate email if provided
+        if (!empty($contact_email) && !is_email($contact_email)) {
+            return new WP_Error(
+                'invalid_email',
+                'Invalid email address provided',
                 ['status' => 400]
             );
         }
 
-        // Check if API is configured
-        if (!$this->enrichment->is_configured()) {
+        // Update cpd_visitors table (has all fields)
+        $visitor_update = [];
+        
+        // Parse name into first_name and last_name
+        $name_parts = explode(' ', $contact_name, 2);
+        $visitor_update['first_name'] = $name_parts[0];
+        $visitor_update['last_name'] = isset($name_parts[1]) ? $name_parts[1] : '';
+        
+        if (!empty($contact_email)) {
+            $visitor_update['email'] = $contact_email;
+        }
+        
+        if (!empty($job_title)) {
+            $visitor_update['job_title'] = $job_title;
+        }
+
+        if (!empty($company_name)) {
+            $visitor_update['company_name'] = $company_name;
+        }
+
+        if (!empty($linkedin_url)) {
+            $visitor_update['linkedin_url'] = $linkedin_url;
+        }
+
+        $format = array_fill(0, count($visitor_update), '%s');
+        
+        $visitor_updated = $wpdb->update(
+            $wpdb->prefix . 'cpd_visitors',
+            $visitor_update,
+            ['id' => $visitor_id],
+            $format,
+            ['%d']
+        );
+
+        // Update rtr_prospects table (only has contact_name, contact_email, company_name)
+        $prospect_update = [
+            'contact_name' => $contact_name,
+            'updated_at' => current_time('mysql')
+        ];
+        
+        if (!empty($contact_email)) {
+            $prospect_update['contact_email'] = $contact_email;
+        }
+
+        if (!empty($company_name)) {
+            $prospect_update['company_name'] = $company_name;
+        }
+
+        if (!empty($job_title)) {
+            $prospect_update['job_title'] = $job_title;
+        }
+
+        $prospect_format = array_fill(0, count($prospect_update), '%s');
+
+        $prospect_updated = $wpdb->update(
+            $wpdb->prefix . 'rtr_prospects',
+            $prospect_update,
+            ['visitor_id' => $visitor_id],
+            $prospect_format,
+            ['%d']
+        );
+
+        if ($visitor_updated === false || $prospect_updated === false) {
             return new WP_Error(
-                'api_not_configured',
-                'Contact enrichment service is not configured',
+                'update_failed',
+                'Failed to update contact information',
                 ['status' => 500]
             );
         }
 
-    // Search for contacts
-        $contacts = $this->enrichment->search_contacts($company_name);
-
-        // Check if search failed (returns empty array)
-        if (empty($contacts)) {
-            // Log the attempt but return success with empty results
-            error_log(sprintf(
-                'Enrichment search for visitor %d at company "%s" returned no contacts',
-                $visitor_id,
-                $company_name
-            ));
-
-            return rest_ensure_response([
-                'success' => false,
-                'message' => 'No contacts found for this company. Please try again or enter contact details manually.',
-                'contacts' => [],
-                'count' => 0
-            ]);
-        }
-
-        // Log successful search
-        error_log(sprintf(
-            'Enrichment search for visitor %d at company "%s" returned %d contacts',
-            $visitor_id,
-            $company_name,
-            count($contacts)
-        ));
-
-        return rest_ensure_response([
+        return new WP_REST_Response([
             'success' => true,
-            'contacts' => $contacts,
-            'count' => count($contacts)
-        ]);
-    }    
+            'message' => 'Contact information saved successfully',
+            'data' => [
+                'contact_name' => $contact_name,
+                'contact_email' => $contact_email,
+                'job_title' => $job_title,
+                'company_name' => $company_name,
+                'linkedin_url' => $linkedin_url
+            ]
+        ], 200);
+    }
 
     /**
      * Helper: Get email statistics for a room.
