@@ -165,15 +165,29 @@ add_action('init', 'dr_rtr_register_rewrite', 1);
 function dr_rtr_register_rewrite(): void
 {
     dr_rtr_require_files();
-    add_rewrite_rule('^reading-the-room/?$', 'index.php?dr_rtr_dashboard=1', 'top');
-    error_log('[RTR] Rewrite rule registered');
     
-    $rules = get_option('rewrite_rules');
-    if ($rules && isset($rules['^reading-the-room/?$'])) {
-        error_log('[RTR] Rule in DB: ' . $rules['^reading-the-room/?$']);
-    } else {
-        error_log('[RTR] WARNING: Rule NOT in DB - flush needed');
-    }
+    // Production URL pattern
+    add_rewrite_rule(
+        '^directreach/reading-the-room/?$',
+        'index.php?dr_rtr_dashboard=1',
+        'top'
+    );
+    
+    // Dev URL pattern
+    add_rewrite_rule(
+        '^dashboarddev/reading-the-room/?$',
+        'index.php?dr_rtr_dashboard=1',
+        'top'
+    );
+    
+    // Generic fallback
+    add_rewrite_rule(
+        '^reading-the-room/?$',
+        'index.php?dr_rtr_dashboard=1',
+        'top'
+    );
+    
+    error_log('[RTR] All rewrite rules registered');
 }
 
 add_filter('query_vars', function($vars) {
@@ -184,13 +198,9 @@ add_filter('query_vars', function($vars) {
 add_action('template_redirect', function (): void {
     $dashboard_var = get_query_var('dr_rtr_dashboard');
     
-    error_log('[RTR] template_redirect: dr_rtr_dashboard=' . var_export($dashboard_var, true));
-    
     if ((int) $dashboard_var === 1) {
-        error_log('[RTR] Dashboard var detected');
-        
         if (!is_user_logged_in()) {
-            wp_redirect(wp_login_url(home_url('/reading-the-room/')));
+            wp_redirect(wp_login_url($_SERVER['REQUEST_URI']));
             exit;
         }
         
@@ -198,12 +208,19 @@ add_action('template_redirect', function (): void {
         exit;
     }
     
+    // Fallback: Check multiple URL patterns
     global $wp;
-    if (isset($wp->request) && $wp->request === 'reading-the-room') {
-        error_log('[RTR] FALLBACK: URL detected, forcing render');
-        
+    $request = isset($wp->request) ? $wp->request : '';
+    
+    $valid_patterns = [
+        'directreach/reading-the-room',
+        'dashboarddev/reading-the-room',
+        'reading-the-room'
+    ];
+    
+    if (in_array($request, $valid_patterns, true)) {
         if (!is_user_logged_in()) {
-            wp_redirect(wp_login_url(home_url('/reading-the-room/')));
+            wp_redirect(wp_login_url($_SERVER['REQUEST_URI']));
             exit;
         }
         
@@ -226,11 +243,20 @@ add_action('admin_menu', function () {
 
 function dr_rtr_admin_redirect(): void
 {
+    // Auto-detect environment from REQUEST_URI
+    $uri = $_SERVER['REQUEST_URI'];
+    
+    if (strpos($uri, 'dashboarddev') !== false) {
+        $url = home_url('/dashboarddev/reading-the-room/');
+    } else {
+        $url = home_url('/directreach/reading-the-room/');
+    }
+    
     if (!headers_sent()) {
-        wp_safe_redirect(esc_url_raw(home_url('/reading-the-room/')));
+        wp_safe_redirect(esc_url_raw($url));
         exit;
     }
-    echo '<script>window.location.href="' . esc_url(home_url('/reading-the-room/')) . '";</script>';
+    echo '<script>window.location.href="' . esc_url($url) . '";</script>';
     exit;
 }
 
