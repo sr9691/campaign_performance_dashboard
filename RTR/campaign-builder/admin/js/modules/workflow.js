@@ -33,6 +33,7 @@ export default class WorkflowManager {
             
             // Update breadcrumb on init
             this.updateBreadcrumbClasses();
+            this.updateBreadcrumbText();
             
             // Setup navigation listeners
             this.setupNavigation();

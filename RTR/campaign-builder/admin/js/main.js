@@ -1,5 +1,5 @@
 /**
- * Campaign Builder Main Entry Point - COMPLETE WITH CONTENT LINKS
+ * Campaign Builder Main Entry Point
  * 
  * @package DirectReach_Campaign_Builder
  * @since 2.0.0
@@ -11,6 +11,7 @@ import ClientManager from './modules/client-manager.js';
 import CampaignManager from './modules/campaign-manager.js';
 import ContentLinksManager from './modules/content-links-manager.js';
 import TemplateManager from './modules/template-manager.js';
+import ClientSettingsManager from '../../../scoring-system/admin/js/modules/client-settings-manager.js';
 
 class CampaignBuilder {
     constructor(config) {
@@ -28,6 +29,7 @@ class CampaignBuilder {
             
             // Initialize managers in order
             this.initializeStateManager();
+            this.initializeSettingsManager();
             this.initializeClientManager();
             this.initializeCampaignManager();
             this.initializeContentLinksManager();
@@ -59,10 +61,23 @@ class CampaignBuilder {
     }
     
     /**
+     * Initialize Settings Manager
+     */
+    initializeSettingsManager() {
+        this.managers.settings = new ClientSettingsManager(this.config);
+        
+        this.managers.settings.on('notification', (data) => {
+            this.showNotification(data.message, data.type);
+        });
+        
+        console.log('Campaign Builder: Settings Manager initialized');
+    }
+
+    /**
      * Initialize Client Manager
      */
     initializeClientManager() {
-        this.managers.client = new ClientManager(this.config, this.managers.state);
+        this.managers.client = new ClientManager(this.config, this.managers.settings);
         
         // Listen for client selection
         this.managers.client.on('client:selected', (client) => {
@@ -71,11 +86,11 @@ class CampaignBuilder {
             // Update state
             this.managers.state.updateState({
                 clientId: client.id,
-                clientName: client.client_name
+                clientName: client.name
             });
             
             // Update breadcrumb
-            this.managers.workflow?.updateBreadcrumbText('client', client.client_name);
+            this.managers.workflow?.updateBreadcrumbText('client', client.name);
         });
         
         this.managers.client.on('notification', (data) => {

@@ -136,6 +136,14 @@ export default class CampaignManager extends EventEmitter {
             this.renderCampaigns();
             return this.campaigns;
         }
+
+        // Update client name display
+        if (this.stateManager) {
+            const state = this.stateManager.getState();
+            if (state.clientName && this.elements.clientNameDisplay) {
+                this.elements.clientNameDisplay.textContent = state.clientName;
+            }
+        }        
         
         this.showLoadingState();
         this.isLoading = true;
