@@ -661,19 +661,25 @@ const data = await response.json();
         if (!pagesJson) return '';
         
         let pages;
-        try {
-            pages = JSON.parse(pagesJson);
-        } catch (e) {
-            return '';
+        if (typeof pagesJson === 'string') {
+            try {
+                pages = JSON.parse(pagesJson);
+            } catch (e) {
+                return '';
+            }
+        } else {
+            pages = pagesJson;
         }
         
         if (!Array.isArray(pages) || pages.length === 0) return '';
         
         return `
-            <div class="info-section">
-                <h4 class="info-section-title">
-                    <i class="fas fa-history"></i> Recent Pages Visited
-                </h4>
+            <div class="info-section recent-pages-section">
+                <h4 class="info-section-title"><i class="fas fa-history"></i> Recent Pages Visited</h4>
+                <div class="page-count-info">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Showing <strong>${Math.min(pages.length, 10)}</strong> of <strong>${pages.length}</strong> pages visited</span>
+                </div>
                 <div class="recent-pages-list">
                     ${pages.slice(0, 10).map(url => `
                         <div class="recent-page-item">
@@ -708,13 +714,14 @@ const data = await response.json();
                 </h4>
                 <div class="email-states-grid">
                     ${Object.keys(states).sort().map(key => {
-                        const emailData = states[key];
+                        const emailData = states[key] || {};
                         const emailNum = key.replace('email_', '');
+                        const state = emailData.state || emailData.status || 'pending';
                         return `
                             <div class="email-state-item">
                                 <span class="email-number">Email ${emailNum}</span>
-                                <span class="email-status ${emailData.state || 'pending'}">${this.formatEmailState(emailData.state)}</span>
-                                ${emailData.timestamp ? `<span class="email-timestamp">${this.formatDate(emailData.timestamp)}</span>` : ''}
+                                <span class="email-status ${state}">${this.formatEmailState(state)}</span>
+                                ${emailData.timestamp || emailData.sent_at ? `<span class="email-timestamp">${this.formatDate(emailData.timestamp || emailData.sent_at)}</span>` : ''}
                             </div>
                         `;
                     }).join('')}
@@ -728,66 +735,121 @@ const data = await response.json();
         
         const responseData = intelligence.response_data;
         
-        // Format the response data as a readable structure
-        let formattedData = '';
-        
-        if (typeof responseData === 'object') {
-            formattedData = this.formatIntelligenceObject(responseData);
-        } else if (typeof responseData === 'string') {
-            formattedData = `<p class="intelligence-text">${this.escapeHtml(responseData)}</p>`;
-        }
-        
-        return `
-            <div class="info-section">
-                <h4 class="info-section-title">
-                    <i class="fas fa-brain"></i> AI Intelligence Insights
-                </h4>
-                <div class="intelligence-content">
-                    ${formattedData}
-                    ${intelligence.processing_time ? `<div class="intelligence-meta">Generated in ${intelligence.processing_time}ms</div>` : ''}
-                </div>
-            </div>
-        `;
-    }
-
-    formatIntelligenceObject(obj, level = 0) {
-        if (!obj || typeof obj !== 'object') return '';
-        
-        const indent = '  '.repeat(level);
-        let html = '';
-        
-        for (const [key, value] of Object.entries(obj)) {
-            const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-            
-            if (value === null || value === undefined) {
-                continue;
-            } else if (typeof value === 'object' && !Array.isArray(value)) {
-                html += `
-                    <div class="intelligence-section" style="margin-left: ${level * 20}px;">
-                        <strong class="intelligence-key">${this.escapeHtml(formattedKey)}:</strong>
-                        ${this.formatIntelligenceObject(value, level + 1)}
-                    </div>
-                `;
-            } else if (Array.isArray(value)) {
-                html += `
-                    <div class="intelligence-item" style="margin-left: ${level * 20}px;">
-                        <strong class="intelligence-key">${this.escapeHtml(formattedKey)}:</strong>
-                        <ul class="intelligence-list">
-                            ${value.map(item => `<li>${typeof item === 'object' ? this.formatIntelligenceObject(item, level + 1) : this.escapeHtml(String(item))}</li>`).join('')}
-                        </ul>
-                    </div>
-                `;
-            } else {
-                html += `
-                    <div class="intelligence-item" style="margin-left: ${level * 20}px;">
-                        <strong class="intelligence-key">${this.escapeHtml(formattedKey)}:</strong>
-                        <span class="intelligence-value">${this.escapeHtml(String(value))}</span>
+        // Parse if it's a string
+        let parsedData = responseData;
+        if (typeof responseData === 'string') {
+            try {
+                parsedData = JSON.parse(responseData);
+            } catch (e) {
+                // If parsing fails, display as text
+                return `
+                    <div class="info-section visitor-modal-section intelligence-section">
+                        <h4><i class="fas fa-brain"></i> AI Intelligence Insights</h4>
+                        <div class="intelligence-content">
+                            <p class="intelligence-text">${this.escapeHtml(responseData)}</p>
+                            ${intelligence.processing_time ? `<div class="intelligence-meta"><small>Generated in ${intelligence.processing_time}ms</small></div>` : ''}
+                        </div>
                     </div>
                 `;
             }
         }
         
+        // Format the parsed data
+        const formattedData = this.formatIntelligenceData(parsedData);
+        
+        return `
+            <div class="info-section visitor-modal-section intelligence-section">
+                <h4><i class="fas fa-brain"></i> AI Intelligence Insights</h4>
+                <div class="intelligence-data">
+                    ${formattedData}
+                </div>
+                ${intelligence.processing_time ? `<div class="intelligence-meta"><small>Generated in ${intelligence.processing_time}ms</small></div>` : ''}
+            </div>
+        `;
+    }
+
+    formatIntelligenceData(data) {
+        if (!data || typeof data !== 'object') return '';
+        
+        let html = '';
+        
+        // Handle common AI response structures
+        for (const [key, value] of Object.entries(data)) {
+            if (value === null || value === undefined) continue;
+            
+            const formattedKey = this.formatIntelligenceKey(key);
+            
+            // Skip email-related keys for now, can be added back if needed
+            if (key.toLowerCase().includes('email for')) continue;
+            
+            html += `<div class="intelligence-item">`;
+            html += `<h4><i class="fas fa-lightbulb"></i> ${this.escapeHtml(formattedKey)}</h4>`;
+            
+            if (typeof value === 'string') {
+                // Clean up the string value
+                const cleanValue = value.replace(/\\n\\n/g, '\n').replace(/\\n/g, '\n').trim();
+                html += `<p>${this.escapeHtml(cleanValue)}</p>`;
+            } else if (Array.isArray(value)) {
+                html += `<ul>`;
+                value.forEach(item => {
+                    if (typeof item === 'object') {
+                        html += `<li>${this.formatNestedObject(item)}</li>`;
+                    } else {
+                        html += `<li>${this.escapeHtml(String(item))}</li>`;
+                    }
+                });
+                html += `</ul>`;
+            } else if (typeof value === 'object') {
+                // Handle nested objects (like decision makers)
+                html += this.formatNestedObject(value);
+            } else {
+                html += `<p>${this.escapeHtml(String(value))}</p>`;
+            }
+            
+            html += `</div>`;
+        }
+        
+        return html || '<div class="no-data-message">No intelligence data available</div>';
+    }
+
+    formatNestedObject(obj) {
+        if (!obj || typeof obj !== 'object') return '';
+        
+        let html = '<ul>';
+        
+        for (const [key, value] of Object.entries(obj)) {
+            if (value === null || value === undefined) continue;
+            
+            const formattedKey = this.formatIntelligenceKey(key);
+            
+            if (typeof value === 'string') {
+                html += `<li><strong>${this.escapeHtml(formattedKey)}:</strong> ${this.escapeHtml(value)}</li>`;
+            } else if (Array.isArray(value)) {
+                html += `<li><strong>${this.escapeHtml(formattedKey)}:</strong><ul>`;
+                value.forEach(item => {
+                    html += `<li>${this.escapeHtml(String(item))}</li>`;
+                });
+                html += `</ul></li>`;
+            } else if (typeof value === 'object') {
+                html += `<li><strong>${this.escapeHtml(formattedKey)}:</strong>`;
+                html += this.formatNestedObject(value);
+                html += `</li>`;
+            } else {
+                html += `<li><strong>${this.escapeHtml(formattedKey)}:</strong> ${this.escapeHtml(String(value))}</li>`;
+            }
+        }
+        
+        html += '</ul>';
         return html;
+    }
+
+    formatIntelligenceKey(key) {
+        // Convert key to readable format
+        return key
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase())
+            .replace(/&/g, '&amp;')
+            .trim();
     }
 
     renderVerificationBadge(prospect) {

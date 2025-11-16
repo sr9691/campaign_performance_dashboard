@@ -520,6 +520,14 @@ final class Reading_Room_Controller extends WP_REST_Controller
                     }
                 }
             }
+
+            // Add email states from tracking table
+            if ($prospect && !empty($prospect['id']) && !empty($prospect['current_room'])) {
+                $prospect['email_states'] = $this->get_email_states(
+                    (int) $prospect['id'],
+                    $prospect['current_room']
+                );
+            }
             
             // Parse intelligence response_data
             if ($intelligence && !empty($intelligence['response_data'])) {

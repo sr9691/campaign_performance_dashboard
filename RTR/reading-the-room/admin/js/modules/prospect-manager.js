@@ -693,7 +693,7 @@ export default class ProspectManager {
 
     /**
      * Generate a new email (pending or failed state)
-     * NEW: Async generation - no modal, just notification
+     * Async generation - no modal, just notification
      * @param {String} visitorId - Visitor ID
      * @param {String} room - Room name
      * @param {Number} emailNumber - Email sequence number
@@ -761,18 +761,31 @@ export default class ProspectManager {
         } catch (error) {
             console.error('Email generation failed:', error);
             
-            // Update button to failed state
-            this.updateButtonState(visitorId, emailNumber, 'failed');
+            // Show user-friendly error message
+            let userMessage = 'Unable to generate email at this time.';
             
-            if (this.uiManager) {
-                this.uiManager.notify('Email generation failed. Click to retry.', 'error');
+            if (error.message && error.message.includes('template')) {
+                userMessage = 'Email templates need to be configured. Please contact your administrator to set up the campaign templates.';
+            } else if (error.message && error.message.includes('500')) {
+                userMessage = 'Server error occurred. Please try again in a few moments.';
+            } else if (error.message && error.message.includes('network')) {
+                userMessage = 'Network error. Please check your connection and try again.';
             }
+            
+            document.dispatchEvent(new CustomEvent('rtr:showNotification', {
+                detail: {
+                    message: userMessage,
+                    type: 'error'
+                }
+            }));
+            
+            this.updateButtonState(visitorId, emailNumber, 'failed');
         }
     }
 
     /**
      * View ready email (ready state)
-     * NEW: Dispatch rtr:view-ready-email instead of rtr:openEmailModal
+     * Dispatch rtr:view-ready-email instead of rtr:openEmailModal
      * @param {String} visitorId - Visitor ID
      * @param {String} room - Room name
      * @param {Number} emailNumber - Email sequence number
@@ -1054,7 +1067,7 @@ export default class ProspectManager {
     }
 
     /**
-     * NEW: Update prospect email buttons based on state changes
+     * Update prospect email buttons based on state changes
      * @param {String} visitorId - Visitor ID
      * @param {Array} emailStates - Array of email state objects
      */
@@ -1076,7 +1089,7 @@ export default class ProspectManager {
     }
 
     /**
-     * NEW: Find prospect by ID across all rooms
+     * Find prospect by ID across all rooms
      * @param {String} visitorId - Visitor ID to search for
      * @returns {Object|null} Prospect object or null if not found
      */

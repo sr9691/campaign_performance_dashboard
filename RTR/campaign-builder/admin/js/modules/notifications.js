@@ -36,11 +36,15 @@ export default class NotificationSystem {
         
         this.container.appendChild(notification);
         
-        // Auto dismiss after 5 seconds
+        // Auto dismiss after 3 seconds
         setTimeout(() => {
             notification.classList.add('fade-out');
-            setTimeout(() => notification.remove(), 300);
-        }, 5000);
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 300);
+        }, 3000);
         
         // Close button
         notification.querySelector('.notification-close').addEventListener('click', () => {

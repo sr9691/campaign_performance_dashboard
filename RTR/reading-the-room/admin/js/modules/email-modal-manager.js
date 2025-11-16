@@ -175,7 +175,7 @@ export default class EmailModalManager {
             this.showEmailModal(e.detail);
         });
 
-        // NEW: Listen for ready email viewing
+        // Listen for ready email viewing
         document.addEventListener('rtr:view-ready-email', (e) => {
             this.showReadyEmail(e.detail);
         });
@@ -369,7 +369,7 @@ export default class EmailModalManager {
     }
 
     /**
-     * NEW: Show ready email (email already generated, non-editable view)
+     * Show ready email (email already generated, non-editable view)
      * 
      * @param {Object} details - { prospectId, emailNumber, prospectName }
      */
@@ -459,7 +459,7 @@ export default class EmailModalManager {
     }
 
     /**
-     * NEW: Display ready email in read-only mode
+     * Display ready email in read-only mode
      * 
      * @param {Object} email - Email data
      */
@@ -514,7 +514,7 @@ export default class EmailModalManager {
     }
 
     /**
-     * NEW: Update footer to show both copy options and regenerate
+     * Update footer to show both copy options and regenerate
      */
     _updateCopyButtons() {
         const footer = this.modal.querySelector('.email-modal-footer');
@@ -561,7 +561,7 @@ export default class EmailModalManager {
     }
 
     /**
-     * NEW: Copy formatted HTML (for pasting into Gmail)
+     * Copy formatted HTML (for pasting into Gmail)
      * Includes tracking pixel
      */
     async copyFormattedHTML() {
@@ -573,10 +573,10 @@ export default class EmailModalManager {
         try {
             const htmlWithTracking = this._addTrackingPixel(this.currentEmail.body_html);
 
-            // Use Clipboard API for rich HTML
-            const blob = new Blob([htmlWithTracking], { type: 'text/html' });
+            // Try to copy as rich HTML for email clients
+            const htmlBlob = new Blob([htmlWithTracking], { type: 'text/html' });
             const clipboardItem = new ClipboardItem({
-                'text/html': blob
+                'text/html': htmlBlob
             });
 
             await navigator.clipboard.write([clipboardItem]);
@@ -584,15 +584,13 @@ export default class EmailModalManager {
             this._showCopySuccess();
             this._trackCopy();
 
-            // Notify user
             document.dispatchEvent(new CustomEvent('rtr:showNotification', {
                 detail: {
-                    message: 'Formatted HTML copied! Paste into your email client.',
+                    message: 'Email copied! Paste directly into Gmail/Outlook.',
                     type: 'success'
                 }
             }));
 
-            // Update button state to "sent"
             document.dispatchEvent(new CustomEvent('rtr:email-state-update', {
                 detail: {
                     visitorId: this.currentProspect.id,
@@ -601,18 +599,17 @@ export default class EmailModalManager {
                 }
             }));
 
-            // Close modal after brief delay
             setTimeout(() => this.hideModal(), 800);
 
         } catch (error) {
             console.error('Failed to copy formatted HTML:', error);
-            // Fallback to text
-            this.copyRawHTML();
+            alert('Your browser doesn\'t support rich HTML copy. Use "Copy Raw HTML" instead and paste as HTML in your email client.');
         }
     }
 
+
     /**
-     * NEW: Copy raw HTML source code
+     * Copy raw HTML source code
      * Includes tracking pixel
      */
     async copyRawHTML() {
@@ -727,7 +724,7 @@ export default class EmailModalManager {
     }
 
     /**
-     * NEW: Add tracking pixel to HTML
+     * Add tracking pixel to HTML
      * 
      * @param {string} html - Original HTML
      * @returns {string} HTML with tracking pixel
@@ -748,8 +745,15 @@ export default class EmailModalManager {
         }
     }
 
+    _stripHtml(html) {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        return div.textContent || div.innerText || '';
+    }
+
+
     /**
-     * NEW: Track that email was copied
+     * Track that email was copied
      */
     async _trackCopy() {
         if (!this.currentEmail || (!this.currentEmail.id && !this.currentEmail.tracking_id)) {
