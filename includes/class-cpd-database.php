@@ -674,6 +674,8 @@ class CPD_Database {
         $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
             id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             prospect_id BIGINT UNSIGNED NOT NULL,
+            visitor_id mediumint(9) NOT NULL
+            campaign_id varchar(255)
             email_number INT NOT NULL,
             room_type ENUM('problem', 'solution', 'offer') NOT NULL,
             subject VARCHAR(500),
@@ -684,6 +686,7 @@ class CPD_Database {
             ai_prompt_tokens INT NULL,
             ai_completion_tokens INT NULL,
             url_included VARCHAR(500) NULL,
+            notes TEXT            
             copied_at DATETIME NULL,
             sent_at DATETIME,
             opened_at DATETIME,
@@ -793,7 +796,6 @@ class CPD_Database {
         $success = $success && $this->create_global_scoring_rules_table();
         $success = $success && $this->create_client_scoring_rules_table();
         $success = $success && $this->create_room_thresholds_table();
-        $success = $success && $this->create_campaign_target_pages_table();
         
         if ($success) {
             // Initialize default values
@@ -954,42 +956,6 @@ class CPD_Database {
             return true;
         } else {
             error_log('CPD: FAILED to create wp_rtr_room_thresholds table');
-            return false;
-        }
-    }
-
-    /**
-     * Create campaign target pages table
-     */
-    private function create_campaign_target_pages_table() {
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'rtr_campaign_target_pages';
-        $charset_collate = $wpdb->get_charset_collate();
-        
-        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
-            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            campaign_id BIGINT UNSIGNED NOT NULL,
-            page_url VARCHAR(2048) NOT NULL,
-            page_title VARCHAR(255),
-            url_pattern VARCHAR(500) COMMENT 'Regex pattern for matching',
-            room_type ENUM('problem', 'solution', 'offer') NOT NULL,
-            points_multiplier DECIMAL(3,2) DEFAULT 1.00,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_campaign (campaign_id),
-            INDEX idx_room (room_type),
-            FOREIGN KEY (campaign_id) 
-                REFERENCES {$wpdb->prefix}dr_campaign_settings(id) 
-                ON DELETE CASCADE
-        ) {$charset_collate};";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-        
-        if ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name) {
-            error_log('CPD: Successfully created/verified wp_rtr_campaign_target_pages table');
-            return true;
-        } else {
-            error_log('CPD: FAILED to create wp_rtr_campaign_target_pages table');
             return false;
         }
     }
