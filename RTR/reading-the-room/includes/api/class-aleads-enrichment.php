@@ -508,8 +508,9 @@ final class ALeads_Enrichment
             if ($prospect && isset($prospect['id'])) {
                 $this->update_prospect_verification($prospect['id'], [
                     'email_verified' => $is_verified ? 1 : 0,
-                    'email_verification_date' => current_time('mysql'),
-                    'email_verification_result' => wp_json_encode($result_data)
+                    'email_verification_date' => current_time('mysql'), // Will map to email_verified_at
+                    'email_quality' => $quality,
+                    'email_verification_status' => $is_valid ? 'valid' : 'invalid'
                 ]);
                 error_log('[RTR] Updated prospect ' . $prospect['id'] . ' with verification result');
             }
@@ -699,6 +700,43 @@ final class ALeads_Enrichment
             return [];
         }
     }
+
+    private function update_prospect_verification(int $prospect_id, array $data): bool
+    {
+        global $wpdb;
+        
+        $update_data = [];
+        
+        // Map verification fields
+        if (isset($data['email_verified'])) {
+            $update_data['email_verified'] = $data['email_verified'];
+        }
+        
+        if (isset($data['email_verification_date'])) {
+            $update_data['email_verified_at'] = $data['email_verification_date'];
+        }
+        
+        if (isset($data['email_quality'])) {
+            $update_data['email_quality'] = $data['email_quality'];
+        }
+        
+        if (isset($data['email_verification_status'])) {
+            $update_data['email_verification_status'] = $data['email_verification_status'];
+        }
+        
+        $update_data['updated_at'] = current_time('mysql');
+        
+        // Update database
+        $wpdb->update(
+            $wpdb->prefix . 'rtr_prospects',
+            $update_data,
+            ['id' => $prospect_id],
+            array_fill(0, count($update_data), '%s'),
+            ['%d']
+        );
+        
+        return true;
+    }    
 
     private function get_prospect_by_visitor_id($visitor_id) {
         global $wpdb;

@@ -216,64 +216,89 @@ export default class EnrichmentManager {
     }
 
     async handleFindEmail(button, visitorId, contactData) {
-        const originalHTML = button.innerHTML;
+        console.log('Finding email for contact:', contactData);
+        
+        // Show loading state on button
+        const originalHtml = button.innerHTML;
         button.disabled = true;
         button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finding...';
-
+        
         try {
-            const response = await fetch(`${this.apiUrl}/prospects/${visitorId}/find-email`, {
+            const url = `${this.apiUrl}/prospects/${visitorId}/find-email`;
+            
+            // Build request body with contact data
+            const body = {
+                member_id: contactData.member_id,
+                first_name: contactData.first_name,
+                last_name: contactData.last_name,
+                company_domain: contactData.domain
+            };
+            
+            console.log('Find email request body:', body);
+            
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'X-WP-Nonce': this.nonce
+                    'X-WP-Nonce': this.nonce,
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    member_id: contactData.member_id,
-                    first_name: contactData.first_name,
-                    last_name: contactData.last_name,
-                    company_domain: contactData.domain
-                })
+                body: JSON.stringify(body)
             });
 
-            const data = await response.json();
-
-            if (!response.ok || !data.success) {
-                throw new Error(data.message || 'Email not found');
+            console.log('Find email response status:', response.status);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
-            // Update contact data with email
-            contactData.email = data.data.email;
-
-            // Update UI to show found email
-            const card = button.closest('.contact-card');
-            const actionsDiv = card.querySelector('.contact-actions');
-            actionsDiv.innerHTML = `
-                <div class="contact-email-status">
-                    <i class="fas fa-check-circle"></i>
-                    <span>Email: ${this.escapeHtml(data.data.email)}</span>
-                </div>
-                <button class="btn btn-sm btn-primary select-contact-btn">
-                    <i class="fas fa-check"></i> Select
-                </button>
-            `;
-
-            // Re-attach select handler
-            const selectBtn = actionsDiv.querySelector('.select-contact-btn');
-            selectBtn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const modal = card.closest('.rtr-enrichment-modal');
-                const room = card.closest('[data-visitor-id]')?.dataset.room || this.currentRoom;
-                await this.handleSelectContact(modal, visitorId, room, contactData);
-            });
-
-            if (this.uiManager) {
-                this.uiManager.notify('Email found successfully', 'success');
+            const result = await response.json();
+            console.log('Find email response data:', result);
+            
+            if (result.success && result.data && result.data.email) {
+                // Update the contact card to show the email
+                const card = button.closest('.contact-card');
+                const emailDisplay = card.querySelector('.contact-email');
+                if (emailDisplay) {
+                    emailDisplay.innerHTML = `
+                        <i class="fas fa-envelope"></i> 
+                        <strong>${this.escapeHtml(result.data.email)}</strong>
+                        <span class="email-verified-badge" title="Found"><i class="fas fa-check-circle"></i></span>
+                    `;
+                }
+                
+                // Update contact data
+                contactData.email = result.data.email;
+                card.dataset.contact = JSON.stringify(contactData);
+                
+                // Change button to "Select Contact"
+                button.outerHTML = `
+                    <button class="btn btn-primary select-contact-btn" style="flex: 1;">
+                        <i class="fas fa-check"></i> Select Contact
+                    </button>
+                `;
+                
+                // Re-attach handler for new select button
+                const newSelectBtn = card.querySelector('.select-contact-btn');
+                if (newSelectBtn) {
+                    newSelectBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const parentModal = document.getElementById('enrichment-modal');
+                        const room = parentModal.querySelector('[data-room]')?.dataset.room;
+                        await this.handleSelectContact(parentModal, visitorId, room, contactData);
+                    });
+                }
+                
+                if (this.uiManager) {
+                    this.uiManager.notify(`Email found: ${result.data.email}`, 'success');
+                }
+            } else {
+                throw new Error(result.message || 'Email not found');
             }
-
+            
         } catch (error) {
-            console.error('Failed to find email:', error);
+            console.error('Find email failed:', error);
             button.disabled = false;
-            button.innerHTML = originalHTML;
+            button.innerHTML = originalHtml;
             if (this.uiManager) {
                 this.uiManager.notify(error.message || 'Failed to find email', 'error');
             }
@@ -281,51 +306,61 @@ export default class EnrichmentManager {
     }
 
     async handleSelectContact(modal, visitorId, room, contactData) {
+        console.log('Selecting contact:', contactData);
+        
         try {
-            if (this.uiManager) {
-                this.uiManager.showLoader('Saving contact information...');
-            }
-
-            const response = await fetch(`${this.apiUrl}/prospects/${visitorId}/save-enrichment`, {
+            const url = `${this.apiUrl}/prospects/${visitorId}/save-enrichment`;
+            
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'X-WP-Nonce': this.nonce
+                    'X-WP-Nonce': this.nonce,
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
                     contact_name: contactData.name,
-                    contact_email: contactData.email || '',
-                    job_title: contactData.job_title || '',
-                    company_name: contactData.company_name || '',
-                    linkedin_url: contactData.linkedin || '',
-                    aleads_member_id: contactData.member_id || ''
+                    contact_email: contactData.email,
+                    job_title: contactData.job_title,
+                    company_name: contactData.company_name,
+                    linkedin_url: contactData.linkedin,
+                    aleads_member_id: contactData.member_id
                 })
             });
 
-            const data = await response.json();
-
-            if (!response.ok || !data.success) {
-                throw new Error(data.message || 'Failed to save contact');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
-            if (this.uiManager) {
-                this.uiManager.hideLoader();
-                this.uiManager.notify('Contact information saved successfully', 'success');
+            const result = await response.json();
+            
+            if (result.success) {
+                if (this.uiManager) {
+                    this.uiManager.notify('Contact information saved successfully', 'success');
+                }
+                
+                // Dispatch event to update prospect list
+                document.dispatchEvent(new CustomEvent('rtr:contactUpdated', {
+                    detail: { 
+                        visitorId,
+                        contactData
+                    }
+                }));
+                
+                // Close modal
+                modal.classList.remove('active');
+                setTimeout(() => modal.remove(), 300);
+                
+                // Reload prospects if ProspectManager is available
+                if (this.prospectManager && this.prospectManager.loadProspects) {
+                    await this.prospectManager.loadProspects();
+                }
+            } else {
+                throw new Error(result.message || 'Failed to save contact');
             }
             
-            // Close modal
-            modal.classList.remove('active');
-            setTimeout(() => modal.remove(), 300);
-            
-            // Reload the room to show updated data
-            if (this.prospectManager) {
-                await this.prospectManager.loadRoomProspects(room);
-            }
-
         } catch (error) {
-            console.error('Failed to save contact:', error);
+            console.error('Save contact failed:', error);
             if (this.uiManager) {
-                this.uiManager.hideLoader();
                 this.uiManager.notify(error.message || 'Failed to save contact information', 'error');
             }
         }

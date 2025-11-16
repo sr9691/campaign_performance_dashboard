@@ -128,15 +128,17 @@ final class Reading_Room_Controller extends WP_REST_Controller
 
         // Find Email endpoint
         register_rest_route($this->namespace, '/prospects/(?P<id>\d+)/find-email', [
-            'methods' => 'POST',
-            'callback' => [$this, 'find_email'],
-            'permission_callback' => [$this, 'check_permission'],
-            'args' => [
-                'id' => [
-                    'required' => true,
-                    'validate_callback' => function($param) {
-                        return is_numeric($param);
-                    }
+            [
+                'methods' => 'POST',
+                'callback' => [$this, 'find_email'],
+                'permission_callback' => [$this, 'check_permission'],
+                'args' => [
+                    'id' => [
+                        'required' => true,
+                        'validate_callback' => function($param) {
+                            return is_numeric($param);
+                        }
+                    ]
                 ]
             ]
         ]);
@@ -452,8 +454,8 @@ final class Reading_Room_Controller extends WP_REST_Controller
         try {
             // Get visitor data first
             $visitor = $wpdb->get_row($wpdb->prepare(
-                "SELECT * FROM {$visitors_table} WHERE id = %s",
-                $visitor_id
+                "SELECT * FROM {$visitors_table} WHERE id = %d",
+                intval($visitor_id)
             ), ARRAY_A);
             
             // Get prospect data with campaign information - use visitor's lead_score and current_room
@@ -461,7 +463,6 @@ final class Reading_Room_Controller extends WP_REST_Controller
                 "SELECT 
                     p.*,
                     c.campaign_name,
-                    c.campaign_type,
                     v.lead_score,
                     v.current_room
                 FROM {$prospects_table} p
@@ -532,9 +533,9 @@ final class Reading_Room_Controller extends WP_REST_Controller
             $response_data = array(
                 'success' => true,
                 'data' => array(
-                    'prospect' => $prospect ?: array(),
+                    'prospect' => $prospect ?: (object)array(),
                     'visitor' => $visitor ?: array(),
-                    'intelligence' => $intelligence ?: array()
+                    'intelligence' => $intelligence ?: (object)array()
                 )
             );
             
@@ -1441,7 +1442,8 @@ final class Reading_Room_Controller extends WP_REST_Controller
             }
 
             // Call the enrichment verify method
-            $result = $this->enrichment->verify_email($email);
+            $visitor_id = (int) $request['id'];
+            $result = $this->enrichment->verify_email($email, $visitor_id);
 
             error_log('[RTR] Verification result: ' . print_r($result, true));
 

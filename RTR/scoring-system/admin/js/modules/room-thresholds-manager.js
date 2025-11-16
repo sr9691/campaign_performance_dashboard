@@ -148,7 +148,7 @@ class RoomThresholdsManager {
         };
         
         try {
-            const response = await fetch(`${this.apiUrl}room-thresholds`, {
+            const response = await fetch(`${this.apiUrl}/room-thresholds`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

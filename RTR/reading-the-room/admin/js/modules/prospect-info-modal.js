@@ -158,7 +158,7 @@ export default class ProspectInfoModal {
             throw new Error(`Failed to fetch prospect details: ${response.statusText}`);
         }
 
-        const data = await response.json();
+const data = await response.json();
         return data.data || data;
     }
 
@@ -174,12 +174,24 @@ export default class ProspectInfoModal {
         try {
             const url = `${this.apiUrl}/prospects/${visitorId}/find-email`;
             
+            // Build request body with visitor data
+            const body = {};
+            
+            // Check if we have member_id from prior enrichment
+            if (this.currentProspectData?.prospect?.aleads_member_id) {
+                body.member_id = this.currentProspectData.prospect.aleads_member_id;
+                body.first_name = this.currentProspectData.visitor.first_name;
+                body.last_name = this.currentProspectData.visitor.last_name;
+                body.company_domain = this.extractDomain(this.currentProspectData.visitor.website);
+            }
+            
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
                     'X-WP-Nonce': this.nonce,
                     'Content-Type': 'application/json'
-                }
+                },
+                body: JSON.stringify(body) 
             });
 
             if (!response.ok) {
@@ -223,6 +235,16 @@ export default class ProspectInfoModal {
             this.setEmailEnrichmentState(visitorId, 'error', error.message);
         }
     }
+
+    extractDomain(url) {
+        if (!url) return '';
+        try {
+            const urlObj = new URL(url.startsWith('http') ? url : 'https://' + url);
+            return urlObj.hostname.replace('www.', '');
+        } catch (e) {
+            return url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+        }
+    }    
 
     /**
      * Handle Verify Email button click
@@ -287,11 +309,20 @@ export default class ProspectInfoModal {
                 const message = this.getVerificationMessage(status, data.data);
                 this.setEmailEnrichmentState(visitorId, 'success', message);
                 
-                // Update stored data
-                if (this.currentProspectData && this.currentProspectData.prospect) {
-                    this.currentProspectData.prospect.email_verified = data.verified ? 1 : 0;
-                }
+                if (data.verified !== undefined) {
+                    // Update stored data
+                    if (this.currentProspectData?.prospect) {
+                        this.currentProspectData.prospect.email_verified = data.verified ? '1' : '0';
+                        this.currentProspectData.prospect.email_verification_status = data.verified ? 'valid' : 'invalid';
+                        this.currentProspectData.prospect.email_quality = data.data?.quality || null;
+                    }
+                    
+                    // Re-render to show badge
+                    this.renderProspectInfo(this.currentProspectData);
+                }            
                 
+
+
                 // Dispatch event to update prospect list
                 document.dispatchEvent(new CustomEvent('rtr:emailVerified', {
                     detail: { 
@@ -304,6 +335,7 @@ export default class ProspectInfoModal {
             } else {
                 throw new Error(data.message || 'Verification failed');
             }
+
 
         } catch (error) {
             console.error('Verify email failed:', error);
@@ -434,12 +466,14 @@ export default class ProspectInfoModal {
         const body = this.modal.querySelector('.rtr-modal-body');
         
         // Extract prospect, visitor, and intelligence data
-        const prospect = data.prospect || {};
+        const prospect = (Array.isArray(data.prospect) && data.prospect.length === 0) ? {} : (data.prospect || {});
         const visitor = data.visitor || {};
         const intelligence = data.intelligence || {};
         
         // Determine current email for enrichment buttons
         const currentEmail = prospect.contact_email || visitor.email || '';
+        const emailToVerify = currentEmail;
+        const hasProspectRecord = prospect && Object.keys(prospect).length > 0;
         const hasEmail = currentEmail && currentEmail !== 'N/A';
         
         body.innerHTML = `
@@ -457,7 +491,11 @@ export default class ProspectInfoModal {
                         <div class="info-item info-item-email">
                             <span class="info-label">Email:</span>
                             <div class="info-value-with-actions">
-                                <span class="info-value">${this.escapeHtml(currentEmail || 'N/A')}</span>
+                                <span class="info-value">
+                                <span class="info-value">
+                                    ${this.escapeHtml(currentEmail || 'N/A')}
+                                    ${hasProspectRecord && currentEmail ? this.renderVerificationBadge(prospect) : (currentEmail ? '<i class="fas fa-question-circle" style="color: #f59e0b; margin-left: 8px; font-size: 14px;" title="Email not yet verified"></i>' : '')}
+                                </span>
                                 <!-- Email Enrichment Buttons -->
                                 <div class="rtr-email-enrichment-container">
                                     <button class="rtr-find-email-btn rtr-enrichment-btn" 
@@ -470,7 +508,7 @@ export default class ProspectInfoModal {
                                     <button class="rtr-verify-email-btn rtr-enrichment-btn" 
                                             data-visitor-id="${visitor.id || prospect.visitor_id}"
                                             title="Verify email address"
-                                            style="${hasEmail ? '' : 'display: none;'}">
+                                            style="${hasEmail && (!hasProspectRecord || (prospect.email_verified != '1' && prospect.email_verified != 1)) ? '' : 'display: none;'}">
                                         <i class="fas fa-check-circle"></i>
                                         <span>Verify Email</span>
                                     </button>
@@ -751,6 +789,39 @@ export default class ProspectInfoModal {
         
         return html;
     }
+
+    renderVerificationBadge(prospect) {
+        if (!prospect || !prospect.contact_email) {
+            return '';
+        }
+        
+        // Verified email - green check
+        console.log('Email verified status:', prospect.email_verified); 
+        if (prospect.email_verified === '1' || prospect.email_verified === 1) {
+            const verifiedDate = prospect.email_verified_at 
+                ? ` on ${this.formatDate(prospect.email_verified_at)}` 
+                : '';
+            return `<i class="fas fa-check-circle" 
+                    style="color: #10b981; margin-left: 8px; font-size: 14px;" 
+                    title="Email verified${verifiedDate}"></i>`;
+        }
+        
+        // Invalid email - red X
+        if (prospect.email_verification_status === 'invalid') {
+            return `<i class="fas fa-times-circle" 
+                    style="color: #ef4444; margin-left: 8px; font-size: 14px;" 
+                    title="Email verification failed"></i>`;
+        }
+        
+        // Not verified - yellow question mark
+        if (prospect.contact_email) {
+            return `<i class="fas fa-question-circle" 
+                    style="color: #f59e0b; margin-left: 8px; font-size: 14px;" 
+                    title="Email not yet verified"></i>`;
+        }
+        
+        return '';
+    }    
 
     showError(message) {
         const body = this.modal.querySelector('.rtr-modal-body');
