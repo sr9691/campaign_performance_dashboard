@@ -815,13 +815,13 @@ class CPD_Admin {
         $rtr_status_changed = false;
         
         // Check if tier changed to premium
-        if ($subscription_tier === 'premium' && $current_client->subscription_tier !== 'premium') {
+        if ($subscription_tier === 'premium') {
             $subscription_expires_at = date('Y-m-d H:i:s', strtotime('+10 years'));
             $tier_changed = true;
         }
         
         // Check if tier changed to basic
-        if ($subscription_tier === 'basic' && $current_client->subscription_tier === 'premium') {
+        if ($subscription_tier === 'basic') {
             $rtr_enabled = 0; // Force disable RTR when downgrading
             $subscription_expires_at = null;
             $tier_changed = true;
@@ -886,9 +886,24 @@ class CPD_Admin {
             implode('; ', $log_parts)
         );
         
-
+        error_log('AJAX Edit Client - Updated: ' . var_export($updated, true) . ', Tier Changed: ' . var_export($tier_changed, true) . ', RTR Status Changed: ' . var_export($rtr_status_changed, true));
         $user_id = get_current_user_id();
         if ( $updated !== false ) {
+            error_log('AJAX Edit Client - Update successful for Client ID ' . $client_id);
+            if ($subscription_tier === 'premium') {
+
+                // Ensure migrator is loaded before firing hook
+                if (function_exists('rtr_hotlist_migrator')) {
+                    error_log('AJAX Edit Client - Initializing migrator before firing hook');
+                    rtr_hotlist_migrator(); // Force initialization
+                } else {
+                    error_log('AJAX Edit Client - WARNING: rtr_hotlist_migrator function not found');
+                }
+
+                error_log('AJAX Edit Client - Triggering cpd_client_tier_changed action for upgrade to premium for Client ID ' . $client_id);
+                do_action('cpd_client_tier_changed', $client_id, 'basic', 'premium');
+            }
+
             $this->log_action( $user_id, 'CLIENT_EDITED_AJAX', 'Client ID ' . $client_id . ' was edited via AJAX with AI ' . ( $ai_intelligence_enabled ? 'enabled' : 'disabled' ) . '.' );
             wp_send_json_success(array(
                 'message' => 'Client updated successfully',

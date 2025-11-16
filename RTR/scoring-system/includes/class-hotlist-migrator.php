@@ -67,12 +67,12 @@ class RTR_Hotlist_Migrator {
         if ($new_tier !== 'premium') {
             return;
         }
-        
+        /*
         // Check if already migrated
         if ($this->is_migrated($client_id)) {
             return;
         }
-        
+        */
         // Perform migration
         $this->migrate_client($client_id);
     }
@@ -85,6 +85,8 @@ class RTR_Hotlist_Migrator {
      * @return array Migration result
      */
     public function migrate_client($client_id) {
+        
+        error_log("Starting Hot List migration for client ID: {$client_id}");
         // Verify client exists and is Premium
         if (!$this->validate_client($client_id)) {
             return [
@@ -92,16 +94,7 @@ class RTR_Hotlist_Migrator {
                 'error' => 'Client not found or not Premium tier'
             ];
         }
-        
-        // Check if already migrated
-        if ($this->is_migrated($client_id)) {
-            return [
-                'success' => false,
-                'error' => 'Hot List already migrated for this client',
-                'already_migrated' => true
-            ];
-        }
-        
+             
         // Load Hot List settings
         $hotlist_settings = $this->get_hotlist_settings($client_id);
         
@@ -143,6 +136,7 @@ class RTR_Hotlist_Migrator {
             'migrated_at' => current_time('mysql'),
             'rules_count' => count($problem_rules)
         ];
+        error_log("Completed Hot List migration for client ID: {$client_id}");
     }
     
     // ===========================================

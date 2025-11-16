@@ -537,7 +537,6 @@ final class Campaign_Matcher
      * Get scoring weights from database - Phase 1.4
      * 
      * Queries rtr_global_scoring_rules (problem room type).
-     * FIXED: Removed rtr_client_scoring_rules query as table doesn't exist
      * 
      * Extracts weights from rules_config JSON and maps them to matcher weights:
      * - industry_alignment.points -> keyword_match
@@ -564,7 +563,6 @@ final class Campaign_Matcher
             global $wpdb;
             
             // FIXED: Removed client_id lookup and client-specific rules
-            // Only use global rules since rtr_client_scoring_rules doesn't exist
             $global_rules_table = $wpdb->prefix . 'rtr_global_scoring_rules';
             $rules = $wpdb->get_row(
                 "SELECT rules_config FROM {$global_rules_table} 
