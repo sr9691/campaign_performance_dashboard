@@ -34,10 +34,16 @@ class AISettingsManager {
     /**
      * Initialize manager
      */
-    init() {
+    async init() {
         this.cacheElements();
         this.attachEventListeners();
-        this.loadSettings();
+        await this.loadSettings();
+        
+        // If API key is in the input field but not saved, save it first
+        if (this.apiKeyInput && this.apiKeyInput.value && !this.currentSettings.api_key_set) {
+            await this.saveApiKeyOnly();
+        }
+        
         this.loadModels();
         this.loadUsageStats();
     }
@@ -124,6 +130,26 @@ class AISettingsManager {
             this.setLoadingState(false);
         }
     }
+
+    async saveApiKeyOnly() {
+        if (!this.apiKeyInput || !this.apiKeyInput.value) {
+            return;
+        }
+        
+        try {
+            console.log('Saving API key before loading models...');
+            const response = await this.apiRequest('PUT', '/settings/ai-config', {
+                api_key: this.apiKeyInput.value
+            });
+            
+            if (response.success) {
+                this.currentSettings.api_key_set = true;
+                console.log('API key saved successfully');
+            }
+        } catch (error) {
+            console.error('Failed to save API key:', error);
+        }
+    }    
     
     /**
      * Populate form with settings data
@@ -334,11 +360,14 @@ class AISettingsManager {
             this.isTesting = true;
             this.setTestingState(true);
             
-            // Get API key from input if provided
             const apiKey = this.apiKeyInput && this.apiKeyInput.value ? 
                 this.apiKeyInput.value : null;
             
-            const payload = apiKey ? { api_key: apiKey } : {};
+            const selectedModel = this.modelSelect ? this.modelSelect.value : null;
+            
+            const payload = {};
+            if (apiKey) payload.api_key = apiKey;
+            if (selectedModel) payload.model = selectedModel;
             
             const response = await this.apiRequest('POST', '/settings/test-ai', payload);
             

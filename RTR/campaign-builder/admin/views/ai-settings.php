@@ -219,9 +219,9 @@ if (!defined('ABSPATH')) {
 document.addEventListener('DOMContentLoaded', function() {
     const toggle = document.getElementById('settings-dropdown-toggle');
     const menu = document.getElementById('settings-menu');
-    const dropdown = toggle.closest('.settings-dropdown'); // Get the container
+    const dropdown = toggle ? toggle.closest('.settings-dropdown') : null; // Get the container
     
-    if (toggle && menu) {
+    if (toggle && menu && dropdown) {
         toggle.addEventListener('click', function(e) {
             e.stopPropagation();
             dropdown.classList.toggle('active'); // Toggle on container, not menu

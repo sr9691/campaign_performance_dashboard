@@ -113,7 +113,7 @@ class AI_Settings_Controller extends \WP_REST_Controller {
             $config = [
                 'enabled' => $this->is_ai_enabled(),
                 'api_key_set' => $this->has_api_key(),
-                'model' => get_option('dr_gemini_model', 'gemini-1.5-flash'),
+                'model' => get_option('dr_gemini_model', 'gemini-1.5-flash-latest'),
                 'temperature' => (float) get_option('dr_gemini_temperature', 0.7),
                 'max_tokens' => (int) get_option('dr_gemini_max_tokens', 1000),
                 'rate_limit_enabled' => $this->is_rate_limit_enabled(),
@@ -240,11 +240,10 @@ class AI_Settings_Controller extends \WP_REST_Controller {
      * @param WP_REST_Request $request
      * @return WP_REST_Response|WP_Error
      */
-    public function test_ai_connection($request) {
+    public function test_ai_connection($request, $model = null) {
         try {
             $params = $request->get_json_params();
             
-            // Use provided API key or get from storage
             $api_key = isset($params['api_key']) && !empty($params['api_key']) 
                 ? sanitize_text_field($params['api_key'])
                 : $this->get_api_key();
@@ -262,8 +261,13 @@ class AI_Settings_Controller extends \WP_REST_Controller {
                 );
             }
 
-            // Test connection with simple API call
-            $test_result = $this->test_gemini_connection($api_key);
+            // Use provided model or get from storage
+            $model = isset($params['model']) && !empty($params['model'])
+                ? sanitize_text_field($params['model'])
+                : get_option('dr_gemini_model', 'gemini-1.5-flash');
+
+                // Test connection with simple API call
+            $test_result = $this->test_gemini_connection($api_key, $model);
 
             if ($test_result['success']) {
                 $this->log_action(
@@ -362,7 +366,7 @@ class AI_Settings_Controller extends \WP_REST_Controller {
      */
     private function fetch_available_models($api_key) {
         // Use v1beta to get all available models
-        $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models?key=' . $api_key;
+        $endpoint = 'https://generativelanguage.googleapis.com/v1/models?key=' . $api_key;
         
         $response = wp_remote_get($endpoint, [
             'timeout' => 10,
@@ -443,15 +447,15 @@ class AI_Settings_Controller extends \WP_REST_Controller {
     private function get_fallback_models() {
         return [
             [
-                'name' => 'gemini-1.5-flash',
+                'name' => 'gemini-1.5-flash-latest',
                 'display_name' => 'Gemini 1.5 Flash (Recommended)',
             ],
             [
-                'name' => 'gemini-1.5-pro',
+                'name' => 'gemini-1.5-pro-latest',
                 'display_name' => 'Gemini 1.5 Pro',
             ],
             [
-                'name' => 'gemini-1.5-flash-8b',
+                'name' => 'gemini-1.5-flash-8b-latest',
                 'display_name' => 'Gemini 1.5 Flash-8B (Fastest)',
             ],
         ];
@@ -463,12 +467,16 @@ class AI_Settings_Controller extends \WP_REST_Controller {
      * @param string $api_key
      * @return array
      */
-    private function test_gemini_connection($api_key) {
-        // Use v1beta for newer models (v1 doesn't support latest models)
-        $model = get_option('dr_gemini_model', 'gemini-1.5-flash');
+    private function test_gemini_connection($api_key, $model = null) {
+        // Use provided model or get from storage
+        error_log('TEST GEMINI CONNECTION: Model passed in param: ' . ($model ? $model : 'none'));
+        $model = isset($params['model']) && !empty($params['model'])
+            ? sanitize_text_field($params['model'])
+            : get_option('dr_gemini_model', 'gemini-2.5-flash');
+        error_log('TEST GEMINI CONNECTION: Model used: ' . $model);
         
         $endpoint = sprintf(
-            'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
+            'https://generativelanguage.googleapis.com/v1/models/%s:generateContent?key=%s',
             $model,
             $api_key
         );
@@ -706,25 +714,6 @@ class AI_Settings_Controller extends \WP_REST_Controller {
             ],
         ];
     }
-
-
-    /**
-     * Add to class-ai-settings-controller.php register_routes() method
-     */
-
-    // POST /settings/test-prompt (renamed from /templates/test-prompt for consistency)
-    register_rest_route($this->namespace, '/' . $this->rest_base . '/test-prompt', [
-        'methods' => \WP_REST_Server::CREATABLE,
-        'callback' => [$this, 'test_prompt'],
-        'permission_callback' => [$this, 'check_admin_permissions'],
-        'args' => [
-            'prompt_template' => [
-                'type' => 'object',
-                'required' => true,
-                'description' => '7-component prompt structure',
-            ],
-        ],
-    ]);
 
     /**
      * Test prompt with mock visitor data
@@ -1045,10 +1034,10 @@ class AI_Settings_Controller extends \WP_REST_Controller {
      * @return array|WP_Error
      */
     private function call_gemini_for_test($api_key, $payload) {
-        $model = get_option('dr_gemini_model', 'gemini-1.5-flash');
+        $model = get_option('dr_gemini_model', 'gemini-1.5-flash-latest');
         
         $endpoint = sprintf(
-            'https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s',
+            'https://generativelanguage.googleapis.com/v1/models/%s:generateContent?key=%s',
             $model,
             $api_key
         );
