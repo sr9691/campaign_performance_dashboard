@@ -38,15 +38,19 @@ export default class WorkflowManager {
             // Setup navigation listeners
             this.setupNavigation();
             this.setupBreadcrumbNavigation();
+            this.setupManagerListeners();
             
             this.emit('workflow:initialized');
+        
         } catch (error) {
+        
             console.error('Workflow initialization failed:', error);
             // Still initialize even if state loading fails
             this.currentStep = 'client';
             this.renderCurrentStep();
             this.setupNavigation();
             this.setupBreadcrumbNavigation();
+            this.setupManagerListeners();
             this.emit('workflow:error', error);
         }
     }
@@ -135,6 +139,87 @@ export default class WorkflowManager {
             });
         });
     }
+
+
+    /**
+     * Setup event listeners for step managers
+     */
+    setupManagerListeners() {
+        console.log('Setting up manager listeners...');
+        
+        // Listen for client selection
+        if (this.clientManager) {
+            this.clientManager.on('client:selected', (client) => {
+                console.log('Workflow: Client selected:', client);
+                
+                // Update state with selected client
+                this.stateManager.updateState({
+                    clientId: client.id,
+                    clientName: client.client_name,
+                    // Clear downstream data when client changes
+                    campaignId: null,
+                    campaignName: null,
+                    utmCampaign: ''
+                });
+                
+                // Update UI
+                this.updateBreadcrumbText();
+                this.updateNavigationButtons();
+            });
+        }
+        
+        // Listen for campaign selection
+        if (this.campaignManager) {
+            this.campaignManager.on('campaign:selected', (campaign) => {
+                console.log('Workflow: Campaign selected:', campaign);
+                
+                // Update state with selected campaign
+                this.stateManager.updateState({
+                    campaignId: campaign.id,
+                    campaignName: campaign.campaign_name,
+                    utmCampaign: campaign.utm_campaign,
+                    settings: campaign.settings || {}
+                });
+                
+                // Update UI
+                this.updateBreadcrumbText();
+                this.updateNavigationButtons();
+            });
+            
+            // Listen for campaign creation
+            this.campaignManager.on('campaign:created', (campaign) => {
+                console.log('Workflow: Campaign created:', campaign);
+                
+                // Update state with new campaign
+                this.stateManager.updateState({
+                    campaignId: campaign.id,
+                    campaignName: campaign.campaign_name,
+                    utmCampaign: campaign.utm_campaign,
+                    settings: campaign.settings || {}
+                });
+                
+                // Update UI
+                this.updateBreadcrumbText();
+                this.updateNavigationButtons();
+            });
+        }
+        
+        // Listen for content links saved
+        if (this.contentLinksManager) {
+            this.contentLinksManager.on('links:saved', () => {
+                console.log('Workflow: Content links saved');
+                this.updateNavigationButtons();
+            });
+        }
+        
+        // Listen for templates saved
+        if (this.templateManager) {
+            this.templateManager.on('templates:saved', () => {
+                console.log('Workflow: Templates saved');
+                this.updateNavigationButtons();
+            });
+        }
+    }    
     
     /**
      * Update breadcrumb classes based on current step
@@ -336,7 +421,64 @@ export default class WorkflowManager {
 
         // Emit step change event
         this.emit('step:changed', this.currentStep);      
+
+        // Initialize step-specific managers
+        this.initializeStepManager(this.currentStep);        
     }
+
+    /**
+     * Initialize manager for current step
+     * 
+     * @param {string} step - Current step name
+     */
+    async initializeStepManager(step) {
+        const state = this.stateManager.getState();
+        
+        switch (step) {
+            case 'client':
+                // Client step - load clients if needed
+                if (this.clientManager && this.clientManager.clients.length === 0) {
+                    await this.clientManager.loadClients();
+                }
+                break;
+                
+            case 'campaign':
+                // Load campaigns for selected client
+                if (state.clientId) {
+                    console.log('Initializing campaign step for client:', state.clientId, state.clientName);
+                    if (this.campaignManager) {
+                        await this.campaignManager.loadCampaigns(state.clientId);
+                    }
+                } else {
+                    console.warn('No client selected, cannot initialize campaign step');
+                }
+                break;
+                
+            case 'content-links':
+                // Load content links for selected campaign
+                if (state.campaignId) {
+                    console.log('Initializing content-links step for campaign:', state.campaignId);
+                    if (this.contentLinksManager) {
+                        await this.contentLinksManager.loadLinks();
+                    }
+                } else {
+                    console.warn('No campaign selected, cannot initialize content-links step');
+                }
+                break;
+                
+            case 'templates':
+                // Load templates for selected campaign
+                if (state.campaignId) {
+                    console.log('Initializing templates step for campaign:', state.campaignId);
+                    if (this.templateManager) {
+                        await this.templateManager.loadTemplates();
+                    }
+                } else {
+                    console.warn('No campaign selected, cannot initialize templates step');
+                }
+                break;
+        }
+    }    
     
     /**
      * Update navigation buttons

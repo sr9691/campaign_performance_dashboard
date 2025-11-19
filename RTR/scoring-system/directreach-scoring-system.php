@@ -19,8 +19,8 @@ if (!defined('ABSPATH')) {
 define('RTR_SCORING_VERSION', '1.0.0');
 
 // Define paths
-define('RTR_SCORING_PATH', plugin_dir_path(__FILE__));
-define('RTR_SCORING_URL', plugin_dir_url(__FILE__));
+define('RTR_SCORING_PATH', plugin_dir_path(__FILE__) ?: __DIR__ . '/');
+define('RTR_SCORING_URL', plugin_dir_url(__FILE__) ?: plugins_url('/', __FILE__));
 
 /**
  * Main Scoring System Class
@@ -440,8 +440,8 @@ class DirectReach_Scoring_System {
         );
         
         // Calculate Campaign Builder CSS URL correctly
-        $rtr_base_url = dirname(RTR_SCORING_URL); 
-        $cb_css_url = $rtr_base_url . '/campaign-builder/admin/css/';
+        $rtr_base_url = RTR_SCORING_URL ? dirname(RTR_SCORING_URL) : ''; 
+        $cb_css_url = $rtr_base_url ? $rtr_base_url . '/campaign-builder/admin/css/' : '';
         
         // Campaign Builder base styles (shared)
         wp_enqueue_style(

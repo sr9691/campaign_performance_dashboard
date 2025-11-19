@@ -137,13 +137,20 @@ export default class CampaignManager extends EventEmitter {
             return this.campaigns;
         }
 
+        // Store the clientId for form submissions
+        this.selectedClientId = targetClientId;
+
         // Update client name display
         if (this.stateManager) {
             const state = this.stateManager.getState();
+            
+            // Also store client name
+            this.selectedClientName = state.clientName || '';
+            
             if (state.clientName && this.elements.clientNameDisplay) {
                 this.elements.clientNameDisplay.textContent = state.clientName;
             }
-        }        
+        }       
         
         this.showLoadingState();
         this.isLoading = true;

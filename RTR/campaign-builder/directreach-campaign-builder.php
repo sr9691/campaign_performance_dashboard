@@ -17,11 +17,11 @@ if (!defined('DR_CB_VERSION')) {
 }
 
 if (!defined('DR_CB_PLUGIN_DIR')) {
-    define('DR_CB_PLUGIN_DIR', plugin_dir_path(__FILE__));
+    define('DR_CB_PLUGIN_DIR', plugin_dir_path(__FILE__) ?: __DIR__ . '/');
 }
 
 if (!defined('DR_CB_PLUGIN_URL')) {
-    define('DR_CB_PLUGIN_URL', plugin_dir_url(__FILE__));
+    define('DR_CB_PLUGIN_URL', plugin_dir_url(__FILE__) ?: plugins_url('/', __FILE__));
 }
 
 /**
@@ -42,7 +42,8 @@ function dr_campaign_builder_init() {
     }
     
     // Check if class file exists
-    $class_file = DR_CB_PLUGIN_DIR . 'includes/class-campaign-builder.php';
+    $plugin_dir = defined('DR_CB_PLUGIN_DIR') && DR_CB_PLUGIN_DIR ? DR_CB_PLUGIN_DIR : __DIR__ . '/';
+    $class_file = $plugin_dir . 'includes/class-campaign-builder.php';
     
     if (!file_exists($class_file)) {
         error_log('DR_CB Bootstrap: ERROR - Class file not found: ' . $class_file);
@@ -61,13 +62,15 @@ function dr_campaign_builder_init() {
     // Admin-only initialization
     if (is_admin()) {
         // Load Global Templates Admin
-        $admin_file = DR_CB_PLUGIN_DIR . 'includes/admin/class-global-templates-admin.php';
+        $plugin_dir = defined('DR_CB_PLUGIN_DIR') && DR_CB_PLUGIN_DIR ? DR_CB_PLUGIN_DIR : __DIR__ . '/';
+        $admin_file = $plugin_dir . 'includes/admin/class-global-templates-admin.php';
         if (file_exists($admin_file)) {
             require_once $admin_file;
         }
 
         // Load Scoring System
-        $scoring_system_file = DR_CB_PLUGIN_DIR . '../scoring-system/directreach-scoring-system.php';
+        $plugin_dir = defined('DR_CB_PLUGIN_DIR') && DR_CB_PLUGIN_DIR ? DR_CB_PLUGIN_DIR : __DIR__ . '/';
+        $scoring_system_file = $plugin_dir . '../scoring-system/directreach-scoring-system.php';
         if (file_exists($scoring_system_file)) {
             require_once $scoring_system_file;
         } else {
@@ -162,16 +165,17 @@ function dr_ai_settings_enqueue_assets() {
     );
     
     // Campaign Builder base styles
+    $plugin_url = defined('DR_CB_PLUGIN_URL') && DR_CB_PLUGIN_URL ? DR_CB_PLUGIN_URL : plugins_url('/', __FILE__);
     wp_enqueue_style(
         'dr-cb-variables',
-        DR_CB_PLUGIN_URL . 'admin/css/variables.css',
+        $plugin_url . 'admin/css/variables.css',
         array(),
         DR_CB_VERSION
     );
     
     wp_enqueue_style(
         'dr-cb-base',
-        DR_CB_PLUGIN_URL . 'admin/css/base.css',
+        $plugin_url . 'admin/css/base.css',
         array('dr-cb-variables'),
         DR_CB_VERSION
     );
@@ -179,7 +183,7 @@ function dr_ai_settings_enqueue_assets() {
     // AI Settings specific styles
     wp_enqueue_style(
         'dr-ai-settings',
-        DR_CB_PLUGIN_URL . '/admin/css/ai-settings.css',
+        $plugin_url . '/admin/css/ai-settings.css',
         array('dr-cb-variables'),
         DR_CB_VERSION
     );
@@ -187,7 +191,7 @@ function dr_ai_settings_enqueue_assets() {
     // AI Settings JavaScript
     wp_enqueue_script(
         'dr-ai-settings',
-        DR_CB_PLUGIN_URL . 'admin/js/modules/ai-settings-manager.js',
+        $plugin_url . 'admin/js/modules/ai-settings-manager.js',
         array(),
         DR_CB_VERSION,
         true
@@ -256,7 +260,8 @@ function dr_ai_settings_render_page() {
     </head>
     <body class="rtr-page dr-ai-settings">
         <?php
-        $template_file = DR_CB_PLUGIN_DIR . 'admin/views/ai-settings.php';
+        $plugin_dir = defined('DR_CB_PLUGIN_DIR') && DR_CB_PLUGIN_DIR ? DR_CB_PLUGIN_DIR : __DIR__ . '/';
+        $template_file = $plugin_dir . 'admin/views/ai-settings.php';
         
         if (file_exists($template_file)) {
             include $template_file;
@@ -290,7 +295,8 @@ function dr_ai_settings_render_page() {
 function dr_ai_settings_register_api() {
     error_log('=== AI Settings: Registering REST API routes ===');
     
-    $controller_file = DR_CB_PLUGIN_DIR . 'includes/api/class-ai-settings-controller.php';
+    $plugin_dir = defined('DR_CB_PLUGIN_DIR') && DR_CB_PLUGIN_DIR ? DR_CB_PLUGIN_DIR : __DIR__ . '/';
+    $controller_file = $plugin_dir . 'includes/api/class-ai-settings-controller.php';
     
     error_log('AI Settings: Controller file path: ' . $controller_file);
     error_log('AI Settings: File exists? ' . (file_exists($controller_file) ? 'YES' : 'NO'));

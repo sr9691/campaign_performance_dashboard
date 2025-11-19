@@ -19,8 +19,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // Define plugin constants.
 define( 'CPD_DASHBOARD_VERSION', '2.0.0' );
-define( 'CPD_DASHBOARD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
-define( 'CPD_DASHBOARD_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+define( 'CPD_DASHBOARD_PLUGIN_DIR', plugin_dir_path( __FILE__ ) ?: __DIR__ . '/' );
+define( 'CPD_DASHBOARD_PLUGIN_URL', plugin_dir_url( __FILE__ ) ?: plugins_url( '/', __FILE__ ) );
 
 /**
  * V2 Premium Feature Constants
@@ -77,7 +77,10 @@ function cpd_dashboard_activate() {
     cpd_register_premium_capabilities();
 }
 
-register_activation_hook( __FILE__, 'cpd_dashboard_activate' );
+$activation_file = __FILE__ ?: '';
+if ($activation_file !== '') {
+    register_activation_hook( $activation_file, 'cpd_dashboard_activate' );
+}
 
 /**
  * Register premium tier capabilities
@@ -553,10 +556,12 @@ function cpd_add_hot_list_query_vars( $vars ) {
 }
 
 function cpd_parse_hot_list_request( $wp ) {
-    // Check if this is our hot list settings URL
-    if ( strpos( $_SERVER['REQUEST_URI'], '/directreach/reports/hot-list-settings' ) !== false ||
-         strpos( $_SERVER['REQUEST_URI'], '/dashboarddev/campaign-dashboard/hot-list-settings' ) !== false ||
-         strpos( $_SERVER['REQUEST_URI'], '/campaign-dashboard/hot-list-settings' ) !== false ) {
+    // PHP 8.1+ compatibility: Ensure REQUEST_URI is a string
+    $request_uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+    if ( $request_uri !== '' && (
+         strpos( $request_uri, '/directreach/reports/hot-list-settings' ) !== false ||
+         strpos( $request_uri, '/dashboarddev/campaign-dashboard/hot-list-settings' ) !== false ||
+         strpos( $request_uri, '/campaign-dashboard/hot-list-settings' ) !== false ) ) {
         
         // Manually set the query var
         $wp->query_vars['cpd_hot_list_settings'] = '1';
@@ -585,7 +590,10 @@ function cpd_handle_hot_list_settings_template() {
 /**
  * Plugin uninstall cleanup
  */
-register_uninstall_hook( __FILE__, 'cpd_dashboard_uninstall' );
+$uninstall_file = __FILE__ ?: '';
+if ($uninstall_file !== '') {
+    register_uninstall_hook( $uninstall_file, 'cpd_dashboard_uninstall' );
+}
 
 function cpd_dashboard_uninstall() {
     // Clean up options
@@ -646,7 +654,10 @@ function cpd_intelligence_admin_notices() {
 add_action( 'plugins_loaded', 'cpd_dashboard_load_textdomain' );
 
 function cpd_dashboard_load_textdomain() {
-    load_plugin_textdomain( 'cpd-dashboard', false, dirname( plugin_basename( __FILE__ ) ) . '/languages/' );
+    $plugin_file = __FILE__ ?: '';
+    if ($plugin_file !== '') {
+        load_plugin_textdomain( 'cpd-dashboard', false, dirname( plugin_basename( $plugin_file ) ) . '/languages/' );
+    }
 }
 
 /**

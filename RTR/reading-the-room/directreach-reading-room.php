@@ -15,8 +15,8 @@ if (!defined('ABSPATH')) {
 
 define('DR_RTR_VERSION', '2.0.1');
 define('DR_RTR_PLUGIN_FILE', __FILE__);
-define('DR_RTR_PLUGIN_DIR', plugin_dir_path(__FILE__));
-define('DR_RTR_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('DR_RTR_PLUGIN_DIR', plugin_dir_path(__FILE__) ?: __DIR__ . '/');
+define('DR_RTR_PLUGIN_URL', plugin_dir_url(__FILE__) ?: plugins_url('/', __FILE__));
 define('DR_RTR_ADMIN_DIR', DR_RTR_PLUGIN_DIR . 'admin/');
 define('DR_RTR_ADMIN_VIEWS', DR_RTR_ADMIN_DIR . 'views/');
 define('DR_RTR_ASSETS_URL', DR_RTR_PLUGIN_URL . 'assets/');
@@ -51,7 +51,8 @@ function dr_rtr_require_files(): void
     $loaded = true;
 }
 
-register_activation_hook(DR_RTR_PLUGIN_FILE, function (): void {
+$activation_file = defined('DR_RTR_PLUGIN_FILE') && DR_RTR_PLUGIN_FILE ? DR_RTR_PLUGIN_FILE : __FILE__;
+register_activation_hook($activation_file, function () use ($activation_file): void {
     global $wpdb;
     
     error_log('[RTR Activation] Starting...');
@@ -71,7 +72,8 @@ register_activation_hook(DR_RTR_PLUGIN_FILE, function (): void {
     error_log('[RTR Activation] Complete');
 });
 
-register_deactivation_hook(DR_RTR_PLUGIN_FILE, function (): void {
+$deactivation_file = defined('DR_RTR_PLUGIN_FILE') && DR_RTR_PLUGIN_FILE ? DR_RTR_PLUGIN_FILE : __FILE__;
+register_deactivation_hook($deactivation_file, function (): void {
     flush_rewrite_rules(false);
 });
 
@@ -244,9 +246,9 @@ add_action('admin_menu', function () {
 function dr_rtr_admin_redirect(): void
 {
     // Auto-detect environment from REQUEST_URI
-    $uri = $_SERVER['REQUEST_URI'];
+    $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
     
-    if (strpos($uri, 'dashboarddev') !== false) {
+    if ($uri !== '' && strpos($uri, 'dashboarddev') !== false) {
         $url = home_url('/dashboarddev/reading-the-room/');
     } else {
         $url = home_url('/directreach/reading-the-room/');
