@@ -894,6 +894,36 @@ class CPD_Database {
         return ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name);
     }  
 
+    public function create_rtr_content_links_table() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'rtr_content_links';
+        $charset_collate = $wpdb->get_charset_collate();
+        
+        $sql = "CREATE TABLE IF NOT EXISTS {$table_name} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            campaign_id BIGINT UNSIGNED NOT NULL,
+            room_type ENUM('problem','solution','offer') NOT NULL,
+            link_title VARCHAR(255) NOT NULL,
+            link_url VARCHAR(500) NOT NULL,
+            link_description TEXT NULL,
+            url_summary TEXT NULL,
+            link_order INT DEFAULT 0,
+            is_active TINYINT(1) DEFAULT 1,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY campaign_id (campaign_id),
+            KEY room_type (room_type),
+            KEY link_order (link_order),
+            KEY is_active (is_active)
+        ) {$charset_collate};";
+        
+        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+        dbDelta($sql);
+        
+        return ($wpdb->get_var("SHOW TABLES LIKE '{$table_name}'") === $table_name);
+    }
+
     /**
      * Create client scoring rules table
      */
@@ -1157,6 +1187,7 @@ class CPD_Database {
         $success = $success && $this->create_scoring_rules_tables();
         $success = $success && $this->create_visitor_activity_table();
         $success = $success && $this->create_rtr_jobs_table();
+        $success = $success && $this->create_rtr_content_links_table();
         
         if ($success) {
             error_log('CPD: All v2 tables created successfully (including wp_rtr_prospects)');
