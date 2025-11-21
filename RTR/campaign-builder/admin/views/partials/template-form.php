@@ -46,7 +46,7 @@ if (!defined('ABSPATH')) {
                 </div>
                 <div class="form-group">
                     <label for="room_type">Room Type</label>
-                    <select id="room_type" name="room_type" class="form-control" disabled>
+                    <select id="room_type" name="room_type" class="form-control">
                         <option value="problem">Problem</option>
                         <option value="solution">Solution</option>
                         <option value="offer">Offer</option>

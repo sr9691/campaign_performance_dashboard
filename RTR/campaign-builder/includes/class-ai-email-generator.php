@@ -64,10 +64,15 @@ class CPD_AI_Email_Generator {
      */
     public function generate_email( $prospect_id, $campaign_id, $room_type, $email_number ) {
         // Check if AI is enabled
-        if ( ! $this->settings->is_enabled() ) {
-            error_log( '[DirectReach] AI generation disabled, using fallback' );
-            return $this->fallback_to_template( $prospect_id, $campaign_id, $room_type );
+        $ai_enabled = get_option( 'dr_ai_email_enabled', false );
+        if ( ! $ai_enabled ) {
+            return new WP_Error(
+                'ai_disabled',
+                'AI generation is currently disabled in settings',
+                array( 'status' => 400 )
+            );
         }
+
 
         // Check rate limit
         $rate_limit_check = $this->rate_limiter->check_limit();
@@ -165,6 +170,24 @@ class CPD_AI_Email_Generator {
     * @return array|WP_Error Generation result or error
     */
     public function generate_email_for_test( $prompt_template, $campaign_id, $room_type = 'problem' ) {
+
+        // Check if AI is enabled
+        $ai_enabled = get_option( 'dr_ai_email_enabled', false );
+        if ( ! $ai_enabled ) {
+            return new WP_Error(
+                'ai_disabled',
+                'AI generation is currently disabled in settings',
+                array( 'status' => 400 )
+            );
+        }
+        
+        // Check rate limit (if enabled)
+        $rate_limit_check = $this->rate_limiter->check_limit();
+        if ( is_wp_error( $rate_limit_check ) ) {
+            error_log( '[DirectReach] Test generation rate limit exceeded: ' . $rate_limit_check->get_error_message() );
+            return $rate_limit_check;
+        }
+
         // Validate prompt template structure
         $validation = $this->validate_prompt_template( $prompt_template );
         if ( is_wp_error( $validation ) ) {
@@ -200,6 +223,16 @@ class CPD_AI_Email_Generator {
             error_log( '[DirectReach] Test generation failed: ' . $result->get_error_message() );
             return $result;
         }
+
+        // Increment rate limiter
+        $this->rate_limiter->increment();
+        
+        // Record usage stats
+        $cost = $this->calculate_cost( $result['usage'] ?? array() );
+        $this->rate_limiter->record_generation( 
+            $result['usage']['total_tokens'] ?? 0,
+            $cost
+        );
 
         // Store generation metadata
         $metadata = array(

@@ -31,7 +31,14 @@ class CPD_AI_Rate_Limiter {
      * @return true|WP_Error True if allowed, error if limit exceeded
      */
     public function check_limit() {
+        // Check if rate limiting is disabled
+        $rate_limit_enabled = get_option( 'dr_rate_limit_enabled', true );
+        if ( ! $rate_limit_enabled ) {
+            return true; // No limit
+        }
+        
         $settings = new CPD_AI_Settings_Manager();
+        
         $limit = $settings->get_rate_limit();
 
         $current_count = $this->get_current_count();
