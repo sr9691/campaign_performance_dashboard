@@ -155,7 +155,7 @@ class CampaignBuilder {
      */
     initializeContentLinksManager() {
         this.managers.contentLinks = new ContentLinksManager(this.config, this.managers.state);
-        
+                
         // Listen for links loaded
         this.managers.contentLinks.on('links:loaded', (links) => {
             console.log('Content links loaded:', links);
@@ -181,10 +181,9 @@ class CampaignBuilder {
      * Initialize Template Manager
      */
     initializeTemplateManager() {
-        this.managers.template = new TemplateManager(this.config, this.managers.state);
-        
-        this.managers.template.on('notification', (data) => {
-            this.showNotification(data.message, data.type);
+        this.managers.template = new TemplateManager(this.config, this.managers.state, {
+            containerSelector: '.templates-step-container',
+            isGlobal: false
         });
         
         console.log('Campaign Builder: Template Manager initialized');

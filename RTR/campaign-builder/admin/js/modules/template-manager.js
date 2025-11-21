@@ -20,6 +20,10 @@ export default class TemplateManager extends EventEmitter {
         this.stateManager = stateManager;
         this.isGlobal = options.isGlobal || false;
         
+        // NEW: Accept a container selector or element
+        this.containerSelector = options.containerSelector || '.templates-step-container';
+        this.containerElement = null; // Will be set in init
+        
         this.templates = {
             problem: [],
             solution: [],
@@ -39,9 +43,17 @@ export default class TemplateManager extends EventEmitter {
      */
     async init() {
         console.log('TemplateManager: Initializing...', this.isGlobal ? '(Global)' : '(Campaign)');
+        
+        // Find the container element
+        this.containerElement = document.querySelector(this.containerSelector);
+        if (!this.containerElement) {
+            console.error(`TemplateManager: Container not found: ${this.containerSelector}`);
+            return;
+        }
+        
         this.attachEventListeners();
         
-        const retryBtn = document.getElementById('retry-load-templates');
+        const retryBtn = this.containerElement.querySelector('#retry-load-templates');
         if (retryBtn) {
             retryBtn.addEventListener('click', () => this.loadTemplates());
         }
@@ -53,8 +65,10 @@ export default class TemplateManager extends EventEmitter {
      * Attach all event listeners
      */
     attachEventListeners() {
-        // Use event delegation for tabs
-        const tabsContainer = document.querySelector('.room-tabs');
+        if (!this.containerElement) return;
+        
+        // Use scoped query within this container
+        const tabsContainer = this.containerElement.querySelector('.room-tabs');
         if (tabsContainer) {
             tabsContainer.addEventListener('click', (e) => {
                 const tab = e.target.closest('.room-tab');
@@ -68,7 +82,7 @@ export default class TemplateManager extends EventEmitter {
         this.attachFormListeners();
         this.attachTestListeners();
         
-        const retryBtn = document.getElementById('retry-load-templates');
+        const retryBtn = this.containerElement.querySelector('#retry-load-templates');
         if (retryBtn) {
             retryBtn.addEventListener('click', () => this.loadTemplates());
         }
@@ -78,16 +92,16 @@ export default class TemplateManager extends EventEmitter {
      * Attach form-related listeners
      */
     attachFormListeners() {
-        const backBtn = document.querySelector('.btn-back-to-list');
+        const backBtn = this.containerElement.querySelector('.btn-back-to-list');
         if (backBtn) {
             backBtn.addEventListener('click', () => this.hideForm());
         }
         
-        document.querySelectorAll('.btn-cancel-form').forEach(btn => {
+        this.containerElement.querySelectorAll('.btn-cancel-form').forEach(btn => {
             btn.addEventListener('click', () => this.hideForm());
         });
         
-        const form = document.getElementById('template-form');
+        const form = this.containerElement.querySelector('#template-form');
         if (form) {
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
@@ -100,17 +114,17 @@ export default class TemplateManager extends EventEmitter {
      * Attach test functionality listeners
      */
     attachTestListeners() {
-        const testBtn = document.getElementById('test-prompt-btn');
+        const testBtn = this.containerElement.querySelector('#test-prompt-btn');
         if (testBtn) {
             testBtn.addEventListener('click', () => this.handleTestPrompt());
         }
         
-        const generateBtn = document.getElementById('generate-test-email-btn');
+        const generateBtn = this.containerElement.querySelector('#generate-test-email-btn');
         if (generateBtn) {
             generateBtn.addEventListener('click', () => this.handleGenerateTestEmail());
         }
         
-        const regenerateBtn = document.getElementById('regenerate-email-btn');
+        const regenerateBtn = this.containerElement.querySelector('#regenerate-email-btn');
         if (regenerateBtn) {
             regenerateBtn.addEventListener('click', () => this.handleGenerateTestEmail());
         }
@@ -138,9 +152,9 @@ export default class TemplateManager extends EventEmitter {
             return;
         }
         
-        const loadingDiv = document.getElementById('templates-loading');
-        const contentDiv = document.getElementById('templates-content');
-        const errorDiv = document.getElementById('templates-error');
+        const loadingDiv = this.containerElement.querySelector('#templates-loading');
+        const contentDiv = this.containerElement.querySelector('#templates-content');
+        const errorDiv = this.containerElement.querySelector('#templates-error');
         
         if (loadingDiv) loadingDiv.style.display = 'flex';
         if (contentDiv) contentDiv.style.display = 'none';
@@ -196,19 +210,25 @@ export default class TemplateManager extends EventEmitter {
      * Switch active room
      */
     switchRoom(room) {
-        if (this.currentRoom === room) return;
+        if (this.currentRoom === room || !this.containerElement) return;
         
         this.currentRoom = room;
         
-        document.querySelectorAll('.room-tab').forEach(tab => {
+        // Hide form if it's visible when switching rooms
+        if (this.isFormVisible) {
+            this.hideForm();
+        }
+        
+        // Only update tabs and lists within this container
+        this.containerElement.querySelectorAll('.room-tab').forEach(tab => {
             tab.classList.toggle('active', tab.dataset.room === room);
         });
         
-        document.querySelectorAll('.template-list-container').forEach(container => {
+        this.containerElement.querySelectorAll('.template-list-container, [class*="-list-container"]').forEach(container => {
             container.classList.toggle('active', container.dataset.room === room);
         });
         
-        const roomSelect = document.getElementById('room_type');
+        const roomSelect = this.containerElement.querySelector('#room_type, [name="room_type"]');
         if (roomSelect) {
             roomSelect.value = room;
         }
@@ -227,7 +247,7 @@ export default class TemplateManager extends EventEmitter {
      * Render templates for a specific room
      */
     renderRoom(room) {
-        const container = document.querySelector(`.template-list-container[data-room="${room}"]`);
+        const container = this.containerElement.querySelector(`.template-list-container[data-room="${room}"]`);
         if (!container) return;
         
         const templates = this.templates[room] || [];
@@ -367,7 +387,7 @@ export default class TemplateManager extends EventEmitter {
      * Attach card event listeners
      */
     attachCardListeners(room) {
-        const container = document.querySelector(`.template-list-container[data-room="${room}"]`);
+        const container = this.containerElement.querySelector(`.template-list-container[data-room="${room}"]`);
         if (!container) return;
         
         container.querySelectorAll('.create-template-btn').forEach(btn => {
@@ -407,17 +427,17 @@ export default class TemplateManager extends EventEmitter {
         this.editingGlobalTemplate = false;
         this.currentRoom = room;
         
-        const form = document.getElementById('template-form');
+        const form = this.containerElement.querySelector('#template-form');
         if (form) {
             form.reset();
         }
         
-        const roomSelect = document.getElementById('room_type');
+        const roomSelect = this.containerElement.querySelector('#room_type');
         if (roomSelect) {
             roomSelect.value = room;
         }
         
-        const formTitle = document.querySelector('.template-form-title');
+        const formTitle = this.containerElement.querySelector('.template-form-title');
         if (formTitle) {
             const templateType = this.isGlobal ? 'Global' : 'Campaign';
             formTitle.innerHTML = `<i class="fas fa-robot"></i> Create ${templateType} AI Prompt Template`;
@@ -446,12 +466,12 @@ export default class TemplateManager extends EventEmitter {
             this.populateForm(template);
             
             // Update name to indicate it's a copy
-            const nameInput = document.getElementById('template_name');
+            const nameInput = this.containerElement.querySelector('#template_name');
             if (nameInput) {
                 nameInput.value = template.template_name + ' (Campaign)';
             }
             
-            const formTitle = document.querySelector('.template-form-title');
+            const formTitle = this.containerElement.querySelector('.template-form-title');
             if (formTitle) {
                 formTitle.innerHTML = `<i class="fas fa-copy"></i> Create Campaign Copy of Global Template`;
             }
@@ -463,7 +483,7 @@ export default class TemplateManager extends EventEmitter {
             
             this.populateForm(template);
             
-            const formTitle = document.querySelector('.template-form-title');
+            const formTitle = this.containerElement.querySelector('.template-form-title');
             if (formTitle) {
                 const templateType = this.isGlobal ? 'Global' : 'Campaign';
                 formTitle.innerHTML = `<i class="fas fa-edit"></i> Edit ${templateType} AI Prompt Template`;
@@ -477,8 +497,8 @@ export default class TemplateManager extends EventEmitter {
      * Show form
      */
     showForm() {
-        const formContainer = document.getElementById('template-form-container');
-        const listContainers = document.querySelectorAll('.template-list-container');
+        const formContainer = this.containerElement.querySelector('#template-form-container');
+        const listContainers = this.containerElement.querySelectorAll('.template-list-container');
         
         if (formContainer) {
             formContainer.style.display = 'block';
@@ -490,7 +510,7 @@ export default class TemplateManager extends EventEmitter {
             container.classList.remove('active');
         });
         
-        const testSection = document.getElementById('test-results-section');
+        const testSection = this.containerElement.querySelector('#test-results-section');
         if (testSection) {
             testSection.style.display = 'none';
         }
@@ -502,8 +522,8 @@ export default class TemplateManager extends EventEmitter {
      * Hide form
      */
     hideForm() {
-        const formContainer = document.getElementById('template-form-container');
-        const listContainers = document.querySelectorAll('.template-list-container');
+        const formContainer = this.containerElement.querySelector('#template-form-container');
+        const listContainers = this.containerElement.querySelectorAll('.template-list-container');
         
         if (formContainer) {
             formContainer.style.display = 'none';
@@ -519,7 +539,7 @@ export default class TemplateManager extends EventEmitter {
             }
         });
         
-        const form = document.getElementById('template-form');
+        const form = this.containerElement.querySelector('#template-form');
         if (form) {
             form.reset();
         }
@@ -539,7 +559,7 @@ export default class TemplateManager extends EventEmitter {
         };
         
         Object.keys(fields).forEach(key => {
-            const input = document.getElementById(key);
+            const input = this.containerElement.querySelector(`#${key}`);
             if (input) {
                 input.value = fields[key];
             }
@@ -557,7 +577,7 @@ export default class TemplateManager extends EventEmitter {
             ];
             
             promptFields.forEach(field => {
-                const textarea = document.getElementById(`prompt_${field}`);
+                const textarea = this.containerElement.querySelector(`#prompt_${field}`);
                 if (textarea && template.prompt_template[field]) {
                     textarea.value = template.prompt_template[field];
                 }
@@ -634,17 +654,17 @@ export default class TemplateManager extends EventEmitter {
      */
     gatherFormData() {
         return {
-            template_name: document.getElementById('template_name')?.value.trim(),
-            room_type: document.getElementById('room_type')?.value,
-            template_order: parseInt(document.getElementById('template_order')?.value) || 0,
+            template_name: this.containerElement.querySelector('#template_name')?.value.trim(),
+            room_type: this.containerElement.querySelector('#room_type')?.value,
+            template_order: parseInt(this.containerElement.querySelector('#template_order')?.value) || 0,
             prompt_template: {
-                persona: document.getElementById('prompt_persona')?.value.trim(),
-                style: document.getElementById('prompt_style')?.value.trim(),
-                output: document.getElementById('prompt_output')?.value.trim(),
-                personalization: document.getElementById('prompt_personalization')?.value.trim(),
-                constraints: document.getElementById('prompt_constraints')?.value.trim(),
-                examples: document.getElementById('prompt_examples')?.value.trim(),
-                context: document.getElementById('prompt_context')?.value.trim()
+                persona: this.containerElement.querySelector('#prompt_persona')?.value.trim(),
+                style: this.containerElement.querySelector('#prompt_style')?.value.trim(),
+                output: this.containerElement.querySelector('#prompt_output')?.value.trim(),
+                personalization: this.containerElement.querySelector('#prompt_personalization')?.value.trim(),
+                constraints: this.containerElement.querySelector('#prompt_constraints')?.value.trim(),
+                examples: this.containerElement.querySelector('#prompt_examples')?.value.trim(),
+                context: this.containerElement.querySelector('#prompt_context')?.value.trim()
             }
         };
     }
@@ -678,8 +698,8 @@ export default class TemplateManager extends EventEmitter {
      * Handle test prompt - shows assembled prompt
      */
     handleTestPrompt() {
-        const testSection = document.getElementById('test-results-section');
-        const testContent = document.getElementById('test-results-content');
+        const testSection = this.containerElement.querySelector('#test-results-section');
+        const testContent = this.containerElement.querySelector('#test-results-content');
         
         if (testSection) {
             testSection.style.display = 'block';
@@ -696,7 +716,7 @@ export default class TemplateManager extends EventEmitter {
      * Assemble prompt preview
      */
     assemblePromptPreview() {
-        const preview = document.getElementById('assembled-prompt-preview');
+        const preview = this.containerElement.querySelector('#assembled-prompt-preview');
         if (!preview) return;
         
         const sections = [
@@ -712,7 +732,7 @@ export default class TemplateManager extends EventEmitter {
         let assembly = '';
         
         sections.forEach(section => {
-            const value = document.getElementById(section.id)?.value.trim();
+            const value = this.containerElement.querySelector(`#${section.id}`)?.value.trim();
             if (value) {
                 assembly += `\n=== ${section.title} ===\n${value}\n`;
             }
@@ -729,8 +749,8 @@ export default class TemplateManager extends EventEmitter {
      * Handle generate test email - calls Gemini API
      */
     async handleGenerateTestEmail() {
-        const generateBtn = document.getElementById('generate-test-email-btn');
-        const emailSection = document.getElementById('generated-email-section');
+        const generateBtn = this.containerElement.querySelector('#generate-test-email-btn');
+        const emailSection = this.containerElement.querySelector('#generated-email-section');
         
         if (!generateBtn) return;
         
@@ -772,8 +792,8 @@ export default class TemplateManager extends EventEmitter {
             if (response.success && emailSection) {
                 emailSection.style.display = 'block';
                 
-                const output = document.getElementById('generated-email-output');
-                const stats = document.getElementById('generation-stats');
+                const output = this.containerElement.querySelector('#generated-email-output');
+                const stats = this.containerElement.querySelector('#generation-stats');
                 
                 if (output) {
                     // Display generated email with mock prospect info
@@ -918,7 +938,7 @@ export default class TemplateManager extends EventEmitter {
      */
     updateTabStatuses() {
         ['problem', 'solution', 'offer'].forEach(room => {
-            const tab = document.querySelector(`.room-tab[data-room="${room}"]`);
+            const tab = this.containerElement.querySelector(`.room-tab[data-room="${room}"]`);
             const statusSpan = tab?.querySelector('.tab-status');
             
             if (statusSpan) {

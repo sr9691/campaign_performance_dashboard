@@ -18,12 +18,16 @@ export default class ContentLinksManager extends EventEmitter {
      * @param {Object} config - Configuration object
      * @param {Object} stateManager - State manager instance
      */
-    constructor(config, stateManager) {
+    constructor(config, stateManager, options = {}) {
         super();
         
         this.config = config;
         this.stateManager = stateManager;
         this.api = new APIClient(config.apiUrl, config.nonce);
+        
+        // Container scoping
+        this.containerSelector = options.containerSelector || '.content-links-step-container';
+        this.containerElement = null;
         
         this.links = {
             problem: [],
@@ -36,20 +40,7 @@ export default class ContentLinksManager extends EventEmitter {
         this.isFormVisible = false;
         this.draggedItem = null;
         
-        this.elements = {
-            stepContainer: document.getElementById('content-links-step'),
-            roomTabs: document.querySelectorAll('.room-tab'),
-            linkListContainers: document.querySelectorAll('.link-list-container'),
-            createBtns: document.querySelectorAll('.create-link-btn'),
-            form: document.getElementById('content-link-form'),
-            formContainer: document.getElementById('link-form-container'),
-            listView: document.getElementById('links-list-view'),
-            cancelBtn: document.getElementById('cancel-link-btn'),
-            saveBtn: document.getElementById('save-link-btn'),
-            backBtn: document.querySelector('.btn-back-to-list'),
-            loadingState: document.getElementById('links-loading'),
-            errorState: document.getElementById('links-error')
-        };
+        this.elements = {};
         
         this.init();
     }
@@ -58,6 +49,29 @@ export default class ContentLinksManager extends EventEmitter {
      * Initialize the manager
      */
     async init() {
+        // Find the container element
+        this.containerElement = document.querySelector(this.containerSelector);
+        if (!this.containerElement) {
+            console.error(`ContentLinksManager: Container not found: ${this.containerSelector}`);
+            return;
+        }
+        
+        // Cache scoped elements
+        this.elements = {
+            stepContainer: this.containerElement.querySelector('#content-links-step'),
+            roomTabs: this.containerElement.querySelectorAll('.room-tab'),
+            linkListContainers: this.containerElement.querySelectorAll('.link-list-container'),
+            createBtns: this.containerElement.querySelectorAll('.create-link-btn'),
+            form: this.containerElement.querySelector('#content-link-form'),
+            formContainer: this.containerElement.querySelector('#link-form-container'),
+            listView: this.containerElement.querySelector('#links-list-view'),
+            cancelBtn: this.containerElement.querySelector('#cancel-link-btn'),
+            saveBtn: this.containerElement.querySelector('#save-link-btn'),
+            backBtn: this.containerElement.querySelector('.btn-back-to-list'),
+            loadingState: this.containerElement.querySelector('#links-loading'),
+            errorState: this.containerElement.querySelector('#links-error')
+        };
+        
         this.attachEventListeners();
         await this.loadLinks();
     }
@@ -66,8 +80,10 @@ export default class ContentLinksManager extends EventEmitter {
      * Attach event listeners
      */
     attachEventListeners() {
-        // Room tabs - use event delegation
-        const tabsContainer = document.querySelector('.room-tabs');
+        if (!this.containerElement) return;
+        
+        // Room tabs - use event delegation with scoped query
+        const tabsContainer = this.containerElement.querySelector('.room-tabs');
         if (tabsContainer) {
             tabsContainer.addEventListener('click', (e) => {
                 const tab = e.target.closest('.room-tab');
@@ -139,22 +155,27 @@ export default class ContentLinksManager extends EventEmitter {
      * Switch active room
      */
     switchRoom(room) {
-        if (this.currentRoom === room) return;
+        if (this.currentRoom === room || !this.containerElement) return;
         
         this.currentRoom = room;
         
-        // Update tabs
-        document.querySelectorAll('.room-tab').forEach(tab => {
+        // Hide form if it's visible when switching rooms
+        if (this.isFormVisible) {
+            this.hideForm();
+        }
+        
+        // Update tabs within this container only
+        this.containerElement.querySelectorAll('.room-tab').forEach(tab => {
             tab.classList.toggle('active', tab.dataset.room === room);
         });
         
-        // Update list containers
-        document.querySelectorAll('.link-list-container').forEach(container => {
+        // Update list containers within this container only
+        this.containerElement.querySelectorAll('.link-list-container').forEach(container => {
             container.classList.toggle('active', container.dataset.room === room);
         });
         
         // Update form room select if visible
-        const roomSelect = document.getElementById('room_type');
+        const roomSelect = this.containerElement.querySelector('#room_type');
         if (roomSelect) {
             roomSelect.value = room;
         }
@@ -173,7 +194,7 @@ export default class ContentLinksManager extends EventEmitter {
      * Render links for a specific room
      */
     renderRoom(room) {
-        const container = document.querySelector(`.link-list-container[data-room="${room}"]`);
+        const container = this.containerElement?.querySelector(`.link-list-container[data-room="${room}"]`);
         if (!container) return;
         
         const links = this.links[room] || [];
@@ -300,7 +321,7 @@ export default class ContentLinksManager extends EventEmitter {
      * Attach card event listeners
      */
     attachCardListeners(room) {
-        const container = document.querySelector(`.link-list-container[data-room="${room}"]`);
+        const container = this.containerElement?.querySelector(`.link-list-container[data-room="${room}"]`);
         if (!container) return;
         
         // Create link buttons
@@ -343,7 +364,7 @@ export default class ContentLinksManager extends EventEmitter {
      * Initialize drag and drop for a room
      */
     initializeDragAndDrop(room) {
-        const linkList = document.querySelector(`.link-list[data-room="${room}"]`);
+        const linkList = this.containerElement?.querySelector(`.link-list[data-room="${room}"]`);
         if (!linkList) return;
         
         const cards = linkList.querySelectorAll('.link-card');
@@ -391,7 +412,7 @@ export default class ContentLinksManager extends EventEmitter {
      * Save new order after drag and drop
      */
     async saveNewOrder(room) {
-        const linkList = document.querySelector(`.link-list[data-room="${room}"]`);
+        const linkList = this.containerElement?.querySelector(`.link-list[data-room="${room}"]`);
         if (!linkList) return;
         
         const cards = linkList.querySelectorAll('.link-card');
@@ -448,12 +469,12 @@ export default class ContentLinksManager extends EventEmitter {
             this.elements.form.reset();
         }
         
-        const roomSelect = document.getElementById('room_type');
+        const roomSelect = this.containerElement?.querySelector('#room_type');
         if (roomSelect) {
             roomSelect.value = room;
         }
         
-        const formTitle = document.getElementById('form-title');
+        const formTitle = this.containerElement?.querySelector('#form-title');
         if (formTitle) {
             formTitle.textContent = 'Add Content Link';
         }
@@ -474,7 +495,7 @@ export default class ContentLinksManager extends EventEmitter {
         this.editingLinkId = linkId;
         this.currentRoom = link.room_type;
         
-        const formTitle = document.getElementById('form-title');
+        const formTitle = this.containerElement?.querySelector('#form-title');
         if (formTitle) {
             formTitle.textContent = 'Edit Content Link';
         }
@@ -533,7 +554,7 @@ export default class ContentLinksManager extends EventEmitter {
         };
         
         Object.keys(fields).forEach(key => {
-            const input = document.getElementById(key);
+            const input = this.containerElement?.querySelector(`#${key}`);
             if (input) {
                 if (input.type === 'checkbox') {
                     input.checked = fields[key];
@@ -618,12 +639,12 @@ export default class ContentLinksManager extends EventEmitter {
      */
     gatherFormData() {
         return {
-            room_type: document.getElementById('room_type')?.value,
-            link_title: document.getElementById('link_title')?.value.trim(),
-            link_url: document.getElementById('link_url')?.value.trim(),
-            url_summary: document.getElementById('url_summary')?.value.trim(),
-            link_description: document.getElementById('link_description')?.value.trim(),
-            is_active: document.getElementById('is_active')?.checked ?? true
+            room_type: this.containerElement?.querySelector('#room_type')?.value,
+            link_title: this.containerElement?.querySelector('#link_title')?.value.trim(),
+            link_url: this.containerElement?.querySelector('#link_url')?.value.trim(),
+            url_summary: this.containerElement?.querySelector('#url_summary')?.value.trim(),
+            link_description: this.containerElement?.querySelector('#link_description')?.value.trim(),
+            is_active: this.containerElement?.querySelector('#is_active')?.checked ?? true
         };
     }
     
@@ -747,7 +768,7 @@ export default class ContentLinksManager extends EventEmitter {
      */
     updateTabCounts() {
         ['problem', 'solution', 'offer'].forEach(room => {
-            const tab = document.querySelector(`.room-tab[data-room="${room}"]`);
+            const tab = this.containerElement?.querySelector(`.room-tab[data-room="${room}"]`);
             const countSpan = tab?.querySelector('.tab-count');
             
             if (countSpan) {
