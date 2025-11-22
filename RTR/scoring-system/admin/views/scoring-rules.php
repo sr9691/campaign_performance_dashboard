@@ -294,19 +294,3 @@ include __DIR__ . '/../../../campaign-builder/admin/views/partials/admin-header.
         </div>
     </div>
 </div>
-
-<?php
-// Localize script data
-wp_localize_script('rtr-scoring-rules', 'rtrScoringConfig', [
-    'nonce' => wp_create_nonce('rtr_scoring_nonce'),
-    'apiUrl' => rest_url('directreach/v2/'),
-    'globalRules' => $global_rules,
-    'industries' => $industries,
-    'strings' => [
-        'saveSuccess' => __('Rules saved successfully', 'directreach'),
-        'saveError' => __('Failed to save rules', 'directreach'),
-        'validationError' => __('Please fix validation errors before saving', 'directreach'),
-        'resetConfirm' => __('Reset rules to global defaults? This cannot be undone.', 'directreach'),
-    ]
-]);
-?>

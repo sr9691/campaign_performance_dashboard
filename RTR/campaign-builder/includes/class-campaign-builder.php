@@ -13,6 +13,9 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Load industry taxonomy
+require_once DR_CB_PLUGIN_DIR . '../scoring-system/includes/industry-config.php';
+
 class DR_Campaign_Builder {
     
     /**
@@ -402,6 +405,12 @@ class DR_Campaign_Builder {
      * BEFORE the main.js ES6 module executes.
      */
     private function inject_js_config() {
+        // Get industries taxonomy
+        $industries = array();
+        if (function_exists('rtr_get_industry_taxonomy')) {
+            $industries = rtr_get_industry_taxonomy();
+        }
+        
         $config = array(
             'apiUrl' => rest_url($this->config['rest_namespace']),
             'nonce' => wp_create_nonce('wp_rest'),
@@ -410,6 +419,7 @@ class DR_Campaign_Builder {
             'pluginUrl' => DR_CB_PLUGIN_URL,
             'version' => DR_CB_VERSION,
             'debug' => defined('WP_DEBUG') && WP_DEBUG,
+            'industries' => $industries, // ADD THIS LINE
         );
         
         wp_add_inline_script(

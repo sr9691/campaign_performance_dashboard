@@ -523,8 +523,8 @@ class DirectReach_Scoring_System {
         
         // Get industries taxonomy
         $industries = array();
-        if (function_exists('rtr_get_industries_taxonomy')) {
-            $industries = rtr_get_industries_taxonomy();
+        if (function_exists('rtr_get_industry_taxonomy')) {
+            $industries = rtr_get_industry_taxonomy();
         }
         
         $config = array(
