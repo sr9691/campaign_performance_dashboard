@@ -662,17 +662,13 @@ final class ALeads_Enrichment
             
             error_log('[RTR] Find email raw response: ' . print_r($api_response, true));
             
-            // Parse nested response structure from A-Leads
-            // Response structure: message.data.response.{result, is_valid, quality, etc}
-            $response_data = $api_response['message']['data']['response'] ?? 
-                            $api_response['data']['response'] ?? 
-                            $api_response['response'] ?? 
-                            $api_response;
+            // Parse response structure from A-Leads
+            $response_data = $api_response['data'] ?? $api_response;
             
             error_log('[RTR] Parsed response data: ' . print_r($response_data, true));
             
             // Extract email from 'result' field
-            $email = $response_data['result'] ?? null;
+            $email = $response_data['email'] ?? null;
             
             if (empty($email)) {
                 error_log('[RTR] No email found in response');
@@ -682,10 +678,10 @@ final class ALeads_Enrichment
             // Build standardized result format
             $result = [
                 'email' => $email,
-                'is_valid' => $response_data['is_valid'] ?? null,
+                'is_valid' => $response_data['result'] === 'ok',  // 'ok' means valid
                 'quality' => $response_data['quality'] ?? null,
-                'confidence' => $response_data['quality'] ?? null, // Use quality as confidence
-                'email_status' => $response_data['is_valid'] ? 'valid' : 'unknown',
+                'confidence' => $response_data['quality'] ?? null,
+                'email_status' => $response_data['result'] === 'ok' ? 'valid' : 'unknown',
                 'catch_all' => $response_data['catch_all_status'] ?? false,
                 'esp' => $response_data['esp'] ?? null
             ];
@@ -782,6 +778,7 @@ final class ALeads_Enrichment
 
             $contact = [
                 'member_id' => $person['member_id'] ?? '',
+                'document_id' => $person['document_id'] ?? '',
                 'name' => $this->build_full_name($person),
                 'first_name' => $person['member_name_first'] ?? '',
                 'last_name' => $person['member_name_last'] ?? '',

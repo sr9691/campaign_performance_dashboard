@@ -752,9 +752,7 @@ class Jobs_Controller extends WP_REST_Controller {
             FROM {$wpdb->prefix}cpd_visitors v
             INNER JOIN {$wpdb->prefix}cpd_visitor_campaigns vc ON v.id = vc.visitor_id
             INNER JOIN {$wpdb->prefix}dr_campaign_settings cs ON vc.campaign_id = cs.id
-            WHERE v.email IS NOT NULL
-            AND v.email != ''
-            AND v.lead_score > 0
+            WHERE v.lead_score > 0
             {$where_client}
             GROUP BY v.id
             ORDER BY v.lead_score DESC, v.last_seen_at DESC

@@ -56,6 +56,9 @@ export default class EnrichmentManager {
             return;
         }
 
+        // Remove any existing enrichment modals first
+        document.querySelectorAll('#enrichment-modal').forEach(m => m.remove());        
+
         // Get prospect data from ProspectManager
         const prospect = this.prospectManager.prospects[room]?.find(p => 
             p.visitor_id == visitorId || p.id == visitorId
@@ -228,7 +231,7 @@ export default class EnrichmentManager {
             
             // Build request body with contact data
             const body = {
-                member_id: contactData.member_id,
+                member_id: contactData.document_id,
                 first_name: contactData.first_name,
                 last_name: contactData.last_name,
                 company_domain: contactData.domain

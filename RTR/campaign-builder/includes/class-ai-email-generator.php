@@ -1071,6 +1071,201 @@ INSTRUCTIONS;
         return round( $input_cost + $output_cost, 6 );
     }
 
+            error_log( sprintf(
+                '[DirectReach] Invalid URL index %d, defaulting to first URL',
+                $url_index
+            ));
+            $url_index = 0;
+        }
+
+        $selected_url = $payload['available_urls'][ $url_index ] ?? null;
+
+        // Get token usage
+        $usage = array(
+            'prompt_tokens' => $data['usageMetadata']['promptTokenCount'] ?? 0,
+            'completion_tokens' => $data['usageMetadata']['candidatesTokenCount'] ?? 0,
+            'total_tokens' => $data['usageMetadata']['totalTokenCount'] ?? 0,
+        );
+
+        return array(
+            'subject' => sanitize_text_field( $parsed['subject'] ),
+            'body_html' => wp_kses_post( $parsed['body_html'] ),
+            'body_text' => sanitize_textarea_field( $parsed['body_text'] ),
+            'selected_url' => $selected_url,
+            'reasoning' => isset( $parsed['reasoning'] ) ? sanitize_text_field( $parsed['reasoning'] ) : '',
+            'usage' => $usage,
+        );
+    }
+
+    /**
+     * Select best template based on visitor behavior
+     *
+     * For now, returns first template. Future enhancement: intelligent selection.
+     *
+     * @param array $templates Available templates
+     * @param array $prospect Prospect data
+     * @return CPD_Prompt_Template Selected template
+     */
+    private function select_template( $templates, $prospect ) {
+        // Simple selection: use first template
+        // TODO: Implement intelligent selection based on:
+        // - Lead score
+        // - Recent page visits
+        // - Email sequence position
+        // - Days in room
+        
+        return $templates[0];
+    }
+
+    /**
+     * Fallback to template-based email
+     *
+     * @param int    $prospect_id Prospect ID
+     * @param int    $campaign_id Campaign ID
+     * @param string $room_type Room type
+     * @return array Template-based email
+     */
+    private function fallback_to_template( $prospect_id, $campaign_id, $room_type ) {
+        // Load prospect
+        $prospect = $this->load_prospect_data( $prospect_id );
+        if ( is_wp_error( $prospect ) ) {
+            return $prospect;
+        }
+
+        // Load templates
+        $templates = $this->resolver->get_available_templates( $campaign_id, $room_type );
+        if ( empty( $templates ) ) {
+            return new WP_Error( 'no_templates', 'No templates available' );
+        }
+
+        $template = $templates[0];
+
+        // Load content links
+        $content_links = $this->load_content_links( $campaign_id, $room_type );
+        
+        // Get sent URLs
+        $sent_urls = array();
+        if ( ! empty( $prospect['urls_sent'] ) ) {
+            $sent_urls = json_decode( $prospect['urls_sent'], true ) ?: array();
+        }
+
+        // Select first unsent URL
+        $selected_url = null;
+        foreach ( $content_links as $link ) {
+            if ( ! in_array( $link['link_url'], $sent_urls, true ) ) {
+                $selected_url = array(
+                    'id' => $link['id'],
+                    'title' => $link['link_title'],
+                    'url' => $link['link_url'],
+                    'description' => $link['link_description'] ?? '',
+                );
+                break;
+            }
+        }
+
+        // Build simple email from template
+        $subject = "Follow up: {$prospect['company_name']}";
+        $body_html = "<p>Hi {$prospect['contact_name']},</p>";
+        $body_html .= "<p>I noticed you've been exploring our {$room_type} solutions.</p>";
+        
+        if ( $selected_url ) {
+            $body_html .= "<p>I thought you might find this resource helpful: <a href=\"{$selected_url['url']}\">{$selected_url['title']}</a></p>";
+        }
+        
+        $body_html .= "<p>Let me know if you have any questions.</p>";
+        
+        $body_text = wp_strip_all_tags( $body_html );
+
+        return array(
+            'success' => true,
+            'fallback' => true,
+            'subject' => $subject,
+            'body_html' => $body_html,
+            'body_text' => $body_text,
+            'selected_url' => $selected_url,
+            'template_used' => array(
+                'id' => $template->get_id(),
+                'name' => $template->get_name(),
+                'is_global' => $template->is_global(),
+            ),
+            'tokens_used' => array(
+                'prompt' => 0,
+                'completion' => 0,
+                'total' => 0,
+                'cost' => 0,
+            ),
+        );
+    }
+
+    /**
+     * Load prospect data
+     *
+     * @param int $prospect_id Prospect ID
+     * @return array|WP_Error Prospect data or error
+     */
+    private function load_prospect_data( $prospect_id ) {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'rtr_prospects';
+        $prospect = $wpdb->get_row(
+            $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $prospect_id ),
+            ARRAY_A
+        );
+
+        if ( ! $prospect ) {
+            return new WP_Error( 'prospect_not_found', 'Prospect not found' );
+        }
+
+        return $prospect;
+    }
+
+    /**
+     * Load content links
+     *
+     * @param int    $campaign_id Campaign ID
+     * @param string $room_type Room type
+     * @return array Content links
+     */
+    private function load_content_links( $campaign_id, $room_type ) {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'rtr_room_content_links';
+        $links = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT * FROM {$table} 
+                WHERE campaign_id = %d 
+                AND room_type = %s 
+                AND is_active = 1
+                ORDER BY link_order ASC",
+                $campaign_id,
+                $room_type
+            ),
+            ARRAY_A
+        );
+
+        return $links ?: array();
+    }
+
+    /**
+     * Calculate cost based on token usage
+     *
+     * Gemini 1.5 Pro pricing (as of Oct 2024):
+     * - Input: $0.00125 / 1K tokens
+     * - Output: $0.005 / 1K tokens
+     *
+     * @param array $usage Token usage
+     * @return float Cost in USD
+     */
+    private function calculate_cost( $usage ) {
+        $prompt_tokens = $usage['prompt_tokens'] ?? 0;
+        $completion_tokens = $usage['completion_tokens'] ?? 0;
+
+        $input_cost = ( $prompt_tokens / 1000 ) * 0.00125;
+        $output_cost = ( $completion_tokens / 1000 ) * 0.005;
+
+        return round( $input_cost + $output_cost, 6 );
+    }
+
     /**
      * Get last generation metadata
      *
@@ -1078,5 +1273,51 @@ INSTRUCTIONS;
      */
     public function get_last_generation_meta() {
         return $this->last_generation_meta;
+    }
+
+    /**
+     * Make HTTP request with retry logic for 429 errors
+     *
+     * @param string $url     Request URL
+     * @param array  $args    Request arguments
+     * @param int    $retries Maximum number of retries
+     * @return array|WP_Error Response or error
+     */
+    private function make_request_with_retry( $url, $args, $retries = 3 ) {
+        $attempt = 0;
+        
+        do {
+            $response = wp_remote_post( $url, $args );
+            
+            if ( is_wp_error( $response ) ) {
+                return $response;
+            }
+            
+            $status_code = wp_remote_retrieve_response_code( $response );
+            
+            // If not a 429, return immediately (success or other error)
+            if ( $status_code !== 429 ) {
+                return $response;
+            }
+            
+            // It's a 429, so we retry
+            $attempt++;
+            
+            if ( $attempt <= $retries ) {
+                // Exponential backoff: 1s, 2s, 4s
+                $delay = pow( 2, $attempt - 1 );
+                error_log( sprintf( 
+                    '[DirectReach] Gemini API 429 Rate Limit hit. Retrying in %d seconds (Attempt %d/%d)...', 
+                    $delay, 
+                    $attempt, 
+                    $retries 
+                ));
+                
+                sleep( $delay );
+            }
+            
+        } while ( $attempt <= $retries );
+        
+        return $response;
     }
 }

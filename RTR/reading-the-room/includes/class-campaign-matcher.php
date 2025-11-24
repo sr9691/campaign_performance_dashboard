@@ -31,9 +31,6 @@ final class Campaign_Matcher
     // FIXED: Added proper type declaration
     private ?Reading_Room_Database $db = null;
 
-    /** @var array<int,array<string,int>> */
-    private array $weights_cache = [];
-
     /**
      * Constructor with dependency injection
      * FIXED: Removed reliance on global $dr_rtr_db
@@ -151,122 +148,85 @@ final class Campaign_Matcher
 
     /**
      * Match a campaign for a visitor or prospect.
-     * ENHANCED: Added input validation
+     * SIMPLIFIED: 3-step matching process
+     *   1. Check utm_campaign in recent_page_urls against campaign utm_campaign
+     *   2. Check recent_page_urls against content_links
+     *   3. Return default campaign
      *
      * @param array<string,mixed> $context
      *        Full context array:
      *        [
+     *          'visitor_id' => int|null,
      *          'email'      => string|null,
      *          'company'    => string|null,
-     *          'utm_source' => string|null,
-     *          'utm_medium' => string|null,
-     *          'utm_campaign' => string|null,
      *          'recent_page_urls' => string|array|null,
-     *          'interests'  => string[]|null,
-     *          'location'   => string|null,
+     *          // other fields...
      *        ]
      *        OR minimal context for database lookup:
      *        [
      *          'visitor_id' => int
      *        ]
-     *        If only visitor_id is provided, full context will be fetched from cpd_visitors table.
-     *        If visitor_id is provided WITH other fields, provided fields take precedence (override).
      *
-     * @return array<string,mixed>|null
+     * @return array<string,mixed>|null Campaign data array or null
      */
     public function match(array $context): ?array
     {
-        // FIXED: Added input validation
         if (empty($context)) {
             error_log(self::LOG_PREFIX . ' match called with empty context');
             return null;
         }
 
-        // Validate that we have at least some usable data
-        if (!isset($context['visitor_id']) && 
-            empty($context['email']) && 
-            empty($context['utm_campaign']) &&
-            empty($context['recent_page_urls'])) {
-            error_log(self::LOG_PREFIX . ' match called with insufficient context data');
-            return null;
-        }
-
         try {
-            // Phase 1.5: Check if we need to fetch context from database
+            // Fetch visitor context from database if only visitor_id provided
             if (isset($context['visitor_id']) && is_int($context['visitor_id'])) {
                 $visitor_id = $context['visitor_id'];
-                
-                // Count how many other fields are provided
                 $other_fields = array_diff_key($context, ['visitor_id' => true]);
                 
                 if (empty($other_fields)) {
-                    // Only visitor_id provided, fetch full context
                     $db_context = $this->get_visitor_context($visitor_id);
                     if ($db_context === null) {
                         error_log(self::LOG_PREFIX . ' Cannot match: visitor_id=' . $visitor_id . ' not found');
-                        return null;
+                        return $this->get_default_campaign();
                     }
                     $context = $db_context;
                 } else {
-                    // Visitor_id + other fields: fetch from DB, then override with provided fields
                     $db_context = $this->get_visitor_context($visitor_id);
                     if ($db_context !== null) {
                         $context = array_merge($db_context, $context);
                     }
-                    // If DB fetch failed but we have other fields, continue with provided context
                 }
             }
 
-            // Phase 1.2: UTM Priority Matching - Check first for instant 100% match
-            $utm_match = $this->match_by_utm($context);
+            // Step 1: Check for utm_campaign in recent_page_urls
+            $utm_match = $this->match_by_utm_campaign($context);
             if ($utm_match !== null) {
                 $utm_match['score'] = self::SCORE_UTM_EXACT_MATCH;
-                $utm_match['match_method'] = 'utm_priority';
+                $utm_match['match_method'] = 'utm_campaign';
                 $this->record_match_event($context, $utm_match);
+                error_log(self::LOG_PREFIX . ' Matched campaign via UTM: ' . ($utm_match['campaign_name'] ?? $utm_match['name'] ?? 'unknown'));
                 return $utm_match;
             }
 
-            // Phase 1.3: Content Link Matching
-            $content_matches = $this->match_by_content_links($context);
+            // Step 2: Check recent_page_urls against content_links
+            $content_link_match = $this->match_by_content_link($context);
+            if ($content_link_match !== null) {
+                $content_link_match['score'] = self::SCORE_CONTENT_LINK_MATCH;
+                $content_link_match['match_method'] = 'content_link';
+                $this->record_match_event($context, $content_link_match);
+                error_log(self::LOG_PREFIX . ' Matched campaign via content link: ' . ($content_link_match['campaign_name'] ?? $content_link_match['name'] ?? 'unknown'));
+                return $content_link_match;
+            }
+
+            // Step 3: Return default campaign
+            $default_campaign = $this->get_default_campaign();
+            if ($default_campaign) {
+                $default_campaign['score'] = 0;
+                $default_campaign['match_method'] = 'default_fallback';
+                $this->record_match_event($context, $default_campaign);
+                error_log(self::LOG_PREFIX . ' No match found, using default campaign');
+            }
             
-            // Fallback to existing scoring logic
-            $campaigns = $this->db()->get_campaigns(['status' => 'active']);
-            if (empty($campaigns)) {
-                return null;
-            }
-
-            $best_score    = 0;
-            $best_campaign = null;
-            $best_method   = 'fallback_scoring';
-
-            foreach ($campaigns as $campaign) {
-                $campaign_id = (int) $campaign['id'];
-                
-                $content_score = $content_matches[$campaign_id] ?? 0;
-                $fallback_score = $this->calculate_match_score($campaign, $context);
-                
-                if ($content_score >= $fallback_score) {
-                    $score = $content_score;
-                    $method = 'content_link';
-                } else {
-                    $score = $fallback_score;
-                    $method = 'fallback_scoring';
-                }
-
-                if ($score > $best_score) {
-                    $best_score    = $score;
-                    $best_campaign = $campaign;
-                    $best_method   = $method;
-                }
-            }
-
-            if ($best_campaign) {
-                $best_campaign['score'] = $best_score;
-                $best_campaign['match_method'] = $best_method;
-                $this->record_match_event($context, $best_campaign);
-            }
-
-            return $best_campaign;
+            return $default_campaign;
         } catch (\Throwable $e) {
             error_log(self::LOG_PREFIX . ' match error: ' . $e->getMessage());
             return null;
@@ -274,74 +234,95 @@ final class Campaign_Matcher
     }
 
     /**
-     * UTM Priority Matching - Phase 1.2
+     * Step 1: Match by UTM Campaign
      * 
-     * Returns campaign immediately if utm_campaign matches, with score=100.
-     * This is the highest priority matching method.
+     * Extracts utm_campaign from visitor's recent_page_urls and matches against
+     * campaign's configured utm_campaign field.
      *
-     * @param array<string,mixed> $context
+     * @param array<string,mixed> $context Visitor context
      * @return array<string,mixed>|null Campaign array if matched, null otherwise
      */
-    private function match_by_utm(array $context): ?array
+    private function match_by_utm_campaign(array $context): ?array
     {
         try {
-            $utm_campaign = $this->extract_utm_campaign_from_context($context);
+            // Parse recent_page_urls to extract utm_campaign parameters
+            $visitor_urls = $this->parse_recent_page_urls($context['recent_page_urls'] ?? null);
             
-            if (empty($utm_campaign)) {
+            if (empty($visitor_urls)) {
                 return null;
             }
 
+            // Extract utm_campaign from each URL
+            $utm_campaigns = [];
+            foreach ($visitor_urls as $url) {
+                $utm = $this->extract_utm_from_url($url);
+                if ($utm !== null) {
+                    $utm_campaigns[] = strtolower(trim($utm));
+                }
+            }
+
+            if (empty($utm_campaigns)) {
+                return null;
+            }
+
+            // Remove duplicates
+            $utm_campaigns = array_unique($utm_campaigns);
+
+            // Query campaigns table for matching utm_campaign
             global $wpdb;
             $table = $wpdb->prefix . 'dr_campaign_settings';
             
+            // Build query to check against all found utm_campaigns
+            $placeholders = implode(',', array_fill(0, count($utm_campaigns), '%s'));
+            
             $query = $wpdb->prepare(
                 "SELECT * FROM {$table} 
-                 WHERE LOWER(utm_campaign) = LOWER(%s) 
+                 WHERE LOWER(TRIM(utm_campaign)) IN ({$placeholders})
                  AND (
                      (start_date IS NULL OR start_date <= CURDATE())
                      AND (end_date IS NULL OR end_date >= CURDATE())
                  )
                  LIMIT 1",
-                $utm_campaign
+                ...$utm_campaigns
             );
 
             $campaign = $wpdb->get_row($query, ARRAY_A);
 
             if ($campaign) {
                 error_log(sprintf(
-                    self::LOG_PREFIX . ' UTM match found: campaign_id=%s, utm_campaign=%s',
+                    self::LOG_PREFIX . ' UTM campaign match: campaign_id=%s, utm_campaign=%s',
                     $campaign['id'],
-                    $utm_campaign
+                    $campaign['utm_campaign'] ?? 'N/A'
                 ));
                 return $campaign;
             }
 
             return null;
         } catch (\Throwable $e) {
-            error_log(self::LOG_PREFIX . ' match_by_utm error: ' . $e->getMessage());
+            error_log(self::LOG_PREFIX . ' match_by_utm_campaign error: ' . $e->getMessage());
             return null;
         }
     }
 
     /**
-     * Content Link Matching - Phase 1.3
+     * Step 2: Match by Content Links
      * 
-     * Scores campaigns based on visitor's recent_page_urls matching campaign content links.
-     * Exact URL matches (ignoring query string) score 100 points each.
-     * Multiple matches for the same campaign are summed.
+     * Checks if visitor's recent_page_urls match any URLs in rtr_room_content_links table.
+     * Returns the first matching campaign found.
      *
-     * @param array<string,mixed> $context
-     * @return array<int,int> Array mapping campaign_id to total score
+     * @param array<string,mixed> $context Visitor context
+     * @return array<string,mixed>|null Campaign array if matched, null otherwise
      */
-    private function match_by_content_links(array $context): array
+    private function match_by_content_link(array $context): ?array
     {
         try {
             $visitor_urls = $this->parse_recent_page_urls($context['recent_page_urls'] ?? null);
             
             if (empty($visitor_urls)) {
-                return [];
+                return null;
             }
 
+            // Normalize visitor URLs for comparison
             $normalized_visitor_urls = [];
             foreach ($visitor_urls as $url) {
                 $normalized = $this->normalize_url($url);
@@ -351,12 +332,14 @@ final class Campaign_Matcher
             }
 
             if (empty($normalized_visitor_urls)) {
-                return [];
+                return null;
             }
 
             global $wpdb;
             $links_table = $wpdb->prefix . 'rtr_room_content_links';
+            $campaigns_table = $wpdb->prefix . 'dr_campaign_settings';
             
+            // Get all active content links
             $query = "SELECT campaign_id, link_url 
                       FROM {$links_table} 
                       WHERE is_active = 1 
@@ -366,31 +349,46 @@ final class Campaign_Matcher
             $content_links = $wpdb->get_results($query, ARRAY_A);
 
             if (empty($content_links)) {
-                return [];
+                return null;
             }
 
-            $campaign_scores = [];
+            // Check each visitor URL against content links
+            foreach ($normalized_visitor_urls as $visitor_url) {
+                foreach ($content_links as $link) {
+                    $content_url = $this->normalize_url($link['link_url']);
+                    
+                    if ($content_url !== null && $visitor_url === $content_url) {
+                        // Found a match! Fetch the campaign
+                        $campaign = $wpdb->get_row(
+                            $wpdb->prepare(
+                                "SELECT * FROM {$campaigns_table} 
+                                 WHERE id = %d 
+                                 AND (
+                                     (start_date IS NULL OR start_date <= CURDATE())
+                                     AND (end_date IS NULL OR end_date >= CURDATE())
+                                 )
+                                 LIMIT 1",
+                                $link['campaign_id']
+                            ),
+                            ARRAY_A
+                        );
 
-            foreach ($content_links as $link) {
-                $campaign_id = (int) $link['campaign_id'];
-                $normalized_link = $this->normalize_url($link['link_url']);
-                
-                if ($normalized_link === null) {
-                    continue;
-                }
-
-                if (in_array($normalized_link, $normalized_visitor_urls, true)) {
-                    if (!isset($campaign_scores[$campaign_id])) {
-                        $campaign_scores[$campaign_id] = 0;
+                        if ($campaign) {
+                            error_log(sprintf(
+                                self::LOG_PREFIX . ' Content link match: campaign_id=%s, url=%s',
+                                $campaign['id'],
+                                $visitor_url
+                            ));
+                            return $campaign;
+                        }
                     }
-                    $campaign_scores[$campaign_id] += self::SCORE_CONTENT_LINK_MATCH;
                 }
             }
 
-            return $campaign_scores;
+            return null;
         } catch (\Throwable $e) {
-            error_log(self::LOG_PREFIX . ' match_by_content_links error: ' . $e->getMessage());
-            return [];
+            error_log(self::LOG_PREFIX . ' match_by_content_link error: ' . $e->getMessage());
+            return null;
         }
     }
 
@@ -428,34 +426,6 @@ final class Campaign_Matcher
             error_log(self::LOG_PREFIX . ' normalize_url error: ' . $url . ' - ' . $e->getMessage());
             return null;
         }
-    }
-
-    /**
-     * Extract utm_campaign from context, checking multiple sources.
-     * Prioritizes direct utm_campaign field, then campaign_name, then extracts from recent_page_urls.
-     *
-     * @param array<string,mixed> $context
-     * @return string|null
-     */
-    private function extract_utm_campaign_from_context(array $context): ?string
-    {
-        if (!empty($context['utm_campaign']) && is_string($context['utm_campaign'])) {
-            return trim($context['utm_campaign']);
-        }
-
-        if (!empty($context['campaign_name']) && is_string($context['campaign_name'])) {
-            return trim($context['campaign_name']);
-        }
-
-        $visitor_urls = $this->parse_recent_page_urls($context['recent_page_urls'] ?? null);
-        foreach ($visitor_urls as $url) {
-            $utm = $this->extract_utm_from_url($url);
-            if ($utm !== null) {
-                return $utm;
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -534,141 +504,58 @@ final class Campaign_Matcher
     }
 
     /**
-     * Get scoring weights from database - Phase 1.4
+     * Step 3: Get default campaign
      * 
-     * Queries rtr_global_scoring_rules (problem room type).
-     * 
-     * Extracts weights from rules_config JSON and maps them to matcher weights:
-     * - industry_alignment.points -> keyword_match
-     * - target_states.points -> location_match
-     * - defaults used for utm_match and interest_match
+     * Returns the campaign named "Default" or the first active campaign found.
      *
-     * @param int $campaign_id
-     * @return array<string,int> ['utm_match' => int, 'keyword_match' => int, 'interest_match' => int, 'location_match' => int]
+     * @return array<string,mixed>|null Default campaign or null if none found
      */
-    private function get_scoring_weights(int $campaign_id): array
+    private function get_default_campaign(): ?array
     {
-        if (isset($this->weights_cache[$campaign_id])) {
-            return $this->weights_cache[$campaign_id];
-        }
-
-        $defaults = [
-            'utm_match' => 10,
-            'keyword_match' => 5,
-            'interest_match' => 3,
-            'location_match' => 2,
-        ];
-
         try {
             global $wpdb;
+            $table = $wpdb->prefix . 'dr_campaign_settings';
             
-            // FIXED: Removed client_id lookup and client-specific rules
-            $global_rules_table = $wpdb->prefix . 'rtr_global_scoring_rules';
-            $rules = $wpdb->get_row(
-                "SELECT rules_config FROM {$global_rules_table} 
-                 WHERE room_type = 'problem' 
+            // Try to find a campaign specifically named "Default"
+            $campaign = $wpdb->get_row(
+                "SELECT * FROM {$table} 
+                 WHERE LOWER(TRIM(campaign_name)) = 'default'
+                 AND (
+                     (start_date IS NULL OR start_date <= CURDATE())
+                     AND (end_date IS NULL OR end_date >= CURDATE())
+                 )
                  LIMIT 1",
                 ARRAY_A
             );
-            
-            if (!$rules || empty($rules['rules_config'])) {
-                $this->weights_cache[$campaign_id] = $defaults;
-                return $defaults;
+
+            if ($campaign) {
+                error_log(self::LOG_PREFIX . ' Using "Default" campaign: ' . $campaign['id']);
+                return $campaign;
             }
-            
-            $config = json_decode($rules['rules_config'], true);
-            if (!is_array($config)) {
-                error_log(self::LOG_PREFIX . ' Invalid rules_config JSON for campaign ' . $campaign_id);
-                $this->weights_cache[$campaign_id] = $defaults;
-                return $defaults;
+
+            // Fallback: get the first active campaign ordered by ID
+            $campaign = $wpdb->get_row(
+                "SELECT * FROM {$table} 
+                 WHERE (
+                     (start_date IS NULL OR start_date <= CURDATE())
+                     AND (end_date IS NULL OR end_date >= CURDATE())
+                 )
+                 ORDER BY id ASC
+                 LIMIT 1",
+                ARRAY_A
+            );
+
+            if ($campaign) {
+                error_log(self::LOG_PREFIX . ' Using first available campaign as default: ' . $campaign['id']);
+                return $campaign;
             }
-            
-            $weights = $defaults;
-            
-            if (isset($config['industry_alignment']['enabled']) && 
-                $config['industry_alignment']['enabled'] && 
-                isset($config['industry_alignment']['points'])) {
-                $points = (int) $config['industry_alignment']['points'];
-                if ($points > 0) {
-                    $weights['keyword_match'] = $points;
-                }
-            }
-            
-            if (isset($config['target_states']['enabled']) && 
-                $config['target_states']['enabled'] && 
-                isset($config['target_states']['points'])) {
-                $points = (int) $config['target_states']['points'];
-                if ($points > 0) {
-                    $weights['location_match'] = $points;
-                }
-            }
-            
-            $this->weights_cache[$campaign_id] = $weights;
-            return $weights;
-            
+
+            error_log(self::LOG_PREFIX . ' No default campaign found');
+            return null;
         } catch (\Throwable $e) {
-            error_log(self::LOG_PREFIX . ' get_scoring_weights error: ' . $e->getMessage());
-            $this->weights_cache[$campaign_id] = $defaults;
-            return $defaults;
+            error_log(self::LOG_PREFIX . ' get_default_campaign error: ' . $e->getMessage());
+            return null;
         }
-    }
-
-    /**
-     * Compute a simple match score between campaign metadata and visitor context.
-     * 
-     * Phase 1.4: Uses database-driven weights from get_scoring_weights()
-     *
-     * @param array<string,mixed> $campaign
-     * @param array<string,mixed> $context
-     * @return int
-     */
-    private function calculate_match_score(array $campaign, array $context): int
-    {
-        $campaign_id = (int) ($campaign['id'] ?? 0);
-        if ($campaign_id === 0) {
-            return 0;
-        }
-        
-        $weights = $this->get_scoring_weights($campaign_id);
-        $score = 0;
-
-        $metadata = [];
-        if (!empty($campaign['metadata'])) {
-            $decoded = json_decode((string) $campaign['metadata'], true);
-            if (is_array($decoded)) {
-                $metadata = $decoded;
-            }
-        }
-
-        if (!empty($context['utm_campaign']) && stripos($campaign['name'], $context['utm_campaign']) !== false) {
-            $score += $weights['utm_match'];
-        }
-
-        if (!empty($metadata['keywords']) && is_array($metadata['keywords'])) {
-            foreach ($metadata['keywords'] as $kw) {
-                if (!empty($context['utm_source']) && stripos($context['utm_source'], $kw) !== false) {
-                    $score += $weights['keyword_match'];
-                }
-                if (!empty($context['company']) && stripos($context['company'], $kw) !== false) {
-                    $score += $weights['keyword_match'];
-                }
-            }
-        }
-
-        if (!empty($context['interests']) && !empty($metadata['topics'])) {
-            $common = array_intersect(array_map('strtolower', $context['interests']), array_map('strtolower', (array) $metadata['topics']));
-            $score += count($common) * $weights['interest_match'];
-        }
-
-        if (!empty($context['location']) && !empty($metadata['locations'])) {
-            foreach ((array) $metadata['locations'] as $loc) {
-                if (stripos($context['location'], $loc) !== false) {
-                    $score += $weights['location_match'];
-                }
-            }
-        }
-
-        return $score;
     }
 
     /**
