@@ -38,6 +38,7 @@ wp_enqueue_style('directreach-header', plugin_dir_url(__FILE__) . '../css/header
 wp_enqueue_style('directreach-room-cards', plugin_dir_url(__FILE__) . '../css/room-cards.css', [], '2.0.0');
 wp_enqueue_style('directreach-room-details', plugin_dir_url(__FILE__) . '../css/room-details.css', [], '2.0.0');
 wp_enqueue_style('directreach-prospect-list', plugin_dir_url(__FILE__) . '../css/prospect-list.css', [], '2.0.0');
+wp_enqueue_style('directreach-pagination', plugin_dir_url(__FILE__) . '../css/pagination-styles.css', [], '2.0.0');
 wp_enqueue_style('directreach-modals', plugin_dir_url(__FILE__) . '../css/modals.css', [], '2.0.0');
 wp_enqueue_style('directreach-email-modal', plugin_dir_url(__FILE__) . '../css/email-modal.css', [], '2.0.0');
 wp_enqueue_style('directreach-email-history-modal', plugin_dir_url(__FILE__) . '../css/email-history-modal.css', [], '2.0.0');
@@ -52,6 +53,7 @@ wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-aw
 wp_enqueue_script('chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js', array(), '4.4.0', true);
 
 // Enqueue main JavaScript as ES module
+/*
 wp_enqueue_script(
     'rtr-dashboard-main',
     plugins_url('admin/js/main.js', dirname(__DIR__)),
@@ -59,7 +61,7 @@ wp_enqueue_script(
     '2.1.0',
     true // Load in footer
 );
-
+*/
 // Localize config for JS - MUST be called AFTER wp_enqueue_script
 wp_localize_script(
     'rtr-dashboard-main',

@@ -1,0 +1,125 @@
+/* Pagination Styles for RTR Dashboard */
+
+.rtr-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    margin-top: 20px;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
+}
+
+.rtr-pagination-info {
+    font-size: 14px;
+    color: #6b7280;
+}
+
+.rtr-pagination-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rtr-pagination-btn {
+    padding: 8px 16px;
+    border: 1px solid #d1d5db;
+    background: white;
+    color: #374151;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.rtr-pagination-btn:hover:not(:disabled) {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+}
+
+.rtr-pagination-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.rtr-pagination-pages {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.rtr-pagination-page {
+    min-width: 36px;
+    height: 36px;
+    padding: 8px;
+    border: 1px solid #d1d5db;
+    background: white;
+    color: #374151;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rtr-pagination-page:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+}
+
+.rtr-pagination-page.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+}
+
+.rtr-pagination-page.active:hover {
+    background: #2563eb;
+    border-color: #2563eb;
+}
+
+.rtr-pagination-ellipsis {
+    padding: 8px 4px;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .rtr-pagination {
+        flex-direction: column;
+        gap: 16px;
+    }
+    
+    .rtr-pagination-info {
+        order: 2;
+    }
+    
+    .rtr-pagination-buttons {
+        order: 1;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .rtr-pagination-btn {
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+    
+    .rtr-pagination-page {
+        min-width: 32px;
+        height: 32px;
+        font-size: 13px;
+    }
+}
+
+/* Make sure prospects wrapper doesn't include pagination */
+.rtr-prospects-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}

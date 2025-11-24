@@ -28,6 +28,13 @@ export default class ProspectManager {
         this.campaigns = new Map();
         this.isLoading = {};
         
+        // Pagination state
+        this.pagination = {
+            problem: { currentPage: 1, totalPages: 1, totalCount: 0, perPage: 10 },
+            solution: { currentPage: 1, totalPages: 1, totalCount: 0, perPage: 10 },
+            offer: { currentPage: 1, totalPages: 1, totalCount: 0, perPage: 10 }
+        };
+        
         // Debounce tracking for button clicks
         this.buttonDebounce = new Map();
         
@@ -60,7 +67,7 @@ export default class ProspectManager {
         if (campaignFilter) {
             campaignFilter.addEventListener('change', (e) => {
                 this.currentFilters.campaign_id = e.target.value;
-                this.refreshAllRooms();
+                //this.refreshAllRooms();
                 document.dispatchEvent(new CustomEvent('rtr:filterChanged'));
             });
         }
@@ -69,7 +76,9 @@ export default class ProspectManager {
             const campaignFilter = document.getElementById(`${room}-room-campaign-filter`);
             if (campaignFilter) {
                 campaignFilter.addEventListener('change', (e) => {
-                    this.loadRoomProspects(room);
+                    // Reset to page 1 when filter changes
+                    this.pagination[room].currentPage = 1;
+                    this.loadRoomProspects(room, null, 1);
                 });
             }
         });
@@ -163,11 +172,15 @@ export default class ProspectManager {
 
     async refreshAllRooms() {
         const rooms = ['problem', 'solution', 'offer'];
-        await Promise.all(rooms.map(room => this.loadRoomProspects(room, this.currentFilters.campaign_id)));
+        // Reset all rooms to page 1
+        rooms.forEach(room => {
+            this.pagination[room].currentPage = 1;
+        });
+        await Promise.all(rooms.map(room => this.loadRoomProspects(room, this.currentFilters.campaign_id, 1)));
     }
 
-    async loadRoomProspects(room, campaignId = null) {
-        console.log(`Loading prospects for room: ${room} with campaign filter: ${campaignId}`);
+    async loadRoomProspects(room, campaignId = null, page = null) {
+        console.log(`Loading prospects for room: ${room} with campaign filter: ${campaignId}, page: ${page}`);
         if (this.isLoading[room]) {
             return;
         }
@@ -184,8 +197,14 @@ export default class ProspectManager {
         this.showLoadingState(container, room);
 
         try {
+            // Use provided page or current page from state
+            const currentPage = page !== null ? page : this.pagination[room].currentPage;
+            const perPage = this.pagination[room].perPage;
+            
             const url = new URL(`${this.apiUrl}/prospects`, window.location.origin);
             url.searchParams.append('room', room);
+            url.searchParams.append('page', currentPage);
+            url.searchParams.append('per_page', perPage);
 
             const clientFilter = document.getElementById('client-select');
 
@@ -216,6 +235,12 @@ export default class ProspectManager {
             }
 
             const data = await response.json();
+            
+            // Update pagination state
+            this.pagination[room].currentPage = data.pagination?.current_page || currentPage;
+            this.pagination[room].totalPages = data.pagination?.total_pages || 1;
+            this.pagination[room].totalCount = data.pagination?.total_count || 0;
+            
             this.prospects[room] = data.data || [];
             
             // Initialize email states for prospects that don't have them
@@ -262,6 +287,9 @@ export default class ProspectManager {
                 const option = document.createElement('option');
                 option.value = id;
                 option.textContent = name;
+                if (currentValue && id == currentValue) {
+                    option.selected = true;  // Use selected attribute instead of setting .value
+                }
                 campaignFilter.appendChild(option);
             });
 
@@ -295,26 +323,172 @@ export default class ProspectManager {
         if (!container) return;
 
         if (!prospects || prospects.length === 0) {
-            container.innerHTML = `
-                <div class="rtr-empty-state">
-                    <i class="fas fa-inbox"></i>
-                    <p>No prospects in ${room} room</p>
-                </div>
-            `;
-            this.updateRoomBadge(room, 0);
+            const paginationInfo = this.pagination[room];
+            if (paginationInfo.totalCount === 0) {
+                container.innerHTML = `
+                    <div class="rtr-empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <p>No prospects in ${room} room</p>
+                    </div>
+                `;
+                this.updateRoomBadge(room, 0);
+            } else {
+                // We have prospects but current page is empty
+                container.innerHTML = `
+                    <div class="rtr-empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <p>No prospects on this page</p>
+                        <button class="rtr-btn-secondary" onclick="document.querySelector('#${room}-pagination-first').click()">
+                            Go to First Page
+                        </button>
+                    </div>
+                `;
+            }
             return;
         }
 
         // Clear container
         container.innerHTML = '';
         
+        // Create prospects wrapper
+        const prospectsWrapper = document.createElement('div');
+        prospectsWrapper.className = 'rtr-prospects-wrapper';
+        
         // Append each prospect row as a DOM element
         prospects.forEach(prospect => {
             const row = this.renderProspectRow(prospect, room);
-            container.appendChild(row);
+            prospectsWrapper.appendChild(row);
         });
+        
+        container.appendChild(prospectsWrapper);
+        
+        // Add pagination controls
+        this.renderPaginationControls(room, container);
 
-        this.updateRoomBadge(room, prospects.length);
+        // Update badge with total count (not just current page)
+        this.updateRoomBadge(room, this.pagination[room].totalCount);
+    }
+
+    renderPaginationControls(room, container) {
+        const paginationInfo = this.pagination[room];
+        const { currentPage, totalPages, totalCount, perPage } = paginationInfo;
+        
+        // Don't show pagination if there's only one page
+        if (totalPages <= 1) {
+            return;
+        }
+        
+        const paginationContainer = document.createElement('div');
+        paginationContainer.className = 'rtr-pagination';
+        
+        // Pagination info
+        const startItem = ((currentPage - 1) * perPage) + 1;
+        const endItem = Math.min(currentPage * perPage, totalCount);
+        
+        const paginationInfo_div = document.createElement('div');
+        paginationInfo_div.className = 'rtr-pagination-info';
+        paginationInfo_div.textContent = `Showing ${startItem}-${endItem} of ${totalCount} prospects`;
+        paginationContainer.appendChild(paginationInfo_div);
+        
+        // Pagination buttons
+        const paginationButtons = document.createElement('div');
+        paginationButtons.className = 'rtr-pagination-buttons';
+        
+        // First page button
+        const firstBtn = this.createPaginationButton('First', currentPage === 1, () => {
+            this.goToPage(room, 1);
+        });
+        firstBtn.id = `${room}-pagination-first`;
+        paginationButtons.appendChild(firstBtn);
+        
+        // Previous button
+        const prevBtn = this.createPaginationButton('Previous', currentPage === 1, () => {
+            this.goToPage(room, currentPage - 1);
+        });
+        paginationButtons.appendChild(prevBtn);
+        
+        // Page numbers (show current page and surrounding pages)
+        const pageNumbersContainer = document.createElement('div');
+        pageNumbersContainer.className = 'rtr-pagination-pages';
+        
+        let startPage = Math.max(1, currentPage - 2);
+        let endPage = Math.min(totalPages, currentPage + 2);
+        
+        // Show first page if not in range
+        if (startPage > 1) {
+            pageNumbersContainer.appendChild(this.createPageNumberButton(room, 1, currentPage));
+            if (startPage > 2) {
+                const ellipsis = document.createElement('span');
+                ellipsis.className = 'rtr-pagination-ellipsis';
+                ellipsis.textContent = '...';
+                pageNumbersContainer.appendChild(ellipsis);
+            }
+        }
+        
+        // Page numbers in range
+        for (let i = startPage; i <= endPage; i++) {
+            pageNumbersContainer.appendChild(this.createPageNumberButton(room, i, currentPage));
+        }
+        
+        // Show last page if not in range
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                const ellipsis = document.createElement('span');
+                ellipsis.className = 'rtr-pagination-ellipsis';
+                ellipsis.textContent = '...';
+                pageNumbersContainer.appendChild(ellipsis);
+            }
+            pageNumbersContainer.appendChild(this.createPageNumberButton(room, totalPages, currentPage));
+        }
+        
+        paginationButtons.appendChild(pageNumbersContainer);
+        
+        // Next button
+        const nextBtn = this.createPaginationButton('Next', currentPage === totalPages, () => {
+            this.goToPage(room, currentPage + 1);
+        });
+        paginationButtons.appendChild(nextBtn);
+        
+        // Last page button
+        const lastBtn = this.createPaginationButton('Last', currentPage === totalPages, () => {
+            this.goToPage(room, totalPages);
+        });
+        paginationButtons.appendChild(lastBtn);
+        
+        paginationContainer.appendChild(paginationButtons);
+        container.appendChild(paginationContainer);
+    }
+
+    createPaginationButton(text, disabled, onClick) {
+        const button = document.createElement('button');
+        button.className = 'rtr-pagination-btn';
+        button.textContent = text;
+        button.disabled = disabled;
+        if (!disabled) {
+            button.addEventListener('click', onClick);
+        }
+        return button;
+    }
+
+    createPageNumberButton(room, pageNumber, currentPage) {
+        const button = document.createElement('button');
+        button.className = 'rtr-pagination-page';
+        if (pageNumber === currentPage) {
+            button.classList.add('active');
+        }
+        button.textContent = pageNumber;
+        button.addEventListener('click', () => {
+            this.goToPage(room, pageNumber);
+        });
+        return button;
+    }
+
+    goToPage(room, page) {
+        if (this.isLoading[room]) {
+            return;
+        }
+        this.pagination[room].currentPage = page;
+        this.loadRoomProspects(room, null, page);
     }
 
     renderProspectRow(prospect, room) {

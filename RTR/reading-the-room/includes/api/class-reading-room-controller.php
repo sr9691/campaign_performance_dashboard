@@ -54,18 +54,20 @@ final class Reading_Room_Controller extends WP_REST_Controller
     public function register_routes(): void
     {
         // Prospects endpoints
-        register_rest_route($this->namespace, '/prospects', [
-            [
-                'methods'             => WP_REST_Server::READABLE,
-                'callback'            => [$this, 'get_prospects'],
-                'permission_callback' => [$this, 'check_permission'],
-                'args'                => [
-                    'client_id'   => ['type' => 'integer', 'required' => false],
-                    'campaign_id' => ['type' => 'integer', 'required' => false],
-                    'room'        => ['type' => 'string', 'required' => false],
-                ],
-            ],
-        ]);
+                register_rest_route($this->namespace, '/prospects', [
+                    [
+                        'methods'             => WP_REST_Server::READABLE,
+                        'callback'            => [$this, 'get_prospects'],
+                        'permission_callback' => [$this, 'check_permission'],
+                        'args'                => [
+                            'client_id'   => ['type' => 'integer', 'required' => false],
+                            'campaign_id' => ['type' => 'integer', 'required' => false],
+                            'room'        => ['type' => 'string', 'required' => false],
+                            'page'        => ['type' => 'integer', 'required' => false, 'default' => 1, 'minimum' => 1],
+                            'per_page'    => ['type' => 'integer', 'required' => false, 'default' => 10, 'minimum' => 1, 'maximum' => 100],
+                        ],
+                    ],
+                ]);
 
         register_rest_route($this->namespace, '/prospects/(?P<id>\d+)', [
             [
@@ -234,8 +236,6 @@ final class Reading_Room_Controller extends WP_REST_Controller
 
     }
 
-
-
     /**
      * Get all prospects with optional filters.
      *
@@ -259,21 +259,17 @@ final class Reading_Room_Controller extends WP_REST_Controller
             }
             error_log('Days filter: ' . ($filters['days'] ?? 'none'));
             
+            // Get pagination parameters
+            $page = max(1, (int) $request->get_param('page'));
+            $per_page = max(1, min(100, (int) $request->get_param('per_page')));
+            
             $prospects = $this->db->get_prospects($filters);
 
-
-
-            // Ensure each prospect has a room assignment and email states
+            // Ensure each prospect has a room assignment
             foreach ($prospects as &$prospect) {
                 if (empty($prospect['room'])) {
                     $prospect['room'] = $this->determine_prospect_room($prospect);
                 }
-                
-                // Add email states
-                $prospect['email_states'] = $this->get_email_states(
-                    (int) $prospect['id'],
-                    $prospect['room']
-                );
             }
 
             // Filter by room if parameter is provided
@@ -289,12 +285,33 @@ final class Reading_Room_Controller extends WP_REST_Controller
                 $score_a = (int) ($a['lead_score'] ?? 0);
                 $score_b = (int) ($b['lead_score'] ?? 0);
                 return $score_b - $score_a; // Descending order
-            });            
+            });
+            
+            // Calculate pagination metadata
+            $total_count = count($prospects);
+            $total_pages = ceil($total_count / $per_page);
+            $offset = ($page - 1) * $per_page;
+            
+            // Apply pagination
+            $paginated_prospects = array_slice($prospects, $offset, $per_page);
+
+            // Add email states ONLY for paginated prospects
+            foreach ($paginated_prospects as &$prospect) {
+                $prospect['email_states'] = $this->get_email_states(
+                    (int) $prospect['id'],
+                    $prospect['room']
+                );
+            }
 
             return new WP_REST_Response([
                 'success' => true,
-                'data'    => $prospects,
-                'count'   => count($prospects),
+                'data'    => $paginated_prospects,
+                'pagination' => [
+                    'current_page' => $page,
+                    'per_page'     => $per_page,
+                    'total_pages'  => $total_pages,
+                    'total_count'  => $total_count,
+                ],
             ], 200);
 
         } catch (\Exception $e) {
