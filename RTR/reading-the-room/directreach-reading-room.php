@@ -154,7 +154,7 @@ add_action('rest_api_init', function() {
     
     if (class_exists('DirectReach\\ReadingTheRoom\\API\\Jobs_Controller')) {
         try {
-            $controller = new \DirectReach\ReadingTheRoom\API\Jobs_Controller();
+            $controller = new \DirectReach\ReadingTheRoom\API\Jobs_Controller($db);
             $controller->register_routes();
             error_log('[RTR] Jobs_Controller routes registered');
         } catch (\Exception $e) {

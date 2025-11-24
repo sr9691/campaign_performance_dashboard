@@ -604,11 +604,14 @@ class Jobs_Controller extends WP_REST_Controller {
             FROM {$wpdb->prefix}cpd_visitors v
             INNER JOIN {$wpdb->prefix}cpd_visitor_campaigns vc ON v.id = vc.visitor_id
             INNER JOIN {$wpdb->prefix}dr_campaign_settings cs ON vc.campaign_id = cs.id
-            WHERE v.lead_score IS NULL 
+            INNER JOIN {$wpdb->prefix}cpd_clients cl ON cs.client_id = cl.id
+            WHERE (v.lead_score IS NULL 
                 OR v.lead_score = 0
                 OR v.score_calculated_at IS NULL
                 OR v.last_seen_at > v.score_calculated_at
-                OR v.score_calculated_at < DATE_SUB(NOW(), INTERVAL 7 DAY)
+                OR v.score_calculated_at < DATE_SUB(NOW(), INTERVAL 7 DAY))
+            AND cl.subscription_tier = 'premium'
+            AND cl.rtr_enabled = 1
         ");
 
         $total = count($visitors);
@@ -660,8 +663,8 @@ class Jobs_Controller extends WP_REST_Controller {
                     $calculated++;
                     $this->job_stats['scores_calculated']++;
                     
-                    // Log first 5 calculations for debugging
-                    if ($calculated <= 5) {
+                    // Log first 3 calculations for debugging
+                    if ($calculated <= 3) {
                         error_log(sprintf(
                             '[RTR Nightly Job] Calculated score %d for visitor_id: %d (RB2B: %s), client_id: %d',
                             $score_data['total_score'],
@@ -752,7 +755,10 @@ class Jobs_Controller extends WP_REST_Controller {
             FROM {$wpdb->prefix}cpd_visitors v
             INNER JOIN {$wpdb->prefix}cpd_visitor_campaigns vc ON v.id = vc.visitor_id
             INNER JOIN {$wpdb->prefix}dr_campaign_settings cs ON vc.campaign_id = cs.id
+            INNER JOIN {$wpdb->prefix}cpd_clients cl ON cs.client_id = cl.id
             WHERE v.lead_score > 0
+            AND cl.subscription_tier = 'premium'
+            AND cl.rtr_enabled = 1
             {$where_client}
             GROUP BY v.id
             ORDER BY v.lead_score DESC, v.last_seen_at DESC
@@ -868,8 +874,12 @@ class Jobs_Controller extends WP_REST_Controller {
             SELECT p.*, v.lead_score
             FROM {$wpdb->prefix}rtr_prospects p
             INNER JOIN {$wpdb->prefix}cpd_visitors v ON p.visitor_id = v.id
+            INNER JOIN {$wpdb->prefix}dr_campaign_settings cs ON p.campaign_id = cs.id
+            INNER JOIN {$wpdb->prefix}cpd_clients cl ON cs.client_id = cl.id
             WHERE p.archived_at IS NULL
             AND p.sales_handoff_at IS NULL
+            AND cl.subscription_tier = 'premium'
+            AND cl.rtr_enabled = 1
         ");
 
         $this->log_job('room_assignment_start', sprintf(
@@ -1137,11 +1147,13 @@ class Jobs_Controller extends WP_REST_Controller {
             
             if ($prospect && $prospect->visitor_id) {
                 $visitor_id = (int) $prospect->visitor_id;
+                /*
                 error_log(sprintf(
                     '[RTR Score Breakdown] Resolved prospect_id %d to visitor_id %d',
                     $prospect_id,
                     $visitor_id
                 ));
+                */
             } else {
                 return new WP_Error(
                     'prospect_not_found',
@@ -1160,12 +1172,14 @@ class Jobs_Controller extends WP_REST_Controller {
         }
 
         // Log what we're calculating
+        /*
         error_log(sprintf(
             '[RTR Score Breakdown] Calculating score for visitor_id: %d, client_id: %d, prospect_id: %d',
             $visitor_id,
             $client_id,
             $prospect_id
         ));
+        */
 
         // Check if RTR_Score_Calculator is available
         if (!class_exists('\RTR_Score_Calculator')) {
@@ -1197,13 +1211,14 @@ class Jobs_Controller extends WP_REST_Controller {
             $score_data['client_id'] = $client_id;
             
             // Log the result
+            /*
             error_log(sprintf(
                 '[RTR Score Breakdown] Calculated score %d for visitor_id: %d (prospect_id: %d)',
                 $score_data['total_score'],
                 $visitor_id,
                 $prospect_id
             ));
-            
+            */
             // Return the score breakdown
             return new WP_REST_Response($score_data, 200);
 
@@ -1267,7 +1282,7 @@ class Jobs_Controller extends WP_REST_Controller {
             ['%d', '%s', '%s', '%s']
         );
 
-        // FIXED: Only log to error_log for warnings/errors or if WP_DEBUG is true
+        // Only log to error_log for warnings/errors or if WP_DEBUG is true
         if ($level !== 'info' || (defined('WP_DEBUG') && WP_DEBUG)) {
             $prefix = self::LOG_PREFIX_JOB . ' ' . strtoupper($level) . ']';
             error_log("{$prefix} {$action_type}: {$description}");
