@@ -194,12 +194,12 @@ const data = await response.json();
                 body: JSON.stringify(body) 
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
             const result = await response.json();
             
+            if (!response.ok) {
+                throw new Error(result.message || 'Email not found');
+            }
+
             if (result.success && result.data && result.data.email) {
                 // Update the displayed email inline
                 this.updateEmailDisplay(result.data.email, 'found');

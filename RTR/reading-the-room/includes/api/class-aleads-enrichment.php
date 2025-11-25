@@ -506,7 +506,7 @@ final class ALeads_Enrichment
 
             // Update prospect with verification result
             if ($prospect && isset($prospect['id'])) {
-                $this->update_prospect_verification($prospect['id'], [
+                $this->update_prospect_verification((int) $prospect['id'], [
                     'email_verified' => $is_verified ? 1 : 0,
                     'email_verification_date' => current_time('mysql'), // Will map to email_verified_at
                     'email_quality' => $quality,
@@ -755,6 +755,60 @@ final class ALeads_Enrichment
         
         return $result;
     }
+
+    /**
+     * Get visitor data by visitor ID
+     *
+     * @param int $visitor_id The visitor ID
+     * @return array|null Visitor data or null if not found
+     */
+    private function get_visitor_data($visitor_id) {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cpd_visitors';
+        
+        $result = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT * FROM $table_name WHERE id = %d",
+                $visitor_id
+            ),
+            ARRAY_A
+        );
+        
+        if ($wpdb->last_error) {
+            error_log('[RTR] Database error in get_visitor_data: ' . $wpdb->last_error);
+            return null;
+        }
+        
+        return $result;
+    }    
+
+    /**
+     * Extract domain from URL or website string
+     *
+     * @param string $url The URL or website
+     * @return string The extracted domain
+     */
+    private function extract_domain(string $url): string {
+        if (empty($url)) {
+            return '';
+        }
+        
+        // Add scheme if missing for parse_url to work
+        if (!preg_match('#^https?://#i', $url)) {
+            $url = 'https://' . $url;
+        }
+        
+        $host = parse_url($url, PHP_URL_HOST);
+        
+        if (empty($host)) {
+            return '';
+        }
+        
+        // Remove www. prefix
+        $domain = preg_replace('/^www\./i', '', $host);
+        
+        return $domain;
+    }    
 
     /**
      * Parse API response and extract contacts (WITHOUT emails - those come from find-email endpoint).

@@ -1301,7 +1301,7 @@ final class Reading_Room_Controller extends WP_REST_Controller
             if (!$matched_contact || empty($matched_contact['member_id'])) {
                 return new WP_REST_Response([
                     'success' => false,
-                    'message' => 'No reliable match found'
+                    'message' => 'Email not found - try using Contact Search first'
                 ], 404);
             }
             
