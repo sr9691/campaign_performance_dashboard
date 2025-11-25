@@ -355,7 +355,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
                 'room_type' => $room_type,
                 'email_number' => $email_number,
                 'subject' => $result['subject'],
-                'body_html' => $result['body_html'],
+                'body_html' => $this->inject_tracking_pixel( $result['body_html'], $tracking_token ),
                 'body_text' => $result['body_text'] ?? strip_tags( $result['body_html'] ),
                 'tracking_token' => $tracking_token,
                 'status' => 'generated',
@@ -509,7 +509,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
             'email_tracking_id' => (int) $tracking->id,
             'tracking_token' => $tracking->tracking_token,
             'subject' => $tracking->subject,
-            'body_html' => $tracking->body_html,            
+            'body_html' => $this->inject_tracking_pixel( $tracking->body_html, $tracking->tracking_token ),
             'body_text' => $tracking->body_text,            
             'email_number' => $email_number,                
             'room_type' => $room_type,                      
@@ -636,7 +636,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
 
         // Update tracking record (delegates to tracking manager)
         // The tracking manager handles checking if already opened
-        $this->tracking->mark_as_opened( $token );
+        $result = $this->tracking->mark_as_opened( $token );
         
         if ( ! $result ) {
             error_log( sprintf(
@@ -657,16 +657,50 @@ class Email_Generation_Controller extends WP_REST_Controller {
         // 1x1 transparent GIF (43 bytes)
         $pixel_data = base64_decode( 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' );
         
-        $response = new WP_REST_Response( $pixel_data );
-        $response->set_status( 200 );
-        $response->header( 'Content-Type', 'image/gif' );
-        $response->header( 'Content-Length', strlen( $pixel_data ) );
-        $response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
-        $response->header( 'Pragma', 'no-cache' );
-        $response->header( 'Expires', '0' );
+        status_header( 200 );
+        header( 'Content-Type: image/gif' );
+        header( 'Content-Length: ' . strlen( $pixel_data ) );
+        header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+        header( 'Pragma: no-cache' );
+        header( 'Expires: 0' );
         
-        return $response;
+        echo $pixel_data;
+        exit;
     }
+
+    /**
+     * Build tracking pixel URL
+     */
+    private function build_tracking_pixel_url( $tracking_token ) {
+        return rest_url( $this->namespace . '/' . $this->rest_base . '/track-open/' . $tracking_token );
+    }
+
+    /**
+     * Build tracking pixel HTML
+     */
+    private function build_tracking_pixel_html( $tracking_token ) {
+        $pixel_url = $this->build_tracking_pixel_url( $tracking_token );
+        return sprintf(
+            '<img src="%s" width="1" height="1" alt="" style="display:none;width:1px;height:1px;border:0;" />',
+            esc_url( $pixel_url )
+        );
+    }
+
+    /**
+     * Inject tracking pixel into HTML body
+     */
+    private function inject_tracking_pixel( $body_html, $tracking_token ) {
+        if ( empty( $tracking_token ) ) {
+            return $body_html;
+        }
+        $pixel_html = $this->build_tracking_pixel_html( $tracking_token );
+        
+        if ( stripos( $body_html, '</body>' ) !== false ) {
+            return preg_replace( '/<\/body>/i', $pixel_html . '</body>', $body_html, 1 );
+        }
+        return $body_html . $pixel_html;
+    }
+
 
     /**
      * Get prospect data
