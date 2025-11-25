@@ -53,12 +53,7 @@ class CPD_Prompt_Template {
         $this->data = $template_data;
     }
 
-    /**
-     * Validate template structure
-     *
-     * @return bool True if valid, false otherwise
-     */
-    public function validate() {
+public function validate() {
         $this->errors = array();
 
         // Check if prompt_template exists and is valid JSON
@@ -69,15 +64,18 @@ class CPD_Prompt_Template {
 
         // Decode if string
         if ( is_string( $this->data['prompt_template'] ) ) {
-            $prompt_data = json_decode( $this->data['prompt_template'], true );
+            $raw_data = json_decode( $this->data['prompt_template'], true );
             
             if ( json_last_error() !== JSON_ERROR_NONE ) {
                 $this->errors[] = 'Invalid JSON in prompt_template: ' . json_last_error_msg();
                 return false;
             }
         } else {
-            $prompt_data = $this->data['prompt_template'];
+            $raw_data = $this->data['prompt_template'];
         }
+
+        // Normalize field names (supports both short and long names)
+        $prompt_data = $this->normalize_field_names( $raw_data );
 
         // Validate structure - all 7 components must exist (can be empty)
         foreach ( self::COMPONENTS as $component ) {
@@ -170,15 +168,49 @@ class CPD_Prompt_Template {
     }
 
     /**
-     * Get prompt data as array
+     * Get prompt data as array (with field name normalization)
      *
      * @return array
      */
     private function get_prompt_data() {
         if ( is_string( $this->data['prompt_template'] ) ) {
-            return json_decode( $this->data['prompt_template'], true );
+            $prompt_data = json_decode( $this->data['prompt_template'], true );
+        } else {
+            $prompt_data = $this->data['prompt_template'];
         }
-        return $this->data['prompt_template'];
+
+        // Normalize short field names to long names for backwards compatibility
+        return $this->normalize_field_names( $prompt_data );
+    }
+
+    /**
+     * Normalize short field names to standard long names
+     *
+     * Supports both short names (style, output, etc.) and long names (style_rules, output_spec, etc.)
+     *
+     * @param array $prompt_data Raw prompt data
+     * @return array Normalized prompt data
+     */
+    private function normalize_field_names( $prompt_data ) {
+        if ( ! is_array( $prompt_data ) ) {
+            return $prompt_data;
+        }
+
+        $mapping = array(
+            'style'           => 'style_rules',
+            'output'          => 'output_spec',
+            'personalization' => 'personalization_guidelines',
+            'context'         => 'context_instructions',
+        );
+
+        foreach ( $mapping as $short => $long ) {
+            if ( isset( $prompt_data[ $short ] ) && ! isset( $prompt_data[ $long ] ) ) {
+                $prompt_data[ $long ] = $prompt_data[ $short ];
+                unset( $prompt_data[ $short ] );
+            }
+        }
+
+        return $prompt_data;
     }
 
     /**
