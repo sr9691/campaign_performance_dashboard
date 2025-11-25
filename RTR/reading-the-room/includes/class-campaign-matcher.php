@@ -148,25 +148,9 @@ final class Campaign_Matcher
 
     /**
      * Match a campaign for a visitor or prospect.
-     * SIMPLIFIED: 3-step matching process
-     *   1. Check utm_campaign in recent_page_urls against campaign utm_campaign
-     *   2. Check recent_page_urls against content_links
-     *   3. Return default campaign
+     * FIXED: Added skip_default_fallback option for nightly job processing
      *
      * @param array<string,mixed> $context
-     *        Full context array:
-     *        [
-     *          'visitor_id' => int|null,
-     *          'email'      => string|null,
-     *          'company'    => string|null,
-     *          'recent_page_urls' => string|array|null,
-     *          // other fields...
-     *        ]
-     *        OR minimal context for database lookup:
-     *        [
-     *          'visitor_id' => int
-     *        ]
-     *
      * @return array<string,mixed>|null Campaign data array or null
      */
     public function match(array $context): ?array
@@ -176,19 +160,22 @@ final class Campaign_Matcher
             return null;
         }
 
+        // FIXED: Check for skip_default_fallback flag
+        $skip_default_fallback = !empty($context['skip_default_fallback']);
+
         try {
             // Fetch visitor context from database if only visitor_id provided
             if (isset($context['visitor_id']) && is_int($context['visitor_id'])) {
                 $visitor_id = $context['visitor_id'];
-                $other_fields = array_diff_key($context, ['visitor_id' => true]);
+                $other_fields = array_diff_key($context, ['visitor_id' => true, 'skip_default_fallback' => true]);
                 
                 if (empty($other_fields)) {
                     $db_context = $this->get_visitor_context($visitor_id);
                     if ($db_context === null) {
                         error_log(self::LOG_PREFIX . ' Cannot match: visitor_id=' . $visitor_id . ' not found');
-                        return $this->get_default_campaign();
+                        return $skip_default_fallback ? null : $this->get_default_campaign();
                     }
-                    $context = $db_context;
+                    $context = array_merge($db_context, ['skip_default_fallback' => $skip_default_fallback]);
                 } else {
                     $db_context = $this->get_visitor_context($visitor_id);
                     if ($db_context !== null) {
@@ -217,7 +204,13 @@ final class Campaign_Matcher
                 return $content_link_match;
             }
 
-            // Step 3: Return default campaign
+            // Step 3: Return default campaign (ONLY if not skipping)
+            // FIXED: Respect skip_default_fallback flag
+            if ($skip_default_fallback) {
+                error_log(self::LOG_PREFIX . ' No explicit match found and skip_default_fallback=true, returning null');
+                return null;
+            }
+
             $default_campaign = $this->get_default_campaign();
             if ($default_campaign) {
                 $default_campaign['score'] = 0;

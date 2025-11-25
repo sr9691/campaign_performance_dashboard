@@ -286,7 +286,7 @@ class Jobs_Controller extends WP_REST_Controller {
         // ENHANCEMENT: Log comprehensive job start with system state
         global $wpdb;
         $system_stats = [
-            'total_visitors' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}cpd_visitors"),
+            'total_visitors' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}rtr_prospects"),
             'visitors_with_campaigns' => $wpdb->get_var("SELECT COUNT(DISTINCT visitor_id) FROM {$wpdb->prefix}cpd_visitor_campaigns"),
             'visitors_with_scores' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}cpd_visitors WHERE lead_score > 0"),
             'existing_prospects' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}rtr_prospects WHERE archived_at IS NULL"),
@@ -502,7 +502,8 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Internal campaign matching logic
-     * ENHANCED: Better logging and error context
+     * FIXED: Only match visitors to campaigns belonging to premium clients
+     * FIXED: Do not use default fallback - only match explicit UTM/content link matches
      *
      * @param string $mode Processing mode (incremental or full).
      * @return array{matched: int, skipped: int, total: int} Results.
@@ -518,6 +519,33 @@ class Jobs_Controller extends WP_REST_Controller {
 
         global $wpdb;
 
+        // FIXED: Get only PREMIUM CLIENT campaigns first
+        // This ensures we only match visitors to campaigns that belong to premium clients
+        $premium_campaign_ids = $wpdb->get_col("
+            SELECT cs.id 
+            FROM {$wpdb->prefix}dr_campaign_settings cs
+            INNER JOIN {$wpdb->prefix}cpd_clients cl ON cs.client_id = cl.id
+            WHERE cl.subscription_tier = 'premium'
+            AND cl.rtr_enabled = 1
+            AND (cs.start_date IS NULL OR cs.start_date <= CURDATE())
+            AND (cs.end_date IS NULL OR cs.end_date >= CURDATE())
+        ");
+
+        if (empty($premium_campaign_ids)) {
+            $this->log_job('campaign_match_skip', 'No premium client campaigns found - skipping campaign matching');
+            return [
+                'matched' => 0,
+                'skipped' => 0,
+                'total' => 0,
+            ];
+        }
+
+        $this->log_job('campaign_match_info', sprintf(
+            'Found %d premium client campaigns: %s',
+            count($premium_campaign_ids),
+            implode(', ', $premium_campaign_ids)
+        ));
+
         // Get unmatched visitors (those without campaign assignments)
         $where_clause = $mode === self::MODE_FULL
             ? "" 
@@ -531,17 +559,23 @@ class Jobs_Controller extends WP_REST_Controller {
         ");
 
         $this->log_job('campaign_match_batch_start', sprintf(
-            'Starting %s campaign matching for %d visitors',
+            'Starting %s campaign matching for %d visitors (filtering for %d premium campaigns)',
             $mode,
-            count($visitors)
+            count($visitors),
+            count($premium_campaign_ids)
         ));
 
         foreach ($visitors as $visitor) {
             try {
                 // Use the campaign matcher to find matching campaigns
-                $match = $this->campaign_matcher->match(['visitor_id' => (int) $visitor->id]);
+                // FIXED: Pass flag to skip default fallback for nightly jobs
+                $match = $this->campaign_matcher->match([
+                    'visitor_id' => (int) $visitor->id,
+                    'skip_default_fallback' => true
+                ]);
 
-                if ($match !== null) {
+                // FIXED: Only accept matches that belong to premium client campaigns
+                if ($match !== null && in_array((int)$match['id'], array_map('intval', $premium_campaign_ids))) {
                     $wpdb->query($wpdb->prepare(
                         "INSERT IGNORE INTO {$wpdb->prefix}cpd_visitor_campaigns 
                         (visitor_id, campaign_id) VALUES (%d, %d)",
@@ -549,6 +583,15 @@ class Jobs_Controller extends WP_REST_Controller {
                         $match['id']
                     ));
                     $matched++;
+                    
+                    if ($matched <= 3) {
+                        $this->log_job('campaign_match_success', sprintf(
+                            'Visitor %d matched to premium campaign %d via %s',
+                            $visitor->id,
+                            $match['id'],
+                            $match['match_method'] ?? 'unknown'
+                        ));
+                    }
                 } else {
                     $skipped++;
                 }
@@ -562,6 +605,12 @@ class Jobs_Controller extends WP_REST_Controller {
                 ), 'error');
             }
         }
+
+        $this->log_job('campaign_match_complete', sprintf(
+            'Campaign matching complete. Matched: %d, Skipped: %d (not premium or no match)',
+            $matched,
+            $skipped
+        ));
 
         return [
             'matched' => $matched,
