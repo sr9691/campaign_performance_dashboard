@@ -1,14 +1,20 @@
 <?php
 /**
- * RTR Score Calculator
+ * RTR Score Calculator (FIXED)
  * 
  * Calculates visitor lead scores based on JSON-configured rules across three room types:
  * - Problem Room: Visitor qualification (company fit, role match, basic engagement)
  * - Solution Room: Engagement signals (emails, page visits, ad interaction)
  * - Offer Room: Intent signals (demo requests, pricing, contact forms)
  * 
+ * FIXES in this version:
+ * 1. key_page_visit - Now checks against rtr_room_content_links table per campaign
+ * 2. ad_engagement - Now checks actual UTM parameters (campaign_source), not referrer string
+ * 3. email_open/email_click - Now queries rtr_email_tracking table for real data
+ * 
  * @package DirectReach_Reports
  * @subpackage RTR
+ * @version 2.1.0
  */
 
 if (!defined('ABSPATH')) {
@@ -42,6 +48,12 @@ class RTR_Score_Calculator {
     private $rules_cache = array();
     
     /**
+     * Cached content links by campaign
+     * @var array
+     */
+    private $content_links_cache = array();
+    
+    /**
      * Constructor
      */
     public function __construct() {
@@ -50,11 +62,13 @@ class RTR_Score_Calculator {
         
         // Initialize table names
         $this->tables = array(
-            'visitors' => $wpdb->prefix . 'cpd_visitors',
-            'global_rules' => $wpdb->prefix . 'rtr_global_scoring_rules',
-            'client_rules' => $wpdb->prefix . 'rtr_client_scoring_rules',
-            'content_links' => $wpdb->prefix . 'rtr_room_content_links',
-            'thresholds' => $wpdb->prefix . 'rtr_room_thresholds'
+            'visitors'        => $wpdb->prefix . 'cpd_visitors',
+            'global_rules'    => $wpdb->prefix . 'rtr_global_scoring_rules',
+            'client_rules'    => $wpdb->prefix . 'rtr_client_scoring_rules',
+            'content_links'   => $wpdb->prefix . 'rtr_room_content_links',
+            'thresholds'      => $wpdb->prefix . 'rtr_room_thresholds',
+            'email_tracking'  => $wpdb->prefix . 'rtr_email_tracking',
+            'visitor_campaigns' => $wpdb->prefix . 'cpd_visitor_campaigns',
         );
     }
     
@@ -63,7 +77,7 @@ class RTR_Score_Calculator {
      * 
      * @param int $visitor_id Visitor ID
      * @param int $client_id Client ID
-     * @param bool $cache_result Whether to save score to database
+     * @param bool $return_breakdown Whether to return detailed breakdown
      * @return array|false Array with total_score and component_scores, or false on error
      */
     public function calculate_visitor_score($visitor_id, $client_id, $return_breakdown = false) {
@@ -74,12 +88,18 @@ class RTR_Score_Calculator {
             return false;
         }
         
+        // Get campaign ID for this visitor (needed for content links lookup)
+        $campaign_id = $this->get_visitor_campaign_id($visitor_id);
+        
         // Load scoring rules
         $rules = $this->load_scoring_rules($client_id);
         if (!$rules) {
             error_log("RTR Score Calculator: No scoring rules found for client {$client_id}");
             return false;
         }
+        
+        // Get email tracking stats for this visitor
+        $email_stats = $this->get_visitor_email_stats($visitor_id);
         
         // Calculate score for each room type
         $breakdown = array(
@@ -92,9 +112,9 @@ class RTR_Score_Calculator {
 
         // Calculate with detailed breakdown if requested
         if ($return_breakdown) {
-            $problem_result = $this->calculate_problem_score($visitor, $rules['problem'] ?? array(), true);
-            $solution_result = $this->calculate_solution_score($visitor, $rules['solution'] ?? array(), true);
-            $offer_result = $this->calculate_offer_score($visitor, $rules['offer'] ?? array(), true);
+            $problem_result = $this->calculate_problem_score($visitor, $rules['problem'] ?? array(), $campaign_id, true);
+            $solution_result = $this->calculate_solution_score($visitor, $rules['solution'] ?? array(), $campaign_id, $email_stats, true);
+            $offer_result = $this->calculate_offer_score($visitor, $rules['offer'] ?? array(), $campaign_id, true);
             
             $breakdown['problem'] = $problem_result['score'];
             $breakdown['solution'] = $solution_result['score'];
@@ -104,9 +124,9 @@ class RTR_Score_Calculator {
             $details['solution'] = $solution_result['details'];
             $details['offer'] = $offer_result['details'];
         } else {
-            $breakdown['problem'] = $this->calculate_room_score($visitor, 'problem', $rules['problem'] ?? array());
-            $breakdown['solution'] = $this->calculate_room_score($visitor, 'solution', $rules['solution'] ?? array());
-            $breakdown['offer'] = $this->calculate_room_score($visitor, 'offer', $rules['offer'] ?? array());
+            $breakdown['problem'] = $this->calculate_problem_score($visitor, $rules['problem'] ?? array(), $campaign_id);
+            $breakdown['solution'] = $this->calculate_solution_score($visitor, $rules['solution'] ?? array(), $campaign_id, $email_stats);
+            $breakdown['offer'] = $this->calculate_offer_score($visitor, $rules['offer'] ?? array(), $campaign_id);
         }
 
         // Calculate total score
@@ -118,7 +138,7 @@ class RTR_Score_Calculator {
         // Determine current room based on score and thresholds
         $current_room = $this->determine_room($total_score, $client_id);
 
-        // Update database (always cache regardless of breakdown request)
+        // Update database
         $this->update_visitor_score($visitor_id, $total_score, $current_room);
 
         $result = array(
@@ -133,6 +153,137 @@ class RTR_Score_Calculator {
         }
 
         return $result;
+    }
+    
+    /**
+     * Get campaign ID for a visitor
+     * 
+     * @param int $visitor_id Visitor ID
+     * @return int|null Campaign ID or null
+     */
+    private function get_visitor_campaign_id($visitor_id) {
+        $campaign_id = $this->wpdb->get_var($this->wpdb->prepare(
+            "SELECT campaign_id FROM {$this->tables['visitor_campaigns']} 
+             WHERE visitor_id = %d 
+             ORDER BY id DESC 
+             LIMIT 1",
+            $visitor_id
+        ));
+        
+        return $campaign_id ? (int) $campaign_id : null;
+    }
+    
+    /**
+     * Get email tracking statistics for a visitor
+     * 
+     * FIX #3: Query actual email tracking data instead of hardcoded zeros
+     * 
+     * @param int $visitor_id Visitor ID
+     * @return array Email stats (opens, clicks, etc.)
+     */
+    private function get_visitor_email_stats($visitor_id) {
+        // Check if table exists
+        $table_exists = $this->wpdb->get_var(
+            "SHOW TABLES LIKE '{$this->tables['email_tracking']}'"
+        );
+        
+        if (!$table_exists) {
+            return array(
+                'total_emails' => 0,
+                'opened_count' => 0,
+                'clicked_count' => 0,
+            );
+        }
+        
+        // Query email tracking for this visitor
+        $stats = $this->wpdb->get_row($this->wpdb->prepare(
+            "SELECT 
+                COUNT(*) as total_emails,
+                SUM(CASE WHEN status = 'opened' THEN 1 ELSE 0 END) as opened_count,
+                SUM(CASE WHEN clicked_at IS NOT NULL THEN 1 ELSE 0 END) as clicked_count
+             FROM {$this->tables['email_tracking']}
+             WHERE visitor_id = %d",
+            $visitor_id
+        ), ARRAY_A);
+        
+        if (!$stats) {
+            return array(
+                'total_emails' => 0,
+                'opened_count' => 0,
+                'clicked_count' => 0,
+            );
+        }
+        
+        return array(
+            'total_emails'  => (int) ($stats['total_emails'] ?? 0),
+            'opened_count'  => (int) ($stats['opened_count'] ?? 0),
+            'clicked_count' => (int) ($stats['clicked_count'] ?? 0),
+        );
+    }
+    
+    /**
+     * Get content links for a campaign and room type
+     * 
+     * @param int $campaign_id Campaign ID
+     * @param string $room_type Room type (problem, solution, offer)
+     * @return array Array of link URLs
+     */
+    private function get_content_links($campaign_id, $room_type = null) {
+        if (!$campaign_id) {
+            return array();
+        }
+        
+        $cache_key = $campaign_id . '_' . ($room_type ?? 'all');
+        
+        if (isset($this->content_links_cache[$cache_key])) {
+            return $this->content_links_cache[$cache_key];
+        }
+        
+        $where_room = '';
+        if ($room_type) {
+            $where_room = $this->wpdb->prepare(' AND room_type = %s', $room_type);
+        }
+        
+        $links = $this->wpdb->get_col($this->wpdb->prepare(
+            "SELECT link_url FROM {$this->tables['content_links']}
+             WHERE campaign_id = %d
+             AND is_active = 1
+             {$where_room}",
+            $campaign_id
+        ));
+        
+        // Normalize URLs for comparison
+        $normalized = array();
+        foreach ($links as $url) {
+            $normalized[] = $this->normalize_url($url);
+        }
+        
+        $this->content_links_cache[$cache_key] = $normalized;
+        
+        return $normalized;
+    }
+    
+    /**
+     * Normalize URL for comparison
+     * 
+     * @param string $url URL to normalize
+     * @return string Normalized URL (lowercase, no trailing slash, no query string)
+     */
+    private function normalize_url($url) {
+        $url = strtolower(trim($url));
+        
+        // Parse URL
+        $parsed = parse_url($url);
+        if (!$parsed || empty($parsed['host'])) {
+            return $url;
+        }
+        
+        // Reconstruct without query string
+        $normalized = ($parsed['scheme'] ?? 'https') . '://';
+        $normalized .= $parsed['host'];
+        $normalized .= rtrim($parsed['path'] ?? '/', '/');
+        
+        return $normalized;
     }
     
     /**
@@ -202,45 +353,15 @@ class RTR_Score_Calculator {
     }
     
     /**
-     * Calculate score for a specific room type
-     * 
-     * @param object $visitor Visitor data
-     * @param string $room_type Room type (problem, solution, offer)
-     * @param array $rules Rules configuration
-     * @return int Score for this room
-     */
-    private function calculate_room_score($visitor, $room_type, $rules) {
-        if (empty($rules)) {
-            return 0;
-        }
-        
-        $score = 0;
-        
-        switch ($room_type) {
-            case 'problem':
-                $score = $this->calculate_problem_score($visitor, $rules);
-                break;
-                
-            case 'solution':
-                $score = $this->calculate_solution_score($visitor, $rules);
-                break;
-                
-            case 'offer':
-                $score = $this->calculate_offer_score($visitor, $rules);
-                break;
-        }
-        
-        return $score;
-    }
-    
-    /**
      * Calculate problem room score (qualification)
      * 
      * @param object $visitor Visitor data
      * @param array $rules Problem room rules
-     * @return int Score
+     * @param int|null $campaign_id Campaign ID for content links
+     * @param bool $return_details Whether to return details
+     * @return int|array Score or array with score and details
      */
-    private function calculate_problem_score($visitor, $rules, $return_details = false) {
+    private function calculate_problem_score($visitor, $rules, $campaign_id = null, $return_details = false) {
         $score = 0;
         $details = array(
             'revenue' => 0,
@@ -296,11 +417,11 @@ class RTR_Score_Calculator {
             }
         }
         
-        // Visited target pages
-        if (!empty($rules['visited_target_pages']['enabled'])) {
-            $points = $this->calculate_target_page_score(
+        // FIX #1: Visited target pages - use content_links table
+        if (!empty($rules['visited_target_pages']['enabled']) && $campaign_id) {
+            $points = $this->calculate_content_link_score(
                 $visitor->recent_page_urls ?? '',
-                $visitor->client_id ?? 0,
+                $campaign_id,
                 'problem',
                 $rules['visited_target_pages']
             );
@@ -348,9 +469,12 @@ class RTR_Score_Calculator {
      * 
      * @param object $visitor Visitor data
      * @param array $rules Solution room rules
-     * @return int Score
+     * @param int|null $campaign_id Campaign ID for content links
+     * @param array $email_stats Email tracking statistics
+     * @param bool $return_details Whether to return details
+     * @return int|array Score or array with score and details
      */
-    private function calculate_solution_score($visitor, $rules, $return_details = false) {
+    private function calculate_solution_score($visitor, $rules, $campaign_id = null, $email_stats = array(), $return_details = false) {
         $score = 0;
         $details = array(
             'email_open' => 0,
@@ -361,21 +485,32 @@ class RTR_Score_Calculator {
             'ad_engagement' => 0
         );
         
-        // Email opens
+        // Default email stats if not provided
+        if (empty($email_stats)) {
+            $email_stats = array(
+                'opened_count' => 0,
+                'clicked_count' => 0,
+            );
+        }
+        
+        // FIX #3: Email opens - use actual tracking data
         if (!empty($rules['email_open']['enabled'])) {
-            // Assuming you have email tracking - adjust as needed
-            $email_opens = 0; // Get from your email tracking system
-            $points = $email_opens * intval($rules['email_open']['points'] ?? 0);
+            $email_opens = (int) ($email_stats['opened_count'] ?? 0);
+            $points_per_open = intval($rules['email_open']['points'] ?? 2);
+            $max_points = intval($rules['email_open']['max_points'] ?? 10);
+            $points = min($email_opens * $points_per_open, $max_points);
             $score += $points;
             if ($return_details) {
                 $details['email_open'] = $points;
             }
         }
         
-        // Email clicks
+        // FIX #3: Email clicks - use actual tracking data
         if (!empty($rules['email_click']['enabled'])) {
-            $email_clicks = 0; // Get from your email tracking system
-            $points = $email_clicks * intval($rules['email_click']['points'] ?? 0);
+            $email_clicks = (int) ($email_stats['clicked_count'] ?? 0);
+            $points_per_click = intval($rules['email_click']['points'] ?? 5);
+            $max_points = intval($rules['email_click']['max_points'] ?? 15);
+            $points = min($email_clicks * $points_per_click, $max_points);
             $score += $points;
             if ($return_details) {
                 $details['email_click'] = $points;
@@ -384,7 +519,7 @@ class RTR_Score_Calculator {
         
         // Email multiple clicks
         if (!empty($rules['email_multiple_click']['enabled'])) {
-            $email_clicks = 0; // Get from your email tracking system
+            $email_clicks = (int) ($email_stats['clicked_count'] ?? 0);
             $min_clicks = intval($rules['email_multiple_click']['minimum_clicks'] ?? 2);
             if ($email_clicks >= $min_clicks) {
                 $points = intval($rules['email_multiple_click']['points'] ?? 0);
@@ -395,7 +530,7 @@ class RTR_Score_Calculator {
             }
         }
         
-        // Page visits
+        // Page visits (general - based on page count)
         if (!empty($rules['page_visit']['enabled'])) {
             $page_count = intval($visitor->recent_page_count ?? 0);
             $points_per_visit = intval($rules['page_visit']['points_per_visit'] ?? 3);
@@ -407,9 +542,9 @@ class RTR_Score_Calculator {
             }
         }
         
-        // Key page visits
-        if (!empty($rules['key_page_visit']['enabled']) && !empty($rules['key_page_visit']['key_pages'])) {
-            if ($this->check_key_page_visits($visitor->recent_page_urls ?? '', $rules['key_page_visit']['key_pages'])) {
+        // FIX #1: Key page visits - use content_links table for "solution" room
+        if (!empty($rules['key_page_visit']['enabled']) && $campaign_id) {
+            if ($this->check_content_link_visits($visitor->recent_page_urls ?? '', $campaign_id, 'solution')) {
                 $points = intval($rules['key_page_visit']['points'] ?? 0);
                 $score += $points;
                 if ($return_details) {
@@ -418,9 +553,9 @@ class RTR_Score_Calculator {
             }
         }
         
-        // Ad engagement
+        // FIX #2: Ad engagement - check actual UTM parameters, not referrer string
         if (!empty($rules['ad_engagement']['enabled']) && !empty($rules['ad_engagement']['utm_sources'])) {
-            if ($this->check_ad_engagement($visitor->most_recent_referrer ?? '', $rules['ad_engagement']['utm_sources'])) {
+            if ($this->check_utm_source_match($visitor, $rules['ad_engagement']['utm_sources'])) {
                 $points = intval($rules['ad_engagement']['points'] ?? 0);
                 $score += $points;
                 if ($return_details) {
@@ -444,9 +579,11 @@ class RTR_Score_Calculator {
      * 
      * @param object $visitor Visitor data
      * @param array $rules Offer room rules
-     * @return int Score
+     * @param int|null $campaign_id Campaign ID for content links
+     * @param bool $return_details Whether to return details
+     * @return int|array Score or array with score and details
      */
-    private function calculate_offer_score($visitor, $rules, $return_details = false) {
+    private function calculate_offer_score($visitor, $rules, $campaign_id = null, $return_details = false) {
         $score = 0;
         $details = array(
             'demo_request' => 0,
@@ -479,9 +616,9 @@ class RTR_Score_Calculator {
             }
         }
         
-        // Pricing page
-        if (!empty($rules['pricing_page']['enabled']) && !empty($rules['pricing_page']['page_urls'])) {
-            if ($this->check_pricing_page_visit($visitor->recent_page_urls ?? '', $rules['pricing_page']['page_urls'])) {
+        // Pricing page - use content_links for "offer" room
+        if (!empty($rules['pricing_page']['enabled']) && $campaign_id) {
+            if ($this->check_content_link_visits($visitor->recent_page_urls ?? '', $campaign_id, 'offer')) {
                 $points = intval($rules['pricing_page']['points'] ?? 0);
                 $score += $points;
                 if ($return_details) {
@@ -501,9 +638,9 @@ class RTR_Score_Calculator {
             }
         }
         
-        // Partner referral
+        // Partner referral - check actual UTM source
         if (!empty($rules['partner_referral']['enabled']) && !empty($rules['partner_referral']['utm_sources'])) {
-            if ($this->check_partner_referral($visitor->most_recent_referrer ?? '', $rules['partner_referral']['utm_sources'])) {
+            if ($this->check_utm_source_match($visitor, $rules['partner_referral']['utm_sources'])) {
                 $points = intval($rules['partner_referral']['points'] ?? 0);
                 $score += $points;
                 if ($return_details) {
@@ -531,31 +668,167 @@ class RTR_Score_Calculator {
     }
     
     /**
-     * Check if visitor revenue matches target values
+     * Calculate score based on content link visits
      * 
-     * @param string $visitor_revenue Visitor's estimated revenue
-     * @param array $target_values Target revenue ranges
-     * @return bool True if matches
+     * FIX #1: Use rtr_room_content_links table instead of hardcoded patterns
+     * 
+     * @param string $recent_urls JSON array of recent URLs
+     * @param int $campaign_id Campaign ID
+     * @param string $room_type Room type
+     * @param array $rule_config Rule configuration
+     * @return int Score
+     */
+    private function calculate_content_link_score($recent_urls, $campaign_id, $room_type, $rule_config) {
+        $visitor_urls = $this->parse_recent_page_urls($recent_urls);
+        if (empty($visitor_urls)) {
+            return 0;
+        }
+        
+        // Get content links for this campaign and room
+        $content_links = $this->get_content_links($campaign_id, $room_type);
+        if (empty($content_links)) {
+            return 0;
+        }
+        
+        // Count how many content links were visited
+        $matches = 0;
+        foreach ($visitor_urls as $visitor_url) {
+            $normalized_visitor_url = $this->normalize_url($visitor_url);
+            foreach ($content_links as $content_url) {
+                if ($normalized_visitor_url === $content_url) {
+                    $matches++;
+                    break; // Only count each content link once
+                }
+            }
+        }
+        
+        if ($matches === 0) {
+            return 0;
+        }
+        
+        // Calculate points based on matches
+        $points_per_page = intval($rule_config['points'] ?? 10);
+        $max_points = intval($rule_config['max_points'] ?? 30);
+        
+        return min($matches * $points_per_page, $max_points);
+    }
+    
+    /**
+     * Check if visitor visited any content links for a room
+     * 
+     * FIX #1: Use rtr_room_content_links table instead of hardcoded patterns
+     * 
+     * @param string $recent_urls JSON array of recent URLs
+     * @param int $campaign_id Campaign ID
+     * @param string $room_type Room type
+     * @return bool True if any content link was visited
+     */
+    private function check_content_link_visits($recent_urls, $campaign_id, $room_type) {
+        $visitor_urls = $this->parse_recent_page_urls($recent_urls);
+        if (empty($visitor_urls)) {
+            return false;
+        }
+        
+        // Get content links for this campaign and room
+        $content_links = $this->get_content_links($campaign_id, $room_type);
+        if (empty($content_links)) {
+            return false;
+        }
+        
+        // Check if any visitor URL matches a content link
+        foreach ($visitor_urls as $visitor_url) {
+            $normalized_visitor_url = $this->normalize_url($visitor_url);
+            foreach ($content_links as $content_url) {
+                if ($normalized_visitor_url === $content_url) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if visitor has matching UTM source
+     * 
+     * FIX #2: Check actual UTM parameters, not referrer string matching
+     * 
+     * @param object $visitor Visitor data
+     * @param array $utm_sources Target UTM sources
+     * @return bool True if UTM source matches
+     */
+    private function check_utm_source_match($visitor, $utm_sources) {
+        // Get the visitor's campaign_source (utm_source)
+        $visitor_utm_source = strtolower(trim($visitor->campaign_source ?? ''));
+        
+        if (empty($visitor_utm_source)) {
+            return false;
+        }
+        
+        // Check against configured UTM sources
+        foreach ($utm_sources as $source) {
+            $source = strtolower(trim($source));
+            if ($visitor_utm_source === $source) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Parse recent_page_urls JSON into array
+     * 
+     * @param string|array $recent_urls JSON string or array
+     * @return array Array of URLs
+     */
+    private function parse_recent_page_urls($recent_urls) {
+        if (empty($recent_urls)) {
+            return array();
+        }
+        
+        if (is_array($recent_urls)) {
+            return array_filter($recent_urls, 'is_string');
+        }
+        
+        if (!is_string($recent_urls)) {
+            return array();
+        }
+        
+        $decoded = json_decode($recent_urls, true);
+        if (is_array($decoded)) {
+            return array_filter($decoded, 'is_string');
+        }
+        
+        // Maybe it's a single URL
+        if (filter_var($recent_urls, FILTER_VALIDATE_URL)) {
+            return array($recent_urls);
+        }
+        
+        return array();
+    }
+    
+    // =========================================================================
+    // EXISTING HELPER METHODS (unchanged)
+    // =========================================================================
+    
+    /**
+     * Check if visitor revenue matches target values
      */
     private function check_revenue_match($visitor_revenue, $target_values) {
         if (empty($visitor_revenue)) {
             return false;
         }
         
-        // Normalize the visitor revenue
         $visitor_revenue = trim($visitor_revenue);
         
-        // Check for exact match first
         if (in_array($visitor_revenue, $target_values)) {
             return true;
         }
         
-        // Check for "Above $50M" matching "$100M+"
-        if (stripos($visitor_revenue, 'above') !== false || stripos($visitor_revenue, '50m') !== false) {
-            foreach ($target_values as $value) {
-                if (stripos($value, '100m+') !== false || stripos($value, '50m') !== false) {
-                    return true;
-                }
+        foreach ($target_values as $target) {
+            if (stripos($visitor_revenue, $target) !== false) {
+                return true;
             }
         }
         
@@ -563,30 +836,22 @@ class RTR_Score_Calculator {
     }
     
     /**
-     * Check if visitor company size matches target values
-     * 
-     * @param string $visitor_size Visitor's estimated employee count
-     * @param array $target_values Target size ranges
-     * @return bool True if matches
+     * Check if company size matches target values
      */
-    private function check_company_size_match($visitor_size, $target_values) {
-        if (empty($visitor_size)) {
+    private function check_company_size_match($company_size, $target_values) {
+        if (empty($company_size)) {
             return false;
         }
         
-        $visitor_size = trim($visitor_size);
+        $company_size = trim($company_size);
         
-        // Check for exact match
-        if (in_array($visitor_size, $target_values)) {
+        if (in_array($company_size, $target_values)) {
             return true;
         }
         
-        // Check for "5001+" matching "1000+"
-        if (stripos($visitor_size, '5001+') !== false || stripos($visitor_size, '5000+') !== false) {
-            foreach ($target_values as $value) {
-                if (stripos($value, '1000+') !== false) {
-                    return true;
-                }
+        foreach ($target_values as $target) {
+            if (stripos($company_size, $target) !== false) {
+                return true;
             }
         }
         
@@ -594,27 +859,19 @@ class RTR_Score_Calculator {
     }
     
     /**
-     * Check if visitor industry matches target industries
-     * 
-     * @param string $visitor_industry Visitor's industry
-     * @param array $target_industries Target industries (may include pipe-separated values)
-     * @return bool True if matches
+     * Check if industry matches target values
      */
-    private function check_industry_match($visitor_industry, $target_industries) {
-        if (empty($visitor_industry)) {
+    private function check_industry_match($industry, $target_values) {
+        if (empty($industry)) {
             return false;
         }
         
-        $visitor_industry = strtolower(trim($visitor_industry));
+        $industry = strtolower(trim($industry));
         
-        foreach ($target_industries as $target) {
-            // Split pipe-separated values
-            $industries = explode('|', $target);
-            foreach ($industries as $industry) {
-                $industry = strtolower(trim($industry));
-                if (stripos($visitor_industry, $industry) !== false) {
-                    return true;
-                }
+        foreach ($target_values as $target) {
+            $target = strtolower(trim($target));
+            if (stripos($industry, $target) !== false || stripos($target, $industry) !== false) {
+                return true;
             }
         }
         
@@ -622,154 +879,47 @@ class RTR_Score_Calculator {
     }
     
     /**
-     * Check if visitor state matches target states
-     * 
-     * @param string $visitor_state Visitor's state
-     * @param array $target_states Target state codes
-     * @return bool True if matches
+     * Check if state matches target values
      */
-    private function check_state_match($visitor_state, $target_states) {
-        if (empty($visitor_state) || empty($target_states)) {
+    private function check_state_match($state, $target_values) {
+        if (empty($state)) {
             return false;
         }
         
-        return in_array(strtoupper(trim($visitor_state)), array_map('strtoupper', $target_states));
+        $state = strtoupper(trim($state));
+        $target_values = array_map('strtoupper', array_map('trim', $target_values));
+        
+        return in_array($state, $target_values);
     }
     
     /**
-     * Check if visitor job title matches target roles
-     * 
-     * @param string $visitor_title Visitor's job title
-     * @param array $rule_config Role match configuration
-     * @return bool True if matches
+     * Check if job title matches target roles
      */
-    private function check_role_match($visitor_title, $rule_config) {
-        if (empty($visitor_title) || empty($rule_config['target_roles'])) {
+    private function check_role_match($job_title, $rule_config) {
+        if (empty($job_title)) {
             return false;
         }
         
-        $visitor_title = strtolower($visitor_title);
+        $job_title = strtolower(trim($job_title));
+        $target_roles = $rule_config['target_roles'] ?? array();
         $match_type = $rule_config['match_type'] ?? 'contains';
         
-        // Check all role categories
-        foreach ($rule_config['target_roles'] as $category => $keywords) {
-            foreach ($keywords as $keyword) {
-                $keyword = strtolower($keyword);
+        foreach ($target_roles as $category => $roles) {
+            if (!is_array($roles)) {
+                continue;
+            }
+            
+            foreach ($roles as $role) {
+                $role = strtolower(trim($role));
                 
-                if ($match_type === 'contains') {
-                    if (stripos($visitor_title, $keyword) !== false) {
+                if ($match_type === 'exact') {
+                    if ($job_title === $role) {
                         return true;
                     }
                 } else {
-                    // Exact match
-                    if ($visitor_title === $keyword) {
+                    if (stripos($job_title, $role) !== false) {
                         return true;
                     }
-                }
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Calculate score for target page visits
-     * 
-     * @param string $recent_urls JSON array of recent URLs
-     * @param int $client_id Client ID
-     * @param string $room_type Room type
-     * @param array $rule_config Page visit rule configuration
-     * @return int Score
-     */
-    private function calculate_target_page_score($recent_urls, $client_id, $room_type, $rule_config) {
-        $urls = json_decode($recent_urls, true);
-        if (!is_array($urls) || empty($urls)) {
-            return 0;
-        }
-        
-        // This would ideally check against rtr_room_content_links
-        // For now, award points per URL visited, capped at max_points
-        $points_per_page = intval($rule_config['points'] ?? 10);
-        $max_points = intval($rule_config['max_points'] ?? 30);
-        
-        $score = min(count($urls) * $points_per_page, $max_points);
-        
-        return $score;
-    }
-    
-    /**
-     * Check if visitor visited key pages
-     * 
-     * @param string $recent_urls JSON array of recent URLs
-     * @param array $key_pages Array of key page patterns
-     * @return bool True if any key page was visited
-     */
-    private function check_key_page_visits($recent_urls, $key_pages) {
-        $urls = json_decode($recent_urls, true);
-        if (!is_array($urls) || empty($urls)) {
-            return false;
-        }
-        
-        foreach ($urls as $url) {
-            foreach ($key_pages as $pattern) {
-                if ($this->url_matches_pattern($url, $pattern)) {
-                    return true;
-                }
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Check if visitor engaged with ads
-     * 
-     * @param string $referrer Most recent referrer
-     * @param array $utm_sources Target UTM sources
-     * @return bool True if ad engagement detected
-     */
-    private function check_ad_engagement($referrer, $utm_sources) {
-        if (empty($referrer)) {
-            return false;
-        }
-        
-        $referrer = strtolower($referrer);
-        
-        foreach ($utm_sources as $source) {
-            $source = strtolower($source);
-            if (stripos($referrer, $source) !== false) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Check for contact form submission
-     * 
-     * @param object $visitor Visitor data
-     * @param array $rule_config Contact form rule configuration
-     * @return bool True if form submission detected
-     */
-    private function check_contact_form_submission($visitor, $rule_config) {
-        $detection_method = $rule_config['detection_method'] ?? 'utm_parameter';
-        
-        if ($detection_method === 'utm_parameter') {
-            $utm_content = $rule_config['utm_content'] ?? '';
-            $referrer = strtolower($visitor->most_recent_referrer ?? '');
-            
-            if (!empty($utm_content) && stripos($referrer, strtolower($utm_content)) !== false) {
-                return true;
-            }
-        }
-        
-        // Could also check URLs for thank-you pages
-        $urls = json_decode($visitor->recent_page_urls ?? '[]', true);
-        if (is_array($urls)) {
-            foreach ($urls as $url) {
-                if (stripos($url, 'thank') !== false || stripos($url, 'contact') !== false) {
-                    return true;
                 }
             }
         }
@@ -779,29 +929,29 @@ class RTR_Score_Calculator {
     
     /**
      * Check for demo request
-     * 
-     * @param object $visitor Visitor data
-     * @param array $rule_config Demo request rule configuration
-     * @return bool True if demo request detected
      */
     private function check_demo_request($visitor, $rule_config) {
-        $detection_method = $rule_config['detection_method'] ?? 'utm_parameter';
+        $detection_method = $rule_config['detection_method'] ?? 'url_pattern';
         
         if ($detection_method === 'utm_parameter') {
             $utm_content = $rule_config['utm_content'] ?? '';
-            $referrer = strtolower($visitor->most_recent_referrer ?? '');
+            $visitor_content = strtolower($visitor->campaign_content ?? '');
             
-            if (!empty($utm_content) && stripos($referrer, strtolower($utm_content)) !== false) {
+            if (!empty($utm_content) && stripos($visitor_content, strtolower($utm_content)) !== false) {
                 return true;
             }
         }
         
         // Check URLs for demo pages
         $urls = json_decode($visitor->recent_page_urls ?? '[]', true);
+        $patterns = $rule_config['patterns'] ?? array('/demo', '/request');
+        
         if (is_array($urls)) {
             foreach ($urls as $url) {
-                if (stripos($url, 'demo') !== false || stripos($url, 'request') !== false) {
-                    return true;
+                foreach ($patterns as $pattern) {
+                    if (stripos($url, $pattern) !== false) {
+                        return true;
+                    }
                 }
             }
         }
@@ -810,21 +960,25 @@ class RTR_Score_Calculator {
     }
     
     /**
-     * Check for pricing page visit
-     * 
-     * @param string $recent_urls JSON array of recent URLs
-     * @param array $page_urls Array of pricing page patterns
-     * @return bool True if pricing page was visited
+     * Check for contact form submission
      */
-    private function check_pricing_page_visit($recent_urls, $page_urls) {
-        $urls = json_decode($recent_urls, true);
-        if (!is_array($urls) || empty($urls)) {
-            return false;
+    private function check_contact_form_submission($visitor, $rule_config) {
+        $detection_method = $rule_config['detection_method'] ?? 'utm_parameter';
+        
+        if ($detection_method === 'utm_parameter') {
+            $utm_content = $rule_config['utm_content'] ?? '';
+            $visitor_content = strtolower($visitor->campaign_content ?? '');
+            
+            if (!empty($utm_content) && stripos($visitor_content, strtolower($utm_content)) !== false) {
+                return true;
+            }
         }
         
-        foreach ($urls as $url) {
-            foreach ($page_urls as $pattern) {
-                if ($this->url_matches_pattern($url, $pattern)) {
+        // Check URLs for thank-you pages
+        $urls = json_decode($visitor->recent_page_urls ?? '[]', true);
+        if (is_array($urls)) {
+            foreach ($urls as $url) {
+                if (stripos($url, 'thank') !== false || stripos($url, 'confirmation') !== false) {
                     return true;
                 }
             }
@@ -835,73 +989,17 @@ class RTR_Score_Calculator {
     
     /**
      * Check for pricing question
-     * 
-     * @param object $visitor Visitor data
-     * @param array $rule_config Pricing question rule configuration
-     * @return bool True if pricing question detected
      */
     private function check_pricing_question($visitor, $rule_config) {
         $detection_method = $rule_config['detection_method'] ?? 'utm_parameter';
         
         if ($detection_method === 'utm_parameter') {
             $utm_content = $rule_config['utm_content'] ?? '';
-            $referrer = strtolower($visitor->most_recent_referrer ?? '');
+            $visitor_content = strtolower($visitor->campaign_content ?? '');
             
-            if (!empty($utm_content) && stripos($referrer, strtolower($utm_content)) !== false) {
+            if (!empty($utm_content) && stripos($visitor_content, strtolower($utm_content)) !== false) {
                 return true;
             }
-        }
-        
-        // Check URLs for pricing-related pages
-        $urls = json_decode($visitor->recent_page_urls ?? '[]', true);
-        if (is_array($urls)) {
-            foreach ($urls as $url) {
-                if (stripos($url, 'pricing') !== false || stripos($url, 'quote') !== false) {
-                    return true;
-                }
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Check for partner referral
-     * 
-     * @param string $referrer Most recent referrer
-     * @param array $utm_sources Partner UTM sources
-     * @return bool True if partner referral detected
-     */
-    private function check_partner_referral($referrer, $utm_sources) {
-        if (empty($referrer)) {
-            return false;
-        }
-        
-        $referrer = strtolower($referrer);
-        
-        foreach ($utm_sources as $source) {
-            if (stripos($referrer, strtolower($source)) !== false) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Check if URL matches a pattern
-     * 
-     * @param string $url URL to check
-     * @param string $pattern Pattern (may contain regex or simple string)
-     * @return bool True if matches
-     */
-    private function url_matches_pattern($url, $pattern) {
-        $url = strtolower($url);
-        $pattern = strtolower(str_replace('\\/', '/', $pattern)); // Handle escaped slashes from JSON
-        
-        // Simple contains check
-        if (stripos($url, $pattern) !== false) {
-            return true;
         }
         
         return false;
@@ -909,13 +1007,8 @@ class RTR_Score_Calculator {
     
     /**
      * Determine which room a visitor should be in based on score
-     * 
-     * @param int $score Total score
-     * @param int $client_id Client ID
-     * @return string Room name (none, problem, solution, offer)
      */
     private function determine_room($score, $client_id) {
-        // Get thresholds for this client
         $thresholds = $this->get_room_thresholds($client_id);
         
         if ($score === 0) {
@@ -931,12 +1024,8 @@ class RTR_Score_Calculator {
     
     /**
      * Get room thresholds for a client
-     * 
-     * @param int $client_id Client ID
-     * @return array Thresholds
      */
     private function get_room_thresholds($client_id) {
-        // Try to get client-specific thresholds
         $thresholds = $this->wpdb->get_row(
             $this->wpdb->prepare(
                 "SELECT problem_max, solution_max, offer_min FROM {$this->tables['thresholds']} WHERE client_id = %d",
@@ -945,7 +1034,6 @@ class RTR_Score_Calculator {
             ARRAY_A
         );
         
-        // Fall back to global thresholds if no client-specific ones
         if (!$thresholds) {
             $thresholds = $this->wpdb->get_row(
                 "SELECT problem_max, solution_max, offer_min FROM {$this->tables['thresholds']} WHERE client_id IS NULL LIMIT 1",
@@ -953,7 +1041,6 @@ class RTR_Score_Calculator {
             );
         }
         
-        // Default thresholds if none found
         if (!$thresholds) {
             $thresholds = array(
                 'problem_max' => 40,
@@ -967,11 +1054,6 @@ class RTR_Score_Calculator {
     
     /**
      * Update visitor score in database
-     * 
-     * @param int $visitor_id Visitor ID
-     * @param int $score Total score
-     * @param string $current_room Current room assignment
-     * @return bool Success
      */
     private function update_visitor_score($visitor_id, $score, $current_room) {
         $result = $this->wpdb->update(
@@ -991,11 +1073,6 @@ class RTR_Score_Calculator {
     
     /**
      * Batch calculate scores for multiple visitors
-     * 
-     * @param array $visitor_ids Array of visitor IDs
-     * @param int $client_id Client ID
-     * @param bool $cache_result Whether to save scores to database
-     * @return array Results keyed by visitor ID
      */
     public function batch_calculate_scores($visitor_ids, $client_id, $cache_result = true) {
         $results = array();

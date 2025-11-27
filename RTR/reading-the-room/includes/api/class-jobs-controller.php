@@ -1,14 +1,14 @@
 <?php
 /**
- * Jobs Controller
+ * Jobs Controller (FIXED)
  *
  * REST API controller for automated job operations.
  * Handles nightly jobs, campaign matching, prospect creation, and room assignments.
- *
+  *
  * @package DirectReach
  * @subpackage ReadingTheRoom
  * @since 2.0.0
- * @version 2.4.0 - FIXED VERSION
+ * @version 2.5.0 - FIXED VERSION
  */
 
 namespace DirectReach\ReadingTheRoom\API;
@@ -28,7 +28,7 @@ if (!defined('ABSPATH')) {
 
 /**
  * Jobs REST API Controller
- * FIXED: Added type declarations, constants, and improved structure
+ * FIXED: Added mode support for full recalculation
  */
 class Jobs_Controller extends WP_REST_Controller {
 
@@ -57,7 +57,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Database instance
-     * FIXED: Added proper type declaration
      *
      * @var Reading_Room_Database
      */
@@ -65,7 +64,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Campaign matcher instance
-     * FIXED: Added proper type declaration
      *
      * @var Campaign_Matcher|null
      */
@@ -77,6 +75,14 @@ class Jobs_Controller extends WP_REST_Controller {
      * @var float
      */
     private float $job_start_time;
+
+    /**
+     * Current job mode
+     * FIXED: Added to track mode across internal methods
+     *
+     * @var string
+     */
+    private string $current_mode = self::MODE_INCREMENTAL;
 
     /**
      * Job statistics
@@ -104,7 +110,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Room thresholds cache with timestamps
-     * FIXED: Added cache timestamps for TTL
      *
      * @var array<int,array>
      */
@@ -119,15 +124,12 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Constructor with dependency injection
-     * FIXED: Removed global $dr_rtr_db usage, using dependency injection
      * 
      * @param Reading_Room_Database|null $db Database instance (required)
      * @throws \RuntimeException If database instance is invalid
      */
     public function __construct(?Reading_Room_Database $db = null) {
-        // FIXED: Proper dependency injection instead of global variable
         if (!$db instanceof Reading_Room_Database) {
-            // Fallback: try to instantiate with global $wpdb
             global $wpdb;
             if (isset($wpdb) && $wpdb instanceof \wpdb) {
                 $db = new Reading_Room_Database($wpdb);
@@ -138,7 +140,6 @@ class Jobs_Controller extends WP_REST_Controller {
         
         $this->db = $db;
         
-        // Initialize campaign matcher if available
         if (class_exists(Campaign_Matcher::class)) {
             $this->campaign_matcher = new Campaign_Matcher($this->db);
         }
@@ -207,6 +208,13 @@ class Jobs_Controller extends WP_REST_Controller {
                         'type'              => 'integer',
                         'sanitize_callback' => 'absint',
                     ],
+                    'mode' => [
+                        'required'          => false,
+                        'type'              => 'string',
+                        'enum'              => [self::MODE_INCREMENTAL, self::MODE_FULL],
+                        'default'           => self::MODE_INCREMENTAL,
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
                 ],
             ],
         ]);
@@ -217,6 +225,15 @@ class Jobs_Controller extends WP_REST_Controller {
                 'methods'             => WP_REST_Server::CREATABLE,
                 'callback'            => [$this, 'calculate_scores'],
                 'permission_callback' => [$this, 'check_api_key'],
+                'args'                => [
+                    'mode' => [
+                        'required'          => false,
+                        'type'              => 'string',
+                        'enum'              => [self::MODE_INCREMENTAL, self::MODE_FULL],
+                        'default'           => self::MODE_INCREMENTAL,
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ],
+                ],
             ],
         ]);
 
@@ -230,12 +247,11 @@ class Jobs_Controller extends WP_REST_Controller {
         ]);
 
         // GET /calculate-score - Get score breakdown for a single visitor or prospect
-        // Accepts either visitor_id (cpd_visitors.id) or prospect_id (rtr_prospects.id)
         register_rest_route($this->namespace, '/calculate-score', [
             [
                 'methods'             => WP_REST_Server::READABLE,
                 'callback'            => [$this, 'get_score_breakdown'],
-                'permission_callback' => '__return_true', // Allow authenticated users
+                'permission_callback' => '__return_true',
                 'args'                => [
                     'visitor_id' => [
                         'required'          => false,
@@ -266,7 +282,7 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Run nightly job (all operations in sequence)
-     * ENHANCED: Comprehensive logging with system state
+     * FIXED: Now passes mode to all internal methods
      *
      * @param WP_REST_Request $request Request object.
      * @return WP_REST_Response|WP_Error Response with stats or error
@@ -283,7 +299,10 @@ class Jobs_Controller extends WP_REST_Controller {
             $mode = self::MODE_FULL;
         }
         
-        // ENHANCEMENT: Log comprehensive job start with system state
+        // FIXED: Store mode for access by internal methods
+        $this->current_mode = $mode;
+        
+        // Log comprehensive job start with system state
         global $wpdb;
         $system_stats = [
             'total_visitors' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}rtr_prospects"),
@@ -313,8 +332,9 @@ class Jobs_Controller extends WP_REST_Controller {
             ));
 
             // Step 2: Calculate scores (Scoring System)
-            $this->log_job('step_2_start', 'Starting score calculation...');
-            $score_result = $this->calculate_scores_internal();
+            // FIXED: Pass mode to calculate_scores_internal
+            $this->log_job('step_2_start', sprintf('Starting score calculation in %s mode...', $mode));
+            $score_result = $this->calculate_scores_internal($mode);
             $this->job_stats['scores_calculated'] = $score_result['calculated'] ?? 0;
             $this->log_job('step_2_complete', sprintf(
                 'Score calculation complete. Calculated: %d scores out of %d visitors',
@@ -323,8 +343,9 @@ class Jobs_Controller extends WP_REST_Controller {
             ));
 
             // Step 3: Create/update prospects
-            $this->log_job('step_3_start', 'Starting prospect creation/update...');
-            $prospect_result = $this->create_prospects_internal();
+            // FIXED: Pass mode to create_prospects_internal
+            $this->log_job('step_3_start', sprintf('Starting prospect creation/update in %s mode...', $mode));
+            $prospect_result = $this->create_prospects_internal(null, $mode);
             $this->job_stats['prospects_created'] = $prospect_result['created'] ?? 0;
             $this->job_stats['prospects_updated'] = $prospect_result['updated'] ?? 0;
             $this->job_stats['prospects_skipped'] = $prospect_result['skipped'] ?? 0;
@@ -350,7 +371,7 @@ class Jobs_Controller extends WP_REST_Controller {
             // Calculate job duration
             $duration = round(microtime(true) - $this->job_start_time, 2);
 
-            // ENHANCEMENT: Add final system state snapshot
+            // Add final system state snapshot
             $final_stats = [
                 'total_visitors' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}cpd_visitors"),
                 'visitors_with_campaigns' => $wpdb->get_var("SELECT COUNT(DISTINCT visitor_id) FROM {$wpdb->prefix}cpd_visitor_campaigns"),
@@ -419,18 +440,21 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Create prospects from visitors
+     * FIXED: Added mode parameter
      *
      * @param WP_REST_Request $request Request object.
      * @return WP_REST_Response|WP_Error Response with creation stats or error
      */
     public function create_prospects($request): WP_REST_Response|WP_Error {
         $client_id = $request->get_param('client_id');
+        $mode = $request->get_param('mode') ?: self::MODE_INCREMENTAL;
 
         try {
-            $result = $this->create_prospects_internal($client_id);
+            $result = $this->create_prospects_internal($client_id, $mode);
 
             return new WP_REST_Response([
                 'success' => true,
+                'mode'    => $mode,
                 'created' => $result['created'] ?? 0,
                 'updated' => $result['updated'] ?? 0,
                 'skipped' => $result['skipped'] ?? 0,
@@ -447,16 +471,20 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Calculate visitor scores
+     * FIXED: Added mode parameter
      *
      * @param WP_REST_Request $request Request object.
      * @return WP_REST_Response|WP_Error Response with calculation stats or error
      */
     public function calculate_scores($request): WP_REST_Response|WP_Error {
+        $mode = $request->get_param('mode') ?: self::MODE_INCREMENTAL;
+        
         try {
-            $result = $this->calculate_scores_internal();
+            $result = $this->calculate_scores_internal($mode);
 
             return new WP_REST_Response([
                 'success'    => true,
+                'mode'       => $mode,
                 'calculated' => $result['calculated'] ?? 0,
                 'total'      => $result['total'] ?? 0,
             ], 200);
@@ -502,8 +530,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Internal campaign matching logic
-     * FIXED: Only match visitors to campaigns belonging to premium clients
-     * FIXED: Do not use default fallback - only match explicit UTM/content link matches
      *
      * @param string $mode Processing mode (incremental or full).
      * @return array{matched: int, skipped: int, total: int} Results.
@@ -519,8 +545,7 @@ class Jobs_Controller extends WP_REST_Controller {
 
         global $wpdb;
 
-        // FIXED: Get only PREMIUM CLIENT campaigns first
-        // This ensures we only match visitors to campaigns that belong to premium clients
+        // Get only PREMIUM CLIENT campaigns
         $premium_campaign_ids = $wpdb->get_col("
             SELECT cs.id 
             FROM {$wpdb->prefix}dr_campaign_settings cs
@@ -567,14 +592,11 @@ class Jobs_Controller extends WP_REST_Controller {
 
         foreach ($visitors as $visitor) {
             try {
-                // Use the campaign matcher to find matching campaigns
-                // FIXED: Pass flag to skip default fallback for nightly jobs
                 $match = $this->campaign_matcher->match([
                     'visitor_id' => (int) $visitor->id,
                     'skip_default_fallback' => true
                 ]);
 
-                // FIXED: Only accept matches that belong to premium client campaigns
                 if ($match !== null && in_array((int)$match['id'], array_map('intval', $premium_campaign_ids))) {
                     $wpdb->query($wpdb->prepare(
                         "INSERT IGNORE INTO {$wpdb->prefix}cpd_visitor_campaigns 
@@ -621,10 +643,12 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Internal score calculation logic
+     * FIXED: Added mode parameter - full mode recalculates ALL visitors
      *
+     * @param string $mode Processing mode (incremental or full).
      * @return array{calculated: int, total: int} Results.
      */
-    private function calculate_scores_internal(): array {
+    private function calculate_scores_internal(string $mode = self::MODE_INCREMENTAL): array {
         global $wpdb;
 
         $calculated = 0;
@@ -643,22 +667,28 @@ class Jobs_Controller extends WP_REST_Controller {
             ];
         }
 
+        // FIXED: Build WHERE clause based on mode
+        if ($mode === self::MODE_FULL) {
+            // Full mode: recalculate ALL visitors with campaign assignments
+            $where_conditions = "1=1"; // No filtering
+            $this->log_job('score_calculation_mode', 'FULL mode: Will recalculate ALL visitor scores');
+        } else {
+            // Incremental mode: Only recalculate visitors that need it
+            $where_conditions = "(v.lead_score IS NULL 
+                OR v.lead_score = 0
+                OR v.score_calculated_at IS NULL
+                OR v.last_seen_at > v.score_calculated_at
+                OR v.score_calculated_at < DATE_SUB(NOW(), INTERVAL 7 DAY))";
+        }
+
         // Get visitors with campaign assignments that need scoring
-        // Recalculate scores for:
-        // 1. Visitors with no score (NULL or 0)
-        // 2. Visitors with new activity since last score calculation
-        // 3. Visitors whose scores are stale (>7 days old)
         $visitors = $wpdb->get_results("
             SELECT DISTINCT v.id, v.visitor_id, vc.campaign_id, cs.client_id
             FROM {$wpdb->prefix}cpd_visitors v
             INNER JOIN {$wpdb->prefix}cpd_visitor_campaigns vc ON v.id = vc.visitor_id
             INNER JOIN {$wpdb->prefix}dr_campaign_settings cs ON vc.campaign_id = cs.id
             INNER JOIN {$wpdb->prefix}cpd_clients cl ON cs.client_id = cl.id
-            WHERE (v.lead_score IS NULL 
-                OR v.lead_score = 0
-                OR v.score_calculated_at IS NULL
-                OR v.last_seen_at > v.score_calculated_at
-                OR v.score_calculated_at < DATE_SUB(NOW(), INTERVAL 7 DAY))
+            WHERE {$where_conditions}
             AND cl.subscription_tier = 'premium'
             AND cl.rtr_enabled = 1
         ");
@@ -674,7 +704,8 @@ class Jobs_Controller extends WP_REST_Controller {
         }
 
         $this->log_job('score_calculation_start', sprintf(
-            'Starting score calculation for %d visitors (new visitors, visitors with new activity, and stale scores >7 days)',
+            'Starting %s score calculation for %d visitors',
+            $mode,
             $total
         ));
 
@@ -699,11 +730,10 @@ class Jobs_Controller extends WP_REST_Controller {
                 
                 // Suppress errors and warnings from Score Calculator
                 $old_error_level = error_reporting();
-                error_reporting(0); // Temporarily disable error reporting
+                error_reporting(0);
                 
                 // Use the Score Calculator to calculate and cache score
                 $score_data = @$score_calculator->calculate_visitor_score($visitor_id, $client_id, true);
-                
                 
                 // Restore error reporting
                 error_reporting($old_error_level);
@@ -725,7 +755,6 @@ class Jobs_Controller extends WP_REST_Controller {
                 } else {
                     $failed++;
                     
-                    // Log first few failures
                     if ($failed <= 3) {
                         error_log(sprintf(
                             '[RTR Nightly Job] Failed to calculate score for visitor_id: %d (RB2B: %s), client_id: %d',
@@ -737,11 +766,9 @@ class Jobs_Controller extends WP_REST_Controller {
                 }
 
             } catch (\Error $e) {
-                // Catch PHP Fatal Errors (like TypeError)
                 $failed++;
                 $this->job_stats['errors']++;
                 
-                // Only log first few errors to avoid log spam
                 if ($failed <= 3) {
                     $this->log_job('score_calculation_error', sprintf(
                         'Fatal error calculating score for visitor %d: %s',
@@ -750,11 +777,9 @@ class Jobs_Controller extends WP_REST_Controller {
                     ), 'error');
                 }
             } catch (\Exception $e) {
-                // Catch all other exceptions
                 $failed++;
                 $this->job_stats['errors']++;
                 
-                // Only log first few errors
                 if ($failed <= 3) {
                     $this->log_job('score_calculation_exception', sprintf(
                         'Exception calculating score for visitor %d: %s',
@@ -781,16 +806,24 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Internal prospect creation logic
+     * FIXED: Added mode parameter - full mode updates ALL prospects
      *
      * @param int|null $client_id Optional client filter.
+     * @param string $mode Processing mode (incremental or full).
      * @return array{created: int, updated: int, skipped: int, total: int} Results.
      */
-    private function create_prospects_internal(?int $client_id = null): array {
+    private function create_prospects_internal(?int $client_id = null, string $mode = self::MODE_INCREMENTAL): array {
         global $wpdb;
 
         $created = 0;
         $updated = 0;
         $skipped = 0;
+
+        // FIXED: Log the mode
+        $this->log_job('prospect_creation_mode', sprintf(
+            'Prospect creation running in %s mode (full mode = update all, incremental = update if diff >= 1)',
+            $mode
+        ));
 
         // Build WHERE clause for client filtering
         $where_client = '';
@@ -814,8 +847,9 @@ class Jobs_Controller extends WP_REST_Controller {
         ");
 
         $this->log_job('prospect_creation_batch_start', sprintf(
-            'Starting prospect creation/update for %d eligible visitors',
-            count($visitors)
+            'Starting prospect creation/update for %d eligible visitors in %s mode',
+            count($visitors),
+            $mode
         ));
 
         foreach ($visitors as $visitor) {
@@ -830,6 +864,7 @@ class Jobs_Controller extends WP_REST_Controller {
                 ", $visitor->id, $visitor->campaign_id));
 
                 if (!$existing) {
+                    // Create new prospect
                     $thresholds = $this->get_room_thresholds($visitor->campaign_id);
                     $initial_room = $this->calculate_room_assignment($visitor->lead_score ?? 0, $thresholds);
 
@@ -863,13 +898,19 @@ class Jobs_Controller extends WP_REST_Controller {
                     ));
 
                 } else {
-                    $score_diff = abs(($visitor->lead_score ?? 0) - ($existing->lead_score ?? 0));
+                    // Update existing prospect
+                    $visitor_score = $visitor->lead_score ?? 0;
+                    $existing_score = $existing->lead_score ?? 0;
+                    $score_diff = abs($visitor_score - $existing_score);
                     
-                    if ($score_diff >= 5) {
+                    // FIXED: In full mode, ALWAYS update. In incremental, only if diff >= 5
+                    $should_update = ($mode === self::MODE_FULL) || ($score_diff >= 1);
+                    
+                    if ($should_update) {
                         $wpdb->update(
                             $wpdb->prefix . 'rtr_prospects',
                             [
-                                'lead_score' => $visitor->lead_score ?? 0,
+                                'lead_score' => $visitor_score,
                                 'updated_at' => current_time('mysql')
                             ],
                             ['id' => $existing->id],
@@ -879,12 +920,24 @@ class Jobs_Controller extends WP_REST_Controller {
                         
                         $updated++;
                         
-                        $this->log_job('prospect_updated', sprintf(
-                            'Updated prospect %d (visitor: %d, new score: %d)',
-                            $existing->id,
-                            $visitor->id,
-                            $visitor->lead_score
-                        ));
+                        // Log updates in full mode
+                        if ($mode === self::MODE_FULL && $updated <= 5) {
+                            $this->log_job('prospect_updated', sprintf(
+                                'Updated prospect %d (visitor: %d, old score: %d, new score: %d, diff: %d)',
+                                $existing->id,
+                                $visitor->id,
+                                $existing_score,
+                                $visitor_score,
+                                $score_diff
+                            ));
+                        } elseif ($mode !== self::MODE_FULL) {
+                            $this->log_job('prospect_updated', sprintf(
+                                'Updated prospect %d (visitor: %d, new score: %d)',
+                                $existing->id,
+                                $visitor->id,
+                                $visitor_score
+                            ));
+                        }
                     } else {
                         $skipped++;
                     }
@@ -899,6 +952,14 @@ class Jobs_Controller extends WP_REST_Controller {
                 ), 'error');
             }
         }
+
+        $this->log_job('prospect_creation_summary', sprintf(
+            'Prospect sync complete. Created: %d, Updated: %d, Skipped: %d (mode: %s)',
+            $created,
+            $updated,
+            $skipped,
+            $mode
+        ));
 
         return [
             'created' => $created,
@@ -950,7 +1011,6 @@ class Jobs_Controller extends WP_REST_Controller {
                 // Check if room needs to change
                 $should_change = false;
                 if ($prospect->current_room !== $calculated_room) {
-                    // Phase 5.7: NO delays - allow all transitions immediately
                     $should_change = true;
                 }
 
@@ -965,7 +1025,7 @@ class Jobs_Controller extends WP_REST_Controller {
                         [
                             'id' => $prospect->id,
                         ],
-                        ['%s', '%s', '%s'],
+                        ['%s', '%s'],
                         ['%d']
                     );
 
@@ -983,7 +1043,6 @@ class Jobs_Controller extends WP_REST_Controller {
             } catch (\Exception $e) {
                 $this->job_stats['errors']++;
                 
-                // ENHANCEMENT: Better error context
                 $this->log_job('room_assignment_prospect_error', sprintf(
                     'Room assignment failed for prospect %d: %s',
                     $prospect->id,
@@ -1028,7 +1087,7 @@ class Jobs_Controller extends WP_REST_Controller {
             $campaign_id
         ));
 
-        // FIXED: Check cache with TTL
+        // Check cache with TTL
         if (isset($this->thresholds_cache[$client_id])) {
             $cached_at = $this->cache_timestamps['threshold_' . $client_id] ?? 0;
             if (time() - $cached_at < self::CACHE_TTL) {
@@ -1057,7 +1116,6 @@ class Jobs_Controller extends WP_REST_Controller {
                 'offer_min'    => 61,
             ];
             
-            // Cache and return hardcoded defaults
             $this->thresholds_cache[$client_id] = $result;
             $this->cache_timestamps['threshold_' . $client_id] = time();
             return $result;
@@ -1070,18 +1128,16 @@ class Jobs_Controller extends WP_REST_Controller {
             'offer_min'    => (int) ($thresholds->offer_min ?? 61),
         ];
 
-        // PHASE 2.3: Validate threshold logic with comprehensive checks
+        // Validate threshold logic
         $validation = $this->validate_thresholds($result);
         
         if (!$validation['valid']) {
-            // Log warning for invalid thresholds
             $this->log_job('threshold_validation_error', sprintf(
                 'Invalid room thresholds for client %d: %s. Using hardcoded defaults.',
                 $client_id,
                 implode(', ', $validation['errors'])
             ), 'warning');
 
-            // Fall back to hardcoded defaults
             $result = [
                 'problem_max'  => 40,
                 'solution_max' => 60,
@@ -1099,53 +1155,38 @@ class Jobs_Controller extends WP_REST_Controller {
     /**
      * Validate room thresholds
      *
-     * @param array{problem_max: int, solution_max: int, offer_min: int} $thresholds Thresholds to validate.
-     * @return array{valid: bool, errors: array<string>} Validation result.
+     * @param array $thresholds Thresholds to validate.
+     * @return array{valid: bool, errors: array} Validation result.
      */
     private function validate_thresholds(array $thresholds): array {
         $errors = [];
         
-        // Check for positive values
-        foreach (['problem_max', 'solution_max', 'offer_min'] as $key) {
-            if (!isset($thresholds[$key]) || $thresholds[$key] <= 0) {
-                $errors[] = "{$key} must be positive";
-            }
+        if ($thresholds['problem_max'] < 1) {
+            $errors[] = 'problem_max must be at least 1';
         }
         
-        // Check proper ordering
-        if ($thresholds['problem_max'] >= $thresholds['solution_max']) {
-            $errors[] = "problem_max ({$thresholds['problem_max']}) must be less than solution_max ({$thresholds['solution_max']})";
+        if ($thresholds['solution_max'] <= $thresholds['problem_max']) {
+            $errors[] = 'solution_max must be greater than problem_max';
         }
         
-        if ($thresholds['solution_max'] >= $thresholds['offer_min']) {
-            $errors[] = "solution_max ({$thresholds['solution_max']}) must be less than offer_min ({$thresholds['offer_min']})";
-        }
-        
-        // Check reasonable values
-        if ($thresholds['offer_min'] > 100) {
-            $errors[] = "offer_min should not exceed 100 (got {$thresholds['offer_min']})";
-        }
-        
-        // Check minimum gaps
-        if (($thresholds['solution_max'] - $thresholds['problem_max']) < 5) {
-            $errors[] = "Gap between problem and solution should be at least 5 points";
+        if ($thresholds['offer_min'] <= $thresholds['solution_max']) {
+            $errors[] = 'offer_min must be greater than solution_max';
         }
         
         return [
             'valid' => empty($errors),
-            'errors' => $errors
+            'errors' => $errors,
         ];
     }
 
     /**
      * Calculate room assignment based on score
      *
-     * @param int   $lead_score Lead score (0-100+).
-     * @param array{problem_max: int, solution_max: int, offer_min: int} $thresholds Room thresholds.
-     * @return string Room assignment: 'none', 'problem', 'solution', or 'offer'.
+     * @param int $lead_score Lead score.
+     * @param array $thresholds Room thresholds.
+     * @return string Room name.
      */
     private function calculate_room_assignment(int $lead_score, array $thresholds): string {
-        // Handle negative or invalid scores
         if ($lead_score < 0) {
             error_log(self::LOG_PREFIX . " Invalid negative score: {$lead_score}");
             return 'none';
@@ -1172,10 +1213,6 @@ class Jobs_Controller extends WP_REST_Controller {
 
     /**
      * Get score breakdown for a single visitor or prospect
-     * 
-     * This endpoint returns the detailed scoring breakdown for a prospect,
-     * showing points earned in each room category and the criteria details.
-     * Accepts either visitor_id (cpd_visitors.id) or prospect_id (rtr_prospects.id).
      *
      * @param WP_REST_Request $request Request object with visitor_id/prospect_id and client_id
      * @return WP_REST_Response|WP_Error Score breakdown or error
@@ -1196,13 +1233,6 @@ class Jobs_Controller extends WP_REST_Controller {
             
             if ($prospect && $prospect->visitor_id) {
                 $visitor_id = (int) $prospect->visitor_id;
-                /*
-                error_log(sprintf(
-                    '[RTR Score Breakdown] Resolved prospect_id %d to visitor_id %d',
-                    $prospect_id,
-                    $visitor_id
-                ));
-                */
             } else {
                 return new WP_Error(
                     'prospect_not_found',
@@ -1220,16 +1250,6 @@ class Jobs_Controller extends WP_REST_Controller {
             );
         }
 
-        // Log what we're calculating
-        /*
-        error_log(sprintf(
-            '[RTR Score Breakdown] Calculating score for visitor_id: %d, client_id: %d, prospect_id: %d',
-            $visitor_id,
-            $client_id,
-            $prospect_id
-        ));
-        */
-
         // Check if RTR_Score_Calculator is available
         if (!class_exists('\RTR_Score_Calculator')) {
             return new WP_Error(
@@ -1240,10 +1260,7 @@ class Jobs_Controller extends WP_REST_Controller {
         }
 
         try {
-            // Instantiate the score calculator
             $score_calculator = new \RTR_Score_Calculator();
-            
-            // Calculate score with full breakdown (3rd parameter = true)
             $score_data = $score_calculator->calculate_visitor_score($visitor_id, $client_id, true);
             
             if ($score_data === false || !isset($score_data['total_score'])) {
@@ -1254,21 +1271,10 @@ class Jobs_Controller extends WP_REST_Controller {
                 );
             }
             
-            // Add IDs to response for verification
             $score_data['visitor_id'] = $visitor_id;
             $score_data['prospect_id'] = $prospect_id;
             $score_data['client_id'] = $client_id;
             
-            // Log the result
-            /*
-            error_log(sprintf(
-                '[RTR Score Breakdown] Calculated score %d for visitor_id: %d (prospect_id: %d)',
-                $score_data['total_score'],
-                $visitor_id,
-                $prospect_id
-            ));
-            */
-            // Return the score breakdown
             return new WP_REST_Response($score_data, 200);
 
         } catch (\Exception $e) {
@@ -1345,7 +1351,6 @@ class Jobs_Controller extends WP_REST_Controller {
      * @return bool|WP_Error True if authenticated, WP_Error otherwise.
      */
     public function check_api_key($request): bool|WP_Error {
-        // Check for API key in header
         $api_key = $request->get_header('X-API-Key');
 
         if (empty($api_key)) {
@@ -1356,15 +1361,12 @@ class Jobs_Controller extends WP_REST_Controller {
             );
         }
 
-        // Get stored API key from options
         $stored_key = get_option('cpd_api_key');
 
         if (empty($stored_key)) {
-            // If no API key is configured, fall back to checking if user is admin
             return current_user_can('manage_options');
         }
 
-        // Validate API key
         if ($api_key !== $stored_key) {
             return new WP_Error(
                 'invalid_api_key',
