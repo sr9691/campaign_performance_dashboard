@@ -510,12 +510,19 @@ export default class ProspectManager {
                             'Name Unknown';
         nameEl.textContent = prospectName;
         
-        // Add edit button for Unknown prospects
-        if (prospectName === 'Name Unknown') {
+        // Add edit button if all emails are still in pending state
+        const prospectEmailStates = prospect.email_states || {};
+        const allEmailsPending = Object.values(prospectEmailStates).every(
+            email => !email?.state || email?.state === 'pending'
+        );
+        
+        if (allEmailsPending) {
             const editBtn = document.createElement('button');
             editBtn.className = 'rtr-edit-contact-btn';
             editBtn.innerHTML = '<i class="fas fa-user-edit"></i>';
-            editBtn.title = 'Add contact information';
+            editBtn.title = prospectName === 'Name Unknown' 
+                ? 'Add contact information' 
+                : 'Update contact information';
             editBtn.dataset.visitorId = prospect.visitor_id || prospect.id;
             editBtn.dataset.room = room;
             nameEl.appendChild(editBtn);
