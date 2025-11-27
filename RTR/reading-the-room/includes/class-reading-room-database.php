@@ -342,13 +342,14 @@ final class Reading_Room_Database
         }        
 
         $where[] = 'p.archived_at IS NULL';
-        
+        $where[] = '(v.is_archived = 0 OR v.is_archived IS NULL)';
         
         $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
         $sql = "
             SELECT p.*, c.campaign_name AS campaign_name, c.client_id as client_id
             FROM {$this->table_prospects} p
             LEFT JOIN {$this->table_campaigns} c ON p.campaign_id = c.id
+            LEFT JOIN {$this->db->prefix}cpd_visitors v ON p.visitor_id = v.id
             {$where_sql}
             ORDER BY p.updated_at DESC
         ";
