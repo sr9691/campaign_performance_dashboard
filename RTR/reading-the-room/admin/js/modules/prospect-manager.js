@@ -16,8 +16,12 @@ export default class ProspectManager {
         this.nonce = config.nonce;
         this.uiManager = null; // Will be set by main.js
         this.currentFilters = {
-            campaign_id: '',
             room: null
+        };
+        this.currentSort = {
+            problem: { orderby: 'lead_score', order: 'desc' },
+            solution: { orderby: 'lead_score', order: 'desc' },
+            offer: { orderby: 'lead_score', order: 'desc' }
         };
         this.prospects = {
             problem: [],
@@ -62,42 +66,20 @@ export default class ProspectManager {
     }
 
     attachEventListeners() {
-        // Campaign filter
-        const campaignFilter = document.getElementById('rtr-campaign-filter');
-        if (campaignFilter) {
-            campaignFilter.addEventListener('change', (e) => {
-                this.currentFilters.campaign_id = e.target.value;
-                //this.refreshAllRooms();
-                document.dispatchEvent(new CustomEvent('rtr:filterChanged'));
-            });
-        }
 
+        // Sort dropdowns for each room
         ['problem', 'solution', 'offer'].forEach(room => {
-            const campaignFilter = document.getElementById(`${room}-room-campaign-filter`);
-            if (campaignFilter) {
-                campaignFilter.addEventListener('change', (e) => {
-                    // Reset to page 1 when filter changes
+            const sortSelect = document.getElementById(`${room}-room-sort`);
+            if (sortSelect) {
+                sortSelect.addEventListener('change', (e) => {
+                    const [orderby, order] = this.parseSortValue(e.target.value);
+                    this.currentSort[room] = { orderby, order };
+                    // Reset to page 1 when sort changes
                     this.pagination[room].currentPage = 1;
                     this.loadRoomProspects(room, null, 1);
                 });
             }
         });
-        
-        document.addEventListener('click', (e) => {
-            const badge = e.target.closest('.rtr-campaign-badge');
-            if (badge && !badge.classList.contains('rtr-more-badge')) {
-                const campaignId = badge.dataset.campaignId;
-                const room = badge.closest('.room-detail-container')?.id?.replace('rtr-room-', '');
-                
-                if (campaignId && room) {
-                    const campaignFilter = document.getElementById(`${room}-room-campaign-filter`);
-                    if (campaignFilter) {
-                        campaignFilter.value = campaignId;
-                        this.loadRoomProspects(room);
-                    }
-                }
-            }
-        });        
 
         // Delegate click events for prospect actions
         document.addEventListener('click', (e) => {
@@ -163,6 +145,19 @@ export default class ProspectManager {
         });
     }
 
+    parseSortValue(value) {
+        const mapping = {
+            'lead_score_desc': ['lead_score', 'desc'],
+            'lead_score_asc': ['lead_score', 'asc'],
+            'created_desc': ['created_at', 'desc'],
+            'created_asc': ['created_at', 'asc'],
+            'updated_desc': ['updated_at', 'desc'],
+            'company_asc': ['company_name', 'asc'],
+            'company_desc': ['company_name', 'desc']
+        };
+        return mapping[value] || ['lead_score', 'desc'];
+    }    
+
     async loadAllRooms() {
         const rooms = ['problem', 'solution', 'offer'];
         console.log('Loading all rooms:', rooms);
@@ -180,7 +175,7 @@ export default class ProspectManager {
     }
 
     async loadRoomProspects(room, campaignId = null, page = null) {
-        console.log(`Loading prospects for room: ${room} with campaign filter: ${campaignId}, page: ${page}`);
+
         if (this.isLoading[room]) {
             return;
         }
@@ -218,10 +213,11 @@ export default class ProspectManager {
                 url.searchParams.append('days', dateFilter.value);
             }            
 
-            const campaignFilter = document.getElementById(`${room}-room-campaign-filter`);
-
-            if (campaignFilter && campaignFilter.value) {
-                url.searchParams.append('campaign_id', campaignFilter.value);
+            // Add sort parameters
+            const sort = this.currentSort[room];
+            if (sort) {
+                url.searchParams.append('orderby', sort.orderby);
+                url.searchParams.append('order', sort.order);
             }
 
             const response = await fetch(url, {
@@ -248,7 +244,6 @@ export default class ProspectManager {
                 this.initializeEmailStates(prospect);
             });
             
-            this.populateCampaignDropdowns(room, this.prospects[room]);
             this.renderProspects(room, this.prospects[room]);
 
         } catch (error) {
@@ -256,46 +251,6 @@ export default class ProspectManager {
             this.showErrorState(container, room, error.message);
         } finally {
             this.isLoading[room] = false;
-        }
-    }
-
-    populateCampaignDropdowns(room, prospects) {
-        const campaignFilter = document.getElementById(`${room}-room-campaign-filter`);
-        if (!campaignFilter) return;
-
-        // Extract unique campaigns from prospects
-        const campaigns = new Map();
-        prospects.forEach(prospect => {
-            // Campaign data is directly on the prospect object
-            if (prospect.campaign_id && prospect.campaign_name) {
-                campaigns.set(prospect.campaign_id, prospect.campaign_name);
-            }
-        });
-
-        console.log(`Found ${campaigns.size} campaigns for ${room}:`, Array.from(campaigns.entries()));
-
-        // Store current selection
-        const currentValue = campaignFilter.value;
-
-        // Clear existing options except "All Campaigns"
-        campaignFilter.innerHTML = '<option value="">All Campaigns</option>';
-
-        // Add campaign options sorted by name
-        Array.from(campaigns.entries())
-            .sort((a, b) => a[1].localeCompare(b[1]))
-            .forEach(([id, name]) => {
-                const option = document.createElement('option');
-                option.value = id;
-                option.textContent = name;
-                if (currentValue && id == currentValue) {
-                    option.selected = true;  // Use selected attribute instead of setting .value
-                }
-                campaignFilter.appendChild(option);
-            });
-
-        // Restore previous selection if it still exists
-        if (currentValue && campaigns.has(currentValue)) {
-            campaignFilter.value = currentValue;
         }
     }
 

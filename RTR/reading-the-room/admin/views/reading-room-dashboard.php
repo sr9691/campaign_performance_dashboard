@@ -226,9 +226,15 @@ if (!is_array($clients)) {
                     <div id="rtr-room-problem" class="room-detail-container">
                         <div class="room-detail-header">
                             <h3><i class="fas fa-exclamation-triangle"></i> Problem Room <span class="room-count-badge">0</span></h3>
-                            <div><select id="problem-room-campaign-filter" class="campaign-dropdown">
-                                <option value="">All Campaigns</option></select>
-                            </div>
+                            <div><select id="problem-room-sort" class="sort-dropdown" data-room="problem">
+                                <option value="lead_score_desc">Lead Score (High → Low)</option>
+                                <option value="lead_score_asc">Lead Score (Low → High)</option>
+                                <option value="created_desc">Newest First</option>
+                                <option value="created_asc">Oldest First</option>
+                                <option value="updated_desc">Recently Updated</option>
+                                <option value="company_asc">Company Name (A-Z)</option>
+                                <option value="company_desc">Company Name (Z-A)</option>
+                            </select></div>
                         </div>
                         <div class="rtr-prospect-list"></div>
                     </div>
@@ -236,19 +242,30 @@ if (!is_array($clients)) {
                     <div id="rtr-room-solution" class="room-detail-container">
                         <div class="room-detail-header">
                             <h3><i class="fas fa-lightbulb"></i> Solution Room <span class="room-count-badge">0</span></h3>
-                            <div><select id="solution-room-campaign-filter" class="campaign-dropdown">
-                                <option value="">All Campaigns</option></select>
-                            </div>
-                        </div>
-                        <div class="rtr-prospect-list"></div>
+                            <div><select id="solution-room-sort" class="sort-dropdown" data-room="solution">
+                                <option value="lead_score_desc">Lead Score (High → Low)</option>
+                                <option value="lead_score_asc">Lead Score (Low → High)</option>
+                                <option value="created_desc">Newest First</option>
+                                <option value="created_asc">Oldest First</option>
+                                <option value="updated_desc">Recently Updated</option>
+                                <option value="company_asc">Company Name (A-Z)</option>
+                                <option value="company_desc">Company Name (Z-A)</option>
+                            </select></div>
+                        </div>                        <div class="rtr-prospect-list"></div>
                     </div>
 
                     <div id="rtr-room-offer" class="room-detail-container">
                         <div class="room-detail-header">
                             <h3><i class="fas fa-handshake"></i> Offer Room <span class="room-count-badge">0</span></h3>
-                            <div><select id="offer-room-campaign-filter" class="campaign-dropdown">
-                                <option value="">All Campaigns</option></select>
-                            </div>
+                            <div><select id="offer-room-sort" class="sort-dropdown" data-room="offer">
+                                <option value="lead_score_desc">Lead Score (High → Low)</option>
+                                <option value="lead_score_asc">Lead Score (Low → High)</option>
+                                <option value="created_desc">Newest First</option>
+                                <option value="created_asc">Oldest First</option>
+                                <option value="updated_desc">Recently Updated</option>
+                                <option value="company_asc">Company Name (A-Z)</option>
+                                <option value="company_desc">Company Name (Z-A)</option>
+                            </select></div>
                         </div>
                         <div class="rtr-prospect-list"></div>
                     </div>

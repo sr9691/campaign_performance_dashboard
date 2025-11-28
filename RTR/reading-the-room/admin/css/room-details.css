@@ -43,26 +43,26 @@
     margin-left: 8px;
 }
 
-.campaign-filter {
-    display: flex;
-    align-items: center;
-}
-
-.campaign-dropdown {
+.sort-dropdown {
     padding: 6px 10px;
     border: 1px solid var(--line-color);
     border-radius: 6px;
     font-family: var(--font-family);
     font-size: 0.8rem;
     background: white;
-    min-width: 150px;
+    min-width: 180px;
     color: var(--text-color-dark);
+    cursor: pointer;
 }
 
-.campaign-dropdown:focus {
+.sort-dropdown:focus {
     outline: none;
     border-color: var(--secondary-color);
     box-shadow: 0 0 0 2px rgba(66, 148, 204, 0.2);
+}
+
+.sort-dropdown:hover {
+    border-color: var(--secondary-color);
 }
 
 /* Prospect List */

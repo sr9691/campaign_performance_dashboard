@@ -54,20 +54,22 @@ final class Reading_Room_Controller extends WP_REST_Controller
     public function register_routes(): void
     {
         // Prospects endpoints
-                register_rest_route($this->namespace, '/prospects', [
-                    [
-                        'methods'             => WP_REST_Server::READABLE,
-                        'callback'            => [$this, 'get_prospects'],
-                        'permission_callback' => [$this, 'check_permission'],
-                        'args'                => [
-                            'client_id'   => ['type' => 'integer', 'required' => false],
-                            'campaign_id' => ['type' => 'integer', 'required' => false],
-                            'room'        => ['type' => 'string', 'required' => false],
-                            'page'        => ['type' => 'integer', 'required' => false, 'default' => 1, 'minimum' => 1],
-                            'per_page'    => ['type' => 'integer', 'required' => false, 'default' => 10, 'minimum' => 1, 'maximum' => 100],
-                        ],
-                    ],
-                ]);
+        register_rest_route($this->namespace, '/prospects', [
+            [
+                'methods'             => WP_REST_Server::READABLE,
+                'callback'            => [$this, 'get_prospects'],
+                'permission_callback' => [$this, 'check_permission'],
+                'args'                => [
+                    'client_id'   => ['type' => 'integer', 'required' => false],
+                    'campaign_id' => ['type' => 'integer', 'required' => false],
+                    'room'        => ['type' => 'string', 'required' => false],
+                    'page'        => ['type' => 'integer', 'required' => false, 'default' => 1, 'minimum' => 1],
+                    'per_page'    => ['type' => 'integer', 'required' => false, 'default' => 10, 'minimum' => 1, 'maximum' => 100],
+                    'orderby'     => ['type' => 'string', 'required' => false, 'default' => 'lead_score', 'enum' => ['lead_score', 'created_at', 'updated_at', 'company_name']],
+                    'order'       => ['type' => 'string', 'required' => false, 'default' => 'desc', 'enum' => ['asc', 'desc']],
+                ],
+            ],
+        ]);
 
         register_rest_route($this->namespace, '/prospects/(?P<id>\d+)', [
             [
@@ -263,6 +265,19 @@ final class Reading_Room_Controller extends WP_REST_Controller
             $page = max(1, (int) $request->get_param('page'));
             $per_page = max(1, min(100, (int) $request->get_param('per_page')));
             
+            // Get sort parameters
+            $orderby = $request->get_param('orderby') ?: 'lead_score';
+            $order = $request->get_param('order') ?: 'desc';
+            
+            // Validate orderby field
+            $allowed_orderby = ['lead_score', 'created_at', 'updated_at', 'company_name'];
+            if (!in_array($orderby, $allowed_orderby)) {
+                $orderby = 'lead_score';
+            }
+            
+            // Validate order direction
+            $order = strtolower($order) === 'asc' ? 'asc' : 'desc';
+            
             $prospects = $this->db->get_prospects($filters);
 
             // Ensure each prospect has a room assignment
@@ -280,11 +295,23 @@ final class Reading_Room_Controller extends WP_REST_Controller
                 }));
             }
 
-            // Sort by lead_score descending (highest scores first)
-            usort($prospects, function($a, $b) {
-                $score_a = (int) ($a['lead_score'] ?? 0);
-                $score_b = (int) ($b['lead_score'] ?? 0);
-                return $score_b - $score_a; // Descending order
+            // Sort prospects based on orderby and order parameters
+            usort($prospects, function($a, $b) use ($orderby, $order) {
+                $val_a = $a[$orderby] ?? '';
+                $val_b = $b[$orderby] ?? '';
+                
+                // Handle numeric vs string comparison
+                if (in_array($orderby, ['lead_score'])) {
+                    $val_a = (int) $val_a;
+                    $val_b = (int) $val_b;
+                    $result = $val_a - $val_b;
+                } elseif (in_array($orderby, ['created_at', 'updated_at'])) {
+                    $result = strtotime($val_a) - strtotime($val_b);
+                } else {
+                    $result = strcasecmp((string) $val_a, (string) $val_b);
+                }
+                
+                return $order === 'desc' ? -$result : $result;
             });
             
             // Calculate pagination metadata
