@@ -344,6 +344,27 @@ final class Reading_Room_Database
         $where[] = 'p.archived_at IS NULL';
         $where[] = '(v.is_archived = 0 OR v.is_archived IS NULL)';
         
+        // Minimum threshold filter: exclude prospects where lead_score < minimum_threshold
+        // Uses client-specific rules if available, falls back to global rules
+        $where[] = "(
+            v.lead_score >= COALESCE(
+                (SELECT JSON_UNQUOTE(JSON_EXTRACT(csr.rules_config, '$.minimum_threshold.required_score'))
+                 FROM {$this->db->prefix}rtr_client_scoring_rules csr 
+                 WHERE csr.client_id = c.client_id 
+                 AND csr.room_type = 'problem'
+                 AND JSON_EXTRACT(csr.rules_config, '$.minimum_threshold.enabled') = true
+                 LIMIT 1),
+                (SELECT JSON_UNQUOTE(JSON_EXTRACT(gsr.rules_config, '$.minimum_threshold.required_score'))
+                 FROM {$this->db->prefix}rtr_global_scoring_rules gsr 
+                 WHERE gsr.room_type = 'problem'
+                 AND JSON_EXTRACT(gsr.rules_config, '$.minimum_threshold.enabled') = true
+                 LIMIT 1),
+                0
+            )
+        )";
+        
+        $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+        
         $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
         $sql = "
             SELECT p.*, c.campaign_name AS campaign_name, c.client_id as client_id

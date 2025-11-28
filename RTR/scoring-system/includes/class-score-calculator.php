@@ -74,130 +74,6 @@ class RTR_Score_Calculator {
         );
     }
 
-/**
-     * Check if Problem Room score meets minimum threshold
-     * 
-     * @param int $problem_score The calculated Problem Room score
-     * @param array $problem_rules Problem Room rules including minimum_threshold
-     * @param int $visitor_id Visitor ID (for logging)
-     * @param int $client_id Client ID (for logging)
-     * @return array Result with below_threshold flag and details
-     */
-    private function check_minimum_threshold($problem_score, $problem_rules, $visitor_id, $client_id) {
-        $result = array(
-            'below_threshold' => false,
-            'required_score' => 0,
-            'actual_score' => $problem_score,
-            'threshold_enabled' => false,
-        );
-        
-        if (empty($problem_rules['minimum_threshold']['enabled'])) {
-            return $result;
-        }
-        
-        $result['threshold_enabled'] = true;
-        $required_score = intval($problem_rules['minimum_threshold']['required_score'] ?? 0);
-        $result['required_score'] = $required_score;
-        
-        if ($required_score <= 0) {
-            return $result;
-        }
-        
-        if ($problem_score < $required_score) {
-            $result['below_threshold'] = true;
-            error_log(sprintf(
-                "RTR Score Calculator: Visitor %d (client %d) below minimum threshold. Problem score: %d, Required: %d. Will be archived.",
-                $visitor_id, $client_id, $problem_score, $required_score
-            ));
-        }
-        
-        return $result;
-    }
-    
-    /**
-     * Archive visitor and prospect that fall below minimum threshold
-     * 
-     * @param int $visitor_id Visitor ID
-     * @param array $threshold_result Result from check_minimum_threshold
-     * @return bool Success status
-     */
-    private function archive_below_threshold($visitor_id, $threshold_result) {
-        $now = current_time('mysql');
-        
-        // Archive the visitor
-        $this->wpdb->update(
-            $this->tables['visitors'],
-            array('is_archived' => 1),
-            array('id' => $visitor_id),
-            array('%d'),
-            array('%d')
-        );
-        
-        // Archive any associated prospects
-        $this->wpdb->update(
-            $this->tables['prospects'],
-            array('archived_at' => $now),
-            array('visitor_id' => $visitor_id, 'archived_at' => null),
-            array('%s'),
-            array('%d', '%s')
-        );
-        
-        // Log the action
-        $this->log_archive_action($visitor_id, $threshold_result);
-        
-        return true;
-    }
-    
-    /**
-     * Log archive action to action logs table
-     */
-    private function log_archive_action($visitor_id, $threshold_result) {
-        $table_exists = $this->wpdb->get_var("SHOW TABLES LIKE '{$this->tables['action_logs']}'");
-        if (!$table_exists) {
-            return;
-        }
-        
-        $prospect_id = $this->wpdb->get_var($this->wpdb->prepare(
-            "SELECT id FROM {$this->tables['prospects']} WHERE visitor_id = %d LIMIT 1",
-            $visitor_id
-        ));
-        
-        $this->wpdb->insert(
-            $this->tables['action_logs'],
-            array(
-                'prospect_id' => $prospect_id ? (int) $prospect_id : null,
-                'action_type' => 'auto_archived',
-                'action_details' => wp_json_encode(array(
-                    'reason' => 'below_minimum_threshold',
-                    'visitor_id' => $visitor_id,
-                    'problem_score' => $threshold_result['actual_score'],
-                    'required_score' => $threshold_result['required_score'],
-                )),
-                'performed_by' => 'system',
-                'created_at' => current_time('mysql'),
-            ),
-            array('%d', '%s', '%s', '%s', '%s')
-        );
-    }
-    
-    /**
-     * Update visitor score with archived status
-     */
-    private function update_visitor_score_archived($visitor_id, $score, $current_room) {
-        return $this->wpdb->update(
-            $this->tables['visitors'],
-            array(
-                'lead_score' => $score,
-                'current_room' => $current_room,
-                'score_calculated_at' => current_time('mysql'),
-                'is_archived' => 1,
-            ),
-            array('id' => $visitor_id),
-            array('%d', '%s', '%s', '%d'),
-            array('%d')
-        );
-    }    
-    
     /**
      * Calculate visitor score based on rules
      * 
@@ -261,39 +137,16 @@ class RTR_Score_Calculator {
         // Cap at 100
         $total_score = min($total_score, 100);
 
-// Check minimum threshold BEFORE determining room
-        $minimum_threshold_result = $this->check_minimum_threshold(
-            $breakdown['problem'],
-            $rules['problem'] ?? array(),
-            $visitor_id,
-            $client_id
-        );
-
-        // If below minimum threshold, archive and set room to 'none'
-        if ($minimum_threshold_result['below_threshold']) {
-            $current_room = 'none';
-            $this->archive_below_threshold($visitor_id, $minimum_threshold_result);
-            $this->update_visitor_score_archived($visitor_id, $total_score, $current_room);
-        } else {
-            // Normal flow
-            $current_room = $this->determine_room($total_score, $client_id);
-            $this->update_visitor_score($visitor_id, $total_score, $current_room);
-        }
+        $current_room = $this->determine_room($total_score, $client_id);
+        
+        // Update score - never archive, just store the threshold status
+        $this->update_visitor_score($visitor_id, $total_score, $current_room);
 
         $result = array(
             'total_score' => $total_score,
             'breakdown' => $breakdown,
             'current_room' => $current_room,
-            'below_minimum_threshold' => $minimum_threshold_result['below_threshold'],
         );
-
-        if ($minimum_threshold_result['below_threshold']) {
-            $result['minimum_threshold'] = array(
-                'required_score' => $minimum_threshold_result['required_score'],
-                'actual_score' => $minimum_threshold_result['actual_score'],
-                'archived' => true,
-            );
-        }
 
         // Add details if requested
         if ($return_breakdown && !empty($details)) {
