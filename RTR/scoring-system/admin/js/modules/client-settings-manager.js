@@ -582,6 +582,14 @@ export default class ClientSettingsManager extends EventEmitter {
             const globalRule = globalRules[ruleKey] || {};
             
             const enabled = clientRule.enabled !== undefined ? clientRule.enabled : (globalRule.enabled || false);
+            
+            // Special handling for minimum_threshold - uses required_score instead of points
+            if (ruleKey === 'minimum_threshold') {
+                const requiredScore = clientRule.required_score !== undefined ? clientRule.required_score : (globalRule.required_score || 20);
+                const globalRequiredScore = globalRule.required_score || 20;
+                return this.renderThresholdRuleCard(room, ruleKey, enabled, requiredScore, globalRequiredScore);
+            }
+            
             const points = clientRule.points !== undefined ? clientRule.points : (globalRule.points || 0);
             const globalPoints = globalRule.points || 0;
             
@@ -736,6 +744,49 @@ export default class ClientSettingsManager extends EventEmitter {
             </div>
         `;
     }
+    
+    /**
+     * Render threshold rule card (minimum_threshold uses required_score, not points)
+     */
+    renderThresholdRuleCard(room, ruleKey, enabled, requiredScore, globalRequiredScore) {
+        return `
+            <div class="panel-rule-card ${!enabled ? 'disabled' : ''}" data-rule="${ruleKey}">
+                <div class="panel-rule-header">
+                    <div class="panel-rule-info">
+                        <div class="panel-rule-name">${this.getRuleName(ruleKey)}</div>
+                        <div class="panel-rule-hint">Global: ${globalRequiredScore} pts</div>
+                    </div>
+                    <div class="panel-rule-toggle">
+                        <span class="toggle-label">On</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" 
+                                   data-room="${room}" 
+                                   data-rule="${ruleKey}" 
+                                   data-field="enabled" 
+                                   ${enabled ? 'checked' : ''} />
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="panel-rule-body">
+                    <div class="panel-rule-points">
+                        <label>Required Score:</label>
+                        <input type="number" 
+                               data-room="${room}" 
+                               data-rule="${ruleKey}" 
+                               data-field="required_score" 
+                               value="${requiredScore}" 
+                               min="0" 
+                               max="100" />
+                    </div>
+                    <div class="panel-global-hint">
+                        Global: <span>${globalRequiredScore}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
     
     /**
      * Attach panel rule listeners

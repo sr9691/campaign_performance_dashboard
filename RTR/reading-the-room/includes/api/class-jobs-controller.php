@@ -819,7 +819,7 @@ class Jobs_Controller extends WP_REST_Controller {
         $updated = 0;
         $skipped = 0;
 
-        // FIXED: Log the mode
+        // Log the mode
         $this->log_job('prospect_creation_mode', sprintf(
             'Prospect creation running in %s mode (full mode = update all, incremental = update if diff >= 1)',
             $mode
@@ -842,7 +842,6 @@ class Jobs_Controller extends WP_REST_Controller {
             AND cl.subscription_tier = 'premium'
             AND cl.rtr_enabled = 1
             {$where_client}
-            GROUP BY v.id
             ORDER BY v.lead_score DESC, v.last_seen_at DESC
         ");
 
@@ -859,7 +858,6 @@ class Jobs_Controller extends WP_REST_Controller {
                     FROM {$wpdb->prefix}rtr_prospects
                     WHERE visitor_id = %d
                     AND campaign_id = %d
-                    AND archived_at IS NULL
                     LIMIT 1
                 ", $visitor->id, $visitor->campaign_id));
 
