@@ -593,8 +593,7 @@ class Jobs_Controller extends WP_REST_Controller {
         foreach ($visitors as $visitor) {
             try {
                 $match = $this->campaign_matcher->match([
-                    'visitor_id' => (int) $visitor->id,
-                    'skip_default_fallback' => true
+                    'visitor_id' => (int) $visitor->id
                 ]);
 
                 if ($match !== null && in_array((int)$match['id'], array_map('intval', $premium_campaign_ids))) {
@@ -887,6 +886,7 @@ class Jobs_Controller extends WP_REST_Controller {
 
                     $created++;
 
+                    /*
                     $this->log_job('prospect_created', sprintf(
                         'Created prospect for visitor %d (campaign: %d, room: %s, score: %d)',
                         $visitor->id,
@@ -894,6 +894,7 @@ class Jobs_Controller extends WP_REST_Controller {
                         $initial_room,
                         $visitor->lead_score ?? 0
                     ));
+                    */
 
                 } else {
                     // Update existing prospect
@@ -1338,7 +1339,7 @@ class Jobs_Controller extends WP_REST_Controller {
         // Only log to error_log for warnings/errors or if WP_DEBUG is true
         if ($level !== 'info' || (defined('WP_DEBUG') && WP_DEBUG)) {
             $prefix = self::LOG_PREFIX_JOB . ' ' . strtoupper($level) . ']';
-            error_log("{$prefix} {$action_type}: {$description}");
+            //error_log("{$prefix} {$action_type}: {$description}");
         }
     }
 

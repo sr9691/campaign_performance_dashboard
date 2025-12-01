@@ -80,6 +80,7 @@ final class Campaign_Matcher
         $query = $wpdb->prepare(
             "SELECT 
                 id,
+                account_id,
                 email,
                 company_name,
                 first_name,
@@ -109,7 +110,7 @@ final class Campaign_Matcher
         }
 
         if (!$visitor) {
-            error_log(self::LOG_PREFIX . ' Visitor not found: id=' . $visitor_id);
+            // error_log(self::LOG_PREFIX . ' Visitor not found: id=' . $visitor_id);
             return null;
         }
 
@@ -117,6 +118,7 @@ final class Campaign_Matcher
         // FIXED: Removed duplicate campaign_name field, keeping only utm_campaign
         $context = [
             'visitor_id' => $visitor_id,
+            'account_id' => !empty($visitor['account_id']) ? trim($visitor['account_id']) : null,
             'email' => !empty($visitor['email']) ? trim($visitor['email']) : null,
             'company' => !empty($visitor['company_name']) ? trim($visitor['company_name']) : null,
             'first_name' => !empty($visitor['first_name']) ? trim($visitor['first_name']) : null,
@@ -162,6 +164,7 @@ final class Campaign_Matcher
 
         // FIXED: Check for skip_default_fallback flag
         $skip_default_fallback = !empty($context['skip_default_fallback']);
+        
 
         try {
             // Fetch visitor context from database if only visitor_id provided
@@ -173,7 +176,7 @@ final class Campaign_Matcher
                     $db_context = $this->get_visitor_context($visitor_id);
                     if ($db_context === null) {
                         error_log(self::LOG_PREFIX . ' Cannot match: visitor_id=' . $visitor_id . ' not found');
-                        return $skip_default_fallback ? null : $this->get_default_campaign();
+                        return $skip_default_fallback ? null : $this->get_default_campaign($context['account_id'] ?? null);
                     }
                     $context = array_merge($db_context, ['skip_default_fallback' => $skip_default_fallback]);
                 } else {
@@ -190,7 +193,7 @@ final class Campaign_Matcher
                 $utm_match['score'] = self::SCORE_UTM_EXACT_MATCH;
                 $utm_match['match_method'] = 'utm_campaign';
                 $this->record_match_event($context, $utm_match);
-                error_log(self::LOG_PREFIX . ' Matched campaign via UTM: ' . ($utm_match['campaign_name'] ?? $utm_match['name'] ?? 'unknown'));
+                // error_log(self::LOG_PREFIX . ' Matched campaign via UTM: ' . ($utm_match['campaign_name'] ?? $utm_match['name'] ?? 'unknown'));
                 return $utm_match;
             }
 
@@ -200,23 +203,21 @@ final class Campaign_Matcher
                 $content_link_match['score'] = self::SCORE_CONTENT_LINK_MATCH;
                 $content_link_match['match_method'] = 'content_link';
                 $this->record_match_event($context, $content_link_match);
-                error_log(self::LOG_PREFIX . ' Matched campaign via content link: ' . ($content_link_match['campaign_name'] ?? $content_link_match['name'] ?? 'unknown'));
+                // error_log(self::LOG_PREFIX . ' Matched campaign via content link: ' . ($content_link_match['campaign_name'] ?? $content_link_match['name'] ?? 'unknown'));
                 return $content_link_match;
             }
 
             // Step 3: Return default campaign (ONLY if not skipping)
-            // FIXED: Respect skip_default_fallback flag
             if ($skip_default_fallback) {
-                error_log(self::LOG_PREFIX . ' No explicit match found and skip_default_fallback=true, returning null');
                 return null;
-            }
+            }            
 
-            $default_campaign = $this->get_default_campaign();
+            $default_campaign = $this->get_default_campaign($context['account_id'] ?? null);
             if ($default_campaign) {
                 $default_campaign['score'] = 0;
                 $default_campaign['match_method'] = 'default_fallback';
                 $this->record_match_event($context, $default_campaign);
-                error_log(self::LOG_PREFIX . ' No match found, using default campaign');
+                //error_log(self::LOG_PREFIX . ' No match found, using default campaign');
             }
             
             return $default_campaign;
@@ -503,7 +504,7 @@ final class Campaign_Matcher
      *
      * @return array<string,mixed>|null Default campaign or null if none found
      */
-    private function get_default_campaign(): ?array
+    private function get_default_campaign(?string $account_id = null): ?array
     {
         try {
             global $wpdb;
@@ -511,22 +512,26 @@ final class Campaign_Matcher
             
             // Try to find a campaign specifically named "Default"
             $campaign = $wpdb->get_row(
-                "SELECT * FROM {$table} 
-                 WHERE LOWER(TRIM(campaign_name)) = 'default'
-                 AND (
-                     (start_date IS NULL OR start_date <= CURDATE())
-                     AND (end_date IS NULL OR end_date >= CURDATE())
-                 )
-                 LIMIT 1",
+                $wpdb->prepare(
+                    "SELECT cs.* FROM {$table} cs
+                    INNER JOIN {$wpdb->prefix}cpd_clients cl ON cs.client_id = cl.id
+                    WHERE LOWER(TRIM(cs.campaign_name)) = 'default'
+                    AND cl.account_id = %s
+                    AND (cs.start_date IS NULL OR cs.start_date <= CURDATE())
+                    AND (cs.end_date IS NULL OR cs.end_date >= CURDATE())
+                    LIMIT 1",
+                    $account_id
+                ),
                 ARRAY_A
             );
 
             if ($campaign) {
-                error_log(self::LOG_PREFIX . ' Using "Default" campaign: ' . $campaign['id']);
+                // error_log(self::LOG_PREFIX . ' Using "Default" campaign: ' . $campaign['id']);
                 return $campaign;
             }
 
             // Fallback: get the first active campaign ordered by ID
+            /*
             $campaign = $wpdb->get_row(
                 "SELECT * FROM {$table} 
                  WHERE (
@@ -537,13 +542,14 @@ final class Campaign_Matcher
                  LIMIT 1",
                 ARRAY_A
             );
+            */
 
             if ($campaign) {
-                error_log(self::LOG_PREFIX . ' Using first available campaign as default: ' . $campaign['id']);
+                // error_log(self::LOG_PREFIX . ' Using first available campaign as default: ' . $campaign['id']);
                 return $campaign;
             }
 
-            error_log(self::LOG_PREFIX . ' No default campaign found');
+            // error_log(self::LOG_PREFIX . ' No default campaign found');
             return null;
         } catch (\Throwable $e) {
             error_log(self::LOG_PREFIX . ' get_default_campaign error: ' . $e->getMessage());

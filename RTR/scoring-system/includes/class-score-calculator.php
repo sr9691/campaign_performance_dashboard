@@ -814,7 +814,16 @@ class RTR_Score_Calculator {
     // =========================================================================
     
     /**
-     * Check if visitor revenue matches target values
+     * Check if visitor revenue matches target values using numeric range comparison
+     * 
+     * Handles formats like:
+     * - "$10M - $20M", "$5M - $10M", "$50M - $100M"
+     * - "Over $100M", "Under $1M"
+     * - "$1M - $5M", "$100K - $500K"
+     * 
+     * @param string $visitor_revenue Visitor's revenue string
+     * @param array $target_values Array of target revenue ranges
+     * @return bool True if visitor revenue overlaps with any target range
      */
     private function check_revenue_match($visitor_revenue, $target_values) {
         if (empty($visitor_revenue)) {
@@ -823,12 +832,32 @@ class RTR_Score_Calculator {
         
         $visitor_revenue = trim($visitor_revenue);
         
+        // First try exact match (backwards compatibility)
         if (in_array($visitor_revenue, $target_values)) {
             return true;
         }
         
+        // Parse visitor revenue into numeric range
+        $visitor_range = $this->parse_revenue_range($visitor_revenue);
+        if ($visitor_range === null) {
+            // Fallback to string matching if parsing fails
+            foreach ($target_values as $target) {
+                if (stripos($visitor_revenue, $target) !== false || stripos($target, $visitor_revenue) !== false) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // Check if visitor range overlaps with any target range
         foreach ($target_values as $target) {
-            if (stripos($visitor_revenue, $target) !== false) {
+            $target_range = $this->parse_revenue_range($target);
+            if ($target_range === null) {
+                continue;
+            }
+            
+            // Check for overlap: visitor_min <= target_max AND visitor_max >= target_min
+            if ($visitor_range['min'] <= $target_range['max'] && $visitor_range['max'] >= $target_range['min']) {
                 return true;
             }
         }
@@ -837,7 +866,85 @@ class RTR_Score_Calculator {
     }
     
     /**
-     * Check if company size matches target values
+     * Parse a revenue string into a numeric range (in dollars)
+     * 
+     * @param string $revenue_str Revenue string to parse
+     * @return array|null Array with 'min' and 'max' keys, or null if parsing fails
+     */
+    private function parse_revenue_range($revenue_str) {
+        if (empty($revenue_str)) {
+            return null;
+        }
+        
+        $revenue_str = trim($revenue_str);
+        
+        // Handle "Over $X" format
+        if (preg_match('/^over\s*\$?([\d.]+)\s*(k|m|b)?/i', $revenue_str, $matches)) {
+            $value = $this->parse_revenue_value($matches[1], $matches[2] ?? '');
+            return array('min' => $value, 'max' => PHP_FLOAT_MAX);
+        }
+        
+        // Handle "Under $X" format
+        if (preg_match('/^under\s*\$?([\d.]+)\s*(k|m|b)?/i', $revenue_str, $matches)) {
+            $value = $this->parse_revenue_value($matches[1], $matches[2] ?? '');
+            return array('min' => 0, 'max' => $value);
+        }
+        
+        // Handle range format: "$10M - $20M" or "$10M-$20M" or "10M - 20M"
+        if (preg_match('/\$?([\d.]+)\s*(k|m|b)?\s*[-–—to]+\s*\$?([\d.]+)\s*(k|m|b)?/i', $revenue_str, $matches)) {
+            $min = $this->parse_revenue_value($matches[1], $matches[2] ?? '');
+            $max = $this->parse_revenue_value($matches[3], $matches[4] ?? '');
+            return array('min' => $min, 'max' => $max);
+        }
+        
+        // Handle single value: "$10M" or "10M"
+        if (preg_match('/\$?([\d.]+)\s*(k|m|b)?/i', $revenue_str, $matches)) {
+            $value = $this->parse_revenue_value($matches[1], $matches[2] ?? '');
+            // For single values, create a small range around the value
+            return array('min' => $value * 0.9, 'max' => $value * 1.1);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Convert a revenue number with suffix to actual dollar value
+     * 
+     * @param string $number The numeric part
+     * @param string $suffix The suffix (K, M, B)
+     * @return float The value in dollars
+     */
+    private function parse_revenue_value($number, $suffix) {
+        $value = floatval($number);
+        
+        switch (strtoupper($suffix)) {
+            case 'K':
+                return $value * 1000;
+            case 'M':
+                return $value * 1000000;
+            case 'B':
+                return $value * 1000000000;
+            default:
+                // If no suffix, assume it's already in dollars
+                // But if value is small (< 1000), it might be in millions
+                if ($value < 1000) {
+                    return $value * 1000000; // Assume millions
+                }
+                return $value;
+        }
+    }
+    
+    /**
+     * Check if company size matches target values using numeric range comparison
+     * 
+     * Handles formats like:
+     * - "21-50", "11-50", "51-200", "201-500"
+     * - "1001-5000", "5000+", "10000+"
+     * - "1-10", "Under 10"
+     * 
+     * @param string $company_size Visitor's company size string
+     * @param array $target_values Array of target employee count ranges
+     * @return bool True if visitor company size overlaps with any target range
      */
     private function check_company_size_match($company_size, $target_values) {
         if (empty($company_size)) {
@@ -846,17 +953,82 @@ class RTR_Score_Calculator {
         
         $company_size = trim($company_size);
         
+        // First try exact match (backwards compatibility)
         if (in_array($company_size, $target_values)) {
             return true;
         }
         
+        // Parse visitor company size into numeric range
+        $visitor_range = $this->parse_employee_range($company_size);
+        if ($visitor_range === null) {
+            // Fallback to string matching if parsing fails
+            foreach ($target_values as $target) {
+                if (stripos($company_size, $target) !== false || stripos($target, $company_size) !== false) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // Check if visitor range overlaps with any target range
         foreach ($target_values as $target) {
-            if (stripos($company_size, $target) !== false) {
+            $target_range = $this->parse_employee_range($target);
+            if ($target_range === null) {
+                continue;
+            }
+            
+            // Check for overlap: visitor_min <= target_max AND visitor_max >= target_min
+            if ($visitor_range['min'] <= $target_range['max'] && $visitor_range['max'] >= $target_range['min']) {
                 return true;
             }
         }
         
         return false;
+    }
+    
+    /**
+     * Parse an employee count string into a numeric range
+     * 
+     * @param string $size_str Employee count string to parse
+     * @return array|null Array with 'min' and 'max' keys, or null if parsing fails
+     */
+    private function parse_employee_range($size_str) {
+        if (empty($size_str)) {
+            return null;
+        }
+        
+        $size_str = trim($size_str);
+        
+        // Remove commas from numbers (e.g., "1,000" -> "1000")
+        $size_str = str_replace(',', '', $size_str);
+        
+        // Handle "X+" format (e.g., "5000+", "10000+")
+        if (preg_match('/^(\d+)\s*\+/', $size_str, $matches)) {
+            return array('min' => (int) $matches[1], 'max' => PHP_INT_MAX);
+        }
+        
+        // Handle "Over X" or "More than X" format
+        if (preg_match('/^(?:over|more\s*than)\s*(\d+)/i', $size_str, $matches)) {
+            return array('min' => (int) $matches[1], 'max' => PHP_INT_MAX);
+        }
+        
+        // Handle "Under X" or "Less than X" format
+        if (preg_match('/^(?:under|less\s*than)\s*(\d+)/i', $size_str, $matches)) {
+            return array('min' => 0, 'max' => (int) $matches[1]);
+        }
+        
+        // Handle range format: "11-50", "51-200", "1001-5000"
+        if (preg_match('/^(\d+)\s*[-–—to]+\s*(\d+)/', $size_str, $matches)) {
+            return array('min' => (int) $matches[1], 'max' => (int) $matches[2]);
+        }
+        
+        // Handle single number
+        if (preg_match('/^(\d+)$/', $size_str, $matches)) {
+            $value = (int) $matches[1];
+            return array('min' => $value, 'max' => $value);
+        }
+        
+        return null;
     }
     
     /**
