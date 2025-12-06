@@ -540,6 +540,7 @@ class Email_Generation_Controller extends WP_REST_Controller {
 
         // Start transaction for atomic updates
         $wpdb->query('START TRANSACTION');
+        $sender_ip = $this->get_client_ip();
         
         try {
             // Get current prospect state (for potential rollback reference)
@@ -554,7 +555,10 @@ class Email_Generation_Controller extends WP_REST_Controller {
             $update_result = $this->tracking->update_status(
                 $email_tracking_id,
                 'copied',
-                array( 'copied_at' => current_time( 'mysql' ) )
+                array( 
+                    'copied_at' => current_time( 'mysql' ),
+                    'sender_ip' => $sender_ip,
+                )
             );
 
             if ( is_wp_error( $update_result ) ) {
@@ -634,19 +638,91 @@ class Email_Generation_Controller extends WP_REST_Controller {
             return $this->return_tracking_pixel();
         }
 
-        // Update tracking record (delegates to tracking manager)
-        // The tracking manager handles checking if already opened
-        $result = $this->tracking->mark_as_opened( $token );
+        // Get current request IP
+        $current_ip = $this->get_client_ip();
+        
+        // Get tracking record to check sender IP
+        global $wpdb;
+        $tracking = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT id, sender_ip, opened_at FROM {$wpdb->prefix}rtr_email_tracking WHERE tracking_token = %s LIMIT 1",
+                $token
+            )
+        );
+        
+        if ( ! $tracking ) {
+            error_log( sprintf( '[DirectReach] Tracking token not found: %s', $token ) );
+            return $this->return_tracking_pixel();
+        }
+        
+        // If sender_ip is NULL, email hasn't been copied/sent yet - ignore all opens
+        if ( empty( $tracking->sender_ip ) ) {
+            error_log( sprintf( 
+                '[DirectReach] Ignoring open - email not yet sent (no sender_ip) for token %s', 
+                $token 
+            ) );
+            return $this->return_tracking_pixel();
+        }
+        
+        // If sender_ip matches current IP, this is the sender previewing after copy - ignore
+        if ( $tracking->sender_ip === $current_ip ) {
+            error_log( sprintf( 
+                '[DirectReach] Ignoring open from sender IP %s for token %s', 
+                $current_ip, 
+                $token 
+            ) );
+            return $this->return_tracking_pixel();
+        }
+        
+        // Different IP - legitimate recipient open
+        $result = $this->tracking->mark_as_opened( $token, $current_ip );
         
         if ( ! $result ) {
             error_log( sprintf(
                 '[DirectReach] Failed to mark email as opened for token: %s',
                 $token
             ) );
-        }        
+        } else {
+            error_log( sprintf(
+                '[DirectReach] Email opened by recipient IP %s (sender was %s) for token %s',
+                $current_ip,
+                $tracking->sender_ip ?? 'unknown',
+                $token
+            ) );
+        }
 
         return $this->return_tracking_pixel();
     }
+
+    /**
+     * Get client IP address
+     *
+     * @return string IP address
+     */
+    private function get_client_ip() {
+        $ip_keys = array(
+            'HTTP_CF_CONNECTING_IP',     // Cloudflare
+            'HTTP_X_FORWARDED_FOR',      // Proxy/Load balancer
+            'HTTP_X_REAL_IP',            // Nginx proxy
+            'REMOTE_ADDR',               // Direct connection
+        );
+        
+        foreach ( $ip_keys as $key ) {
+            if ( ! empty( $_SERVER[ $key ] ) ) {
+                $ip = $_SERVER[ $key ];
+                // Handle comma-separated list (X-Forwarded-For can have multiple IPs)
+                if ( strpos( $ip, ',' ) !== false ) {
+                    $ip = trim( explode( ',', $ip )[0] );
+                }
+                // Validate IP
+                if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+                    return $ip;
+                }
+            }
+        }
+        
+        return '';
+    }    
 
     /**
      * Return a 1x1 transparent tracking pixel

@@ -376,6 +376,26 @@ class RTR_Scoring_Rules_Database {
             }
         }
         
+        // Additional validation for industry_alignment exclusion
+        if ($room_type === 'problem' && isset($rules_config['industry_alignment'])) {
+            $industry_rule = $rules_config['industry_alignment'];
+            
+            // If both values and excluded_values exist, ensure no overlap
+            if (!empty($industry_rule['values']) && !empty($industry_rule['excluded_values'])) {
+                $overlap = array_intersect($industry_rule['values'], $industry_rule['excluded_values']);
+                if (!empty($overlap)) {
+                    error_log('RTR Scoring Rules: Industry cannot be in both match and exclude lists: ' . implode(', ', $overlap));
+                    return false;
+                }
+            }
+            
+            // Validate exclusion_points is negative or zero
+            if (isset($industry_rule['exclusion_points']) && $industry_rule['exclusion_points'] > 0) {
+                error_log('RTR Scoring Rules: exclusion_points must be zero or negative');
+                return false;
+            }
+        }
+        
         return true;
     }
     

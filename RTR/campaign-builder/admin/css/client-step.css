@@ -417,6 +417,70 @@
     box-shadow: none;
 }
 
+.badge-action {
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    color: white;
+    border: none;
+    box-shadow: none;
+}
+
+.badge-action:hover {
+    background: linear-gradient(135deg, #218838 0%, #1cb386 100%);
+    filter: brightness(1.1);
+}
+
+.badge-action.running {
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+    cursor: wait;
+}
+
+/* Run Nightly Job Button */
+.run-nightly-job-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: white;
+}
+
+.run-nightly-job-btn:hover {
+    filter: brightness(1.15);
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(23, 162, 184, 0.4);
+}
+
+.run-nightly-job-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(23, 162, 184, 0.2);
+}
+
+.run-nightly-job-btn:focus {
+    outline: 2px solid #17a2b8;
+    outline-offset: 2px;
+}
+
+.run-nightly-job-btn i {
+    font-size: 1rem;
+    transition: transform 0.3s ease;
+}
+
+.run-nightly-job-btn:hover i {
+    transform: rotate(180deg);
+}
+
+.run-nightly-job-btn.running {
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+    cursor: wait;
+    pointer-events: none;
+}
+
 
 /* Wrapper for the Configure Button to match Badge size */
 .configure-client-container {

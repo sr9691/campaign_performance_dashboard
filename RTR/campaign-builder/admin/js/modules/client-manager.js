@@ -112,6 +112,19 @@ export default class ClientManager extends EventEmitter {
         // Event delegation for client cards - UPDATED
         if (this.elements.clientsList) {
             this.elements.clientsList.addEventListener('click', (e) => {
+                // Check if run nightly job button was clicked
+                const runJobBtn = e.target.closest('.run-nightly-job-btn');
+                if (runJobBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const card = runJobBtn.closest('.client-card');
+                    if (card) {
+                        const clientId = parseInt(card.dataset.clientId);
+                        this.handleRunNightlyJob(clientId, runJobBtn);
+                    }
+                    return;
+                }
+
                 // Check if configure button was clicked
                 const configureBtn = e.target.closest('.configure-client-btn');
                 if (configureBtn) {
@@ -222,6 +235,12 @@ export default class ClientManager extends EventEmitter {
                 <div class="client-card-body">
                     <div class="client-meta">
                         <button type="button" 
+                            class="badge badge-action run-nightly-job-btn" 
+                            title="Run Nightly Job for this Client" 
+                            aria-label="Run nightly job for this client">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button type="button" 
                                 class="badge badge-premium configure-client-btn" 
                                 title="Configure Settings" 
                                 aria-label="Configure client settings">
@@ -258,6 +277,62 @@ export default class ClientManager extends EventEmitter {
         // Emit event
         this.emit('client:configure', { clientId, client });
     }
+
+    /**
+     * Handle run nightly job button click - NEW
+     */
+    async handleRunNightlyJob(clientId, button) {
+        const client = this.clients.find(c => c.id === clientId);
+        
+        if (!client) {
+            console.error('Client not found:', clientId);
+            return;
+        }
+
+        // Confirm action
+        if (!confirm(`Run nightly job for "${client.name}"?\n\nThis will process all visitors, calculate scores, and update prospects for this client.`)) {
+            return;
+        }
+
+        // Disable button and show loading state
+        const originalHtml = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        button.classList.add('running');
+
+        try {
+            const response = await this.api.post('/jobs/run-nightly', {
+                mode: 'client',
+                client_id: clientId
+            });
+
+            if (response.success) {
+                const stats = response.stats || {};
+                this.emit('notification', {
+                    type: 'success',
+                    message: `Nightly job completed for ${client.name} in ${response.duration}s. ` +
+                             `Created: ${stats.prospects_created || 0}, ` +
+                             `Updated: ${stats.prospects_updated || 0}, ` +
+                             `Scores: ${stats.scores_calculated || 0}`
+                });
+
+                this.emit('client:job_completed', { clientId, client, stats: response.stats });
+            } else {
+                throw new Error(response.message || 'Job failed');
+            }
+        } catch (error) {
+            console.error('Error running nightly job:', error);
+            this.emit('notification', {
+                type: 'error',
+                message: `Failed to run nightly job: ${error.message}`
+            });
+        } finally {
+            // Restore button state
+            button.disabled = false;
+            button.innerHTML = originalHtml;
+            button.classList.remove('running');
+        }
+    }    
     
     /**
      * Select a client

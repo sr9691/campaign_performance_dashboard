@@ -649,6 +649,147 @@
 }
 
 /* ===========================================
+   Industry Exclusion Styles
+   =========================================== */
+
+.exclusion-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: #fff5f5;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #721c24;
+    margin-top: 8px;
+}
+
+.exclusion-badge i {
+    font-size: 11px;
+}
+
+/* Editor Sections */
+.match-section {
+    padding: 16px;
+    background: #f8fff8;
+    border: 1px solid #c3e6c3;
+    border-radius: 8px;
+}
+
+.exclude-section {
+    padding: 16px;
+    background: #fff5f5;
+    border: 1px solid #f5c6cb;
+    border-radius: 8px;
+}
+
+.exclude-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.exclusion-points-config {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.exclusion-points-config label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #721c24;
+}
+
+.exclusion-points-config input {
+    width: 80px;
+    padding: 6px 10px;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #721c24;
+}
+
+.exclusion-points-config input:focus {
+    outline: none;
+    border-color: #dc3545;
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.1);
+}
+
+.section-help {
+    font-size: 12px;
+    color: #666;
+    margin: 4px 0 12px 0;
+}
+
+.section-help-warning {
+    color: #856404;
+}
+
+.excluded-values-list {
+    background: #fff;
+    border-color: #f5c6cb;
+}
+
+.value-chip.excluded {
+    background: #fff5f5;
+    border-color: #f5c6cb;
+    color: #721c24;
+}
+
+.value-chip.excluded .remove-value:hover {
+    color: #dc3545;
+}
+
+.preset-chip.excluded {
+    background: #fff5f5;
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.preset-chip.excluded:hover {
+    background: #ffecec;
+}
+
+.industry-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Global Reference Exclusion */
+.global-subsection {
+    margin-bottom: 12px;
+}
+
+.global-subsection:last-child {
+    margin-bottom: 0;
+}
+
+.global-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #93370d;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
+.global-label-exclude {
+    color: #721c24;
+}
+
+.global-chip.excluded {
+    background: #fff5f5;
+    border-color: #f5c6cb;
+    color: #721c24;
+}
+
+/* ===========================================
    Responsive
    =========================================== */
 

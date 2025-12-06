@@ -8,8 +8,8 @@
  * @since 2.1.0
  */
 
-import EventEmitter from '../../../../campaign-builder/admin/js/utils/event-emitter.js';
-import APIClient from '../../../../campaign-builder/admin/js/utils/api-client.js';
+import EventEmitter from '../../../campaign-builder/admin/js/utils/event-emitter.js';
+import APIClient from '../../../campaign-builder/admin/js/utils/api-client.js';
 
 export default class ClientSettingsManager extends EventEmitter {
     constructor(config) {
@@ -688,6 +688,24 @@ export default class ClientSettingsManager extends EventEmitter {
         const valuesCount = values?.length || 0;
         const globalValuesCount = globalValues?.length || 0;
         
+        // For industry_alignment, also get exclusion info
+        let exclusionInfo = '';
+        if (ruleKey === 'industry_alignment') {
+            const clientRule = this.clientScoringRules[room]?.[ruleKey] || {};
+            const globalRule = this.globalScoringRules[room]?.[ruleKey] || {};
+            const excludedCount = clientRule.excluded_values?.length || globalRule.excluded_values?.length || 0;
+            const exclusionPoints = clientRule.exclusion_points ?? globalRule.exclusion_points ?? -200;
+            
+            if (excludedCount > 0) {
+                exclusionInfo = `
+                    <div class="exclusion-badge">
+                        <i class="fas fa-ban"></i>
+                        ${excludedCount} excluded (${exclusionPoints} pts)
+                    </div>
+                `;
+            }
+        }
+        
         return `
             <div class="panel-rule-card ${!enabled ? 'disabled' : ''}" data-rule="${ruleKey}">
                 <div class="panel-rule-header">
@@ -729,6 +747,7 @@ export default class ClientSettingsManager extends EventEmitter {
                                     ${valuesCount !== globalValuesCount ? `(Global: ${globalValuesCount})` : ''}
                                 </span>
                             </div>
+                            ${exclusionInfo}
                             <button type="button" 
                                     class="btn-edit-values" 
                                     data-room="${room}" 
@@ -921,12 +940,18 @@ export default class ClientSettingsManager extends EventEmitter {
     }
     
     /**
-     * Render industry editor (simplified for client settings)
+     * Render industry editor with match and exclude sections
      */
     renderIndustryEditor(currentValues, globalValues) {
-        // For simplicity, show a searchable list of industries
-        // You could enhance this with the full hierarchical modal
         const allIndustries = this.config.industries || [];
+        const { room, ruleKey } = this.currentEditingRule;
+        
+        // Get exclusion values
+        const clientRule = this.clientScoringRules[room]?.[ruleKey] || {};
+        const globalRule = this.globalScoringRules[room]?.[ruleKey] || {};
+        const excludedValues = clientRule.excluded_values || globalRule.excluded_values || [];
+        const globalExcludedValues = globalRule.excluded_values || [];
+        const exclusionPoints = clientRule.exclusion_points ?? globalRule.exclusion_points ?? -200;
         
         return `
             <div class="industry-editor">
@@ -937,47 +962,104 @@ export default class ClientSettingsManager extends EventEmitter {
                            class="search-input" />
                 </div>
                 
-                <div class="editor-section">
-                    <h4>Selected Industries (${currentValues.length})</h4>
+                <!-- Match Industries Section -->
+                <div class="editor-section match-section">
+                    <h4><i class="fas fa-check-circle" style="color: #28a745;"></i> Match Industries (${currentValues.length})</h4>
+                    <p class="section-help">Visitors from these industries will receive positive points</p>
                     <div class="values-list" id="current-values-list">
                         ${currentValues.length > 0 ? currentValues.map(v => `
                             <div class="value-chip">
                                 <span>${v.replace('|', ' → ')}</span>
-                                <button type="button" class="remove-value" data-value="${v}">
+                                <button type="button" class="remove-value" data-value="${v}" data-mode="match">
                                     <i class="fas fa-times"></i>
                                 </button>
                             </div>
-                        `).join('') : '<div class="empty-message">No industries selected</div>'}
+                        `).join('') : '<div class="empty-message">No industries selected - all industries will qualify</div>'}
                     </div>
                 </div>
                 
+                <!-- Exclude Industries Section -->
+                <div class="editor-section exclude-section">
+                    <div class="exclude-header">
+                        <h4><i class="fas fa-ban" style="color: #dc3545;"></i> Exclude Industries (${excludedValues.length})</h4>
+                        <div class="exclusion-points-config">
+                            <label>Penalty:</label>
+                            <input type="number" 
+                                   id="exclusion-points-input"
+                                   value="${exclusionPoints}" 
+                                   max="0" 
+                                   step="10" />
+                        </div>
+                    </div>
+                    <p class="section-help section-help-warning">Double-click on an industry to add them to the exclusion list. Visitors from these industries will be disqualified and hidden from dashboard</p>
+                    <div class="values-list excluded-values-list" id="excluded-values-list">
+                        ${excludedValues.length > 0 ? excludedValues.map(v => `
+                            <div class="value-chip excluded">
+                                <span>${v.replace('|', ' → ')}</span>
+                                <button type="button" class="remove-value" data-value="${v}" data-mode="exclude">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        `).join('') : '<div class="empty-message">No industries excluded</div>'}
+                    </div>
+                </div>
+                
+                <!-- Available Industries -->
                 <div class="editor-section">
                     <h4>Available Industries</h4>
                     <div class="industry-list" id="industry-list">
                         ${Object.keys(allIndustries).map(category => `
                             <div class="industry-category">
                                 <h5>${category}</h5>
-                                ${allIndustries[category].map(sub => {
-                                    const value = `${category}|${sub}`;
-                                    const isSelected = currentValues.includes(value);
-                                    return `
-                                        <div class="preset-chip ${isSelected ? 'selected' : ''}" data-value="${value}">
-                                            <span>${sub}</span>
-                                            ${isSelected ? '<i class="fas fa-check"></i>' : '<i class="fas fa-plus"></i>'}
-                                        </div>
-                                    `;
-                                }).join('')}
+                                <div class="industry-chips">
+                                    ${allIndustries[category].map(sub => {
+                                        const value = `${category}|${sub}`;
+                                        const isMatched = currentValues.includes(value);
+                                        const isExcluded = excludedValues.includes(value);
+                                        let chipClass = 'preset-chip';
+                                        let icon = '<i class="fas fa-plus"></i>';
+                                        
+                                        if (isMatched) {
+                                            chipClass += ' selected';
+                                            icon = '<i class="fas fa-check"></i>';
+                                        } else if (isExcluded) {
+                                            chipClass += ' excluded';
+                                            icon = '<i class="fas fa-ban"></i>';
+                                        }
+                                        
+                                        return `
+                                            <div class="${chipClass}" data-value="${value}">
+                                                <span>${sub}</span>
+                                                ${icon}
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
                             </div>
                         `).join('')}
                     </div>
                 </div>
                 
-                ${globalValues.length > 0 ? `
+                <!-- Global Reference -->
+                ${globalValues.length > 0 || globalExcludedValues.length > 0 ? `
                     <div class="editor-section global-reference">
-                        <h4>Global Default Industries</h4>
-                        <div class="global-values-display">
-                            ${globalValues.map(v => `<span class="global-chip">${v.replace('|', ' → ')}</span>`).join('')}
-                        </div>
+                        <h4>Global Defaults</h4>
+                        ${globalValues.length > 0 ? `
+                            <div class="global-subsection">
+                                <span class="global-label">Match:</span>
+                                <div class="global-values-display">
+                                    ${globalValues.map(v => `<span class="global-chip">${v.replace('|', ' → ')}</span>`).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        ${globalExcludedValues.length > 0 ? `
+                            <div class="global-subsection">
+                                <span class="global-label global-label-exclude">Exclude:</span>
+                                <div class="global-values-display">
+                                    ${globalExcludedValues.map(v => `<span class="global-chip excluded">${v.replace('|', ' → ')}</span>`).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
                     </div>
                 ` : ''}
             </div>
@@ -1065,7 +1147,7 @@ export default class ClientSettingsManager extends EventEmitter {
     }
     
     /**
-     * Attach editor listeners
+     * Attach editor-specific listeners
      */
     attachEditorListeners(ruleKey) {
         const modalBody = this.editingModal.querySelector('#editing-modal-body');
@@ -1074,17 +1156,27 @@ export default class ClientSettingsManager extends EventEmitter {
         modalBody.querySelectorAll('.remove-value').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const value = e.currentTarget.dataset.value;
-                this.removeValueFromEditor(value);
+                const mode = e.currentTarget.dataset.mode || 'match';
+                this.removeValueFromEditor(value, mode);
             });
         });
         
-        // Add value buttons (preset chips)
-        modalBody.querySelectorAll('.preset-chip').forEach(chip => {
-            chip.addEventListener('click', (e) => {
-                const value = e.currentTarget.dataset.value;
-                this.toggleValueInEditor(value);
+        // Preset chips - handle industry with mode cycling
+        if (ruleKey === 'industry_alignment') {
+            modalBody.querySelectorAll('.preset-chip').forEach(chip => {
+                chip.addEventListener('click', (e) => {
+                    const value = e.currentTarget.dataset.value;
+                    this.cycleIndustryState(value, e.currentTarget);
+                });
             });
-        });
+        } else {
+            modalBody.querySelectorAll('.preset-chip').forEach(chip => {
+                chip.addEventListener('click', (e) => {
+                    const value = e.currentTarget.dataset.value;
+                    this.toggleValueInEditor(value);
+                });
+            });
+        }
         
         // Key pages specific
         if (ruleKey === 'key_page_visit') {
@@ -1201,6 +1293,113 @@ export default class ClientSettingsManager extends EventEmitter {
     }
     
     /**
+     * Cycle industry state: none -> match -> exclude -> none
+     */
+    cycleIndustryState(value, chipElement) {
+        const isMatched = chipElement.classList.contains('selected');
+        const isExcluded = chipElement.classList.contains('excluded');
+        
+        if (!isMatched && !isExcluded) {
+            // Add to match
+            this.addValueToEditor(value, 'match');
+            chipElement.classList.add('selected');
+            chipElement.classList.remove('excluded');
+            chipElement.querySelector('i').className = 'fas fa-check';
+        } else if (isMatched) {
+            // Move to exclude
+            this.removeValueFromEditor(value, 'match');
+            this.addValueToEditor(value, 'exclude');
+            chipElement.classList.remove('selected');
+            chipElement.classList.add('excluded');
+            chipElement.querySelector('i').className = 'fas fa-ban';
+        } else {
+            // Remove from exclude
+            this.removeValueFromEditor(value, 'exclude');
+            chipElement.classList.remove('excluded');
+            chipElement.querySelector('i').className = 'fas fa-plus';
+        }
+    }
+    
+    /**
+     * Add value to editor (with mode support)
+     */
+    addValueToEditor(value, mode = 'match') {
+        const listId = mode === 'exclude' ? '#excluded-values-list' : '#current-values-list';
+        const currentList = this.editingModal.querySelector(listId);
+        if (!currentList) return;
+        
+        const emptyMessage = currentList.querySelector('.empty-message');
+        if (emptyMessage) {
+            emptyMessage.remove();
+        }
+        
+        const displayValue = value.includes('|') ? value.replace('|', ' → ') : value;
+        
+        const chip = document.createElement('div');
+        chip.className = mode === 'exclude' ? 'value-chip excluded' : 'value-chip';
+        chip.innerHTML = `
+            <span>${displayValue}</span>
+            <button type="button" class="remove-value" data-value="${value}" data-mode="${mode}">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        
+        currentList.appendChild(chip);
+        
+        // Attach remove listener
+        chip.querySelector('.remove-value').addEventListener('click', (e) => {
+            this.removeValueFromEditor(value, mode);
+        });
+        
+        // Update preset chip state
+        const presetChip = this.editingModal.querySelector(`.preset-chip[data-value="${value}"]`);
+        if (presetChip) {
+            if (mode === 'exclude') {
+                presetChip.classList.add('excluded');
+                presetChip.classList.remove('selected');
+                presetChip.querySelector('i').className = 'fas fa-ban';
+            } else {
+                presetChip.classList.add('selected');
+                presetChip.classList.remove('excluded');
+                presetChip.querySelector('i').className = 'fas fa-check';
+            }
+        }
+    }
+    
+    /**
+     * Remove value from editor (with mode support)
+     */
+    removeValueFromEditor(value, mode = 'match') {
+        const listId = mode === 'exclude' ? '#excluded-values-list' : '#current-values-list';
+        const currentList = this.editingModal.querySelector(listId);
+        if (!currentList) return;
+        
+        const chips = currentList.querySelectorAll('.value-chip');
+        
+        chips.forEach(chip => {
+            const chipValue = chip.querySelector('span').textContent;
+            const normalizedValue = value.includes('|') ? value.replace('|', ' → ') : value;
+            
+            if (chipValue === normalizedValue || chipValue === value) {
+                chip.remove();
+            }
+        });
+        
+        // Show empty message if no values
+        if (currentList.querySelectorAll('.value-chip').length === 0) {
+            const emptyText = mode === 'exclude' ? 'No industries excluded' : 'No industries selected - all industries will qualify';
+            currentList.innerHTML = `<div class="empty-message">${emptyText}</div>`;
+        }
+        
+        // Update preset chip state
+        const presetChip = this.editingModal.querySelector(`.preset-chip[data-value="${value}"]`);
+        if (presetChip) {
+            presetChip.classList.remove('selected', 'excluded');
+            presetChip.querySelector('i').className = 'fas fa-plus';
+        }
+    }
+
+    /**
      * Filter industries by search
      */
     filterIndustries(searchTerm) {
@@ -1229,14 +1428,6 @@ export default class ClientSettingsManager extends EventEmitter {
         if (!this.currentEditingRule) return;
         
         const { room, ruleKey } = this.currentEditingRule;
-        const currentList = this.editingModal.querySelector('#current-values-list');
-        const chips = currentList.querySelectorAll('.value-chip');
-        
-        const values = Array.from(chips).map(chip => {
-            const text = chip.querySelector('span').textContent;
-            // Convert display format back to storage format
-            return text.replace(' → ', '|');
-        });
         
         // Update client rules
         if (!this.clientScoringRules[room]) {
@@ -1246,18 +1437,60 @@ export default class ClientSettingsManager extends EventEmitter {
             this.clientScoringRules[room][ruleKey] = {};
         }
         
-        // Store in correct field
-        if (ruleKey === 'key_page_visit') {
-            this.clientScoringRules[room][ruleKey].key_pages = values;
+        // Handle industry_alignment specially
+        if (ruleKey === 'industry_alignment') {
+            // Get match values
+            const matchList = this.editingModal.querySelector('#current-values-list');
+            const matchChips = matchList?.querySelectorAll('.value-chip') || [];
+            const matchValues = Array.from(matchChips).map(chip => {
+                const text = chip.querySelector('span').textContent;
+                return text.replace(' → ', '|');
+            });
+            
+            // Get exclude values
+            const excludeList = this.editingModal.querySelector('#excluded-values-list');
+            const excludeChips = excludeList?.querySelectorAll('.value-chip') || [];
+            const excludedValues = Array.from(excludeChips).map(chip => {
+                const text = chip.querySelector('span').textContent;
+                return text.replace(' → ', '|');
+            });
+            
+            // Get exclusion points
+            const exclusionPointsInput = this.editingModal.querySelector('#exclusion-points-input');
+            const exclusionPoints = parseInt(exclusionPointsInput?.value) || -200;
+            
+            this.clientScoringRules[room][ruleKey].values = matchValues;
+            this.clientScoringRules[room][ruleKey].excluded_values = excludedValues;
+            this.clientScoringRules[room][ruleKey].exclusion_points = exclusionPoints;
         } else {
-            this.clientScoringRules[room][ruleKey].values = values;
+            // Original logic for other rules
+            const currentList = this.editingModal.querySelector('#current-values-list');
+            const chips = currentList?.querySelectorAll('.value-chip') || [];
+            
+            const values = Array.from(chips).map(chip => {
+                const text = chip.querySelector('span').textContent;
+                return text.replace(' → ', '|');
+            });
+            
+            // Store in correct field
+            if (ruleKey === 'key_page_visit') {
+                this.clientScoringRules[room][ruleKey].key_pages = values;
+            } else {
+                this.clientScoringRules[room][ruleKey].values = values;
+            }
         }
         
-        // Re-render rules
-        this.renderClientScoringRules();
+        // Re-render the room rules
+        this.renderClientScoringRules(this.currentPanelRoom);
         
         // Close modal
         this.closeEditingModal();
+        
+        // Show feedback
+        this.emit('notification', {
+            type: 'info',
+            message: 'Values updated. Click Save to apply changes.'
+        });
     }
     
     /**

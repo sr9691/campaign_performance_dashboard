@@ -38,6 +38,7 @@ class Jobs_Controller extends WP_REST_Controller {
     
     private const MODE_INCREMENTAL = 'incremental';
     private const MODE_FULL = 'full';
+    private const MODE_CLIENT = 'client';
     
     private const ROOM_HIERARCHY = [
         'none'     => 0,
@@ -160,12 +161,12 @@ class Jobs_Controller extends WP_REST_Controller {
             [
                 'methods'             => WP_REST_Server::CREATABLE,
                 'callback'            => [$this, 'run_nightly_job'],
-                'permission_callback' => [$this, 'check_api_key'],
+                'permission_callback' => [$this, 'check_api_key_or_admin'],
                 'args'                => [
                     'mode' => [
                         'required'          => false,
                         'type'              => 'string',
-                        'enum'              => [self::MODE_INCREMENTAL, self::MODE_FULL],
+                        'enum'              => [self::MODE_INCREMENTAL, self::MODE_FULL, self::MODE_CLIENT],
                         'default'           => self::MODE_INCREMENTAL,
                         'sanitize_callback' => 'sanitize_text_field',
                     ],
@@ -173,6 +174,11 @@ class Jobs_Controller extends WP_REST_Controller {
                         'required'          => false,
                         'type'              => 'boolean',
                         'default'           => false,
+                    ],
+                    'client_id' => [
+                        'required'          => false,
+                        'type'              => 'integer',
+                        'sanitize_callback' => 'absint',
                     ],
                 ],
             ],
@@ -283,6 +289,7 @@ class Jobs_Controller extends WP_REST_Controller {
     /**
      * Run nightly job (all operations in sequence)
      * FIXED: Now passes mode to all internal methods
+     * ADDED: client_id parameter for client-specific processing
      *
      * @param WP_REST_Request $request Request object.
      * @return WP_REST_Response|WP_Error Response with stats or error
@@ -293,10 +300,16 @@ class Jobs_Controller extends WP_REST_Controller {
         // Get mode from request, check force_full parameter
         $mode = $request->get_param('mode') ?: self::MODE_INCREMENTAL;
         $force_full = $request->get_param('force_full');
+        $client_id = $request->get_param('client_id');
         
         // Override mode if force_full is true
         if ($force_full === true || $force_full === 'true' || $force_full === '1') {
             $mode = self::MODE_FULL;
+        }
+        
+        // If client_id is provided, set mode to client
+        if ($client_id) {
+            $mode = self::MODE_CLIENT;
         }
         
         // FIXED: Store mode for access by internal methods
@@ -304,6 +317,23 @@ class Jobs_Controller extends WP_REST_Controller {
         
         // Log comprehensive job start with system state
         global $wpdb;
+        
+        // Validate client exists if client_id provided
+        if ($client_id) {
+            $client_exists = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM {$wpdb->prefix}cpd_clients WHERE id = %d AND subscription_tier = 'premium'",
+                $client_id
+            ));
+            
+            if (!$client_exists) {
+                return new WP_Error(
+                    'invalid_client',
+                    'Client not found or not premium',
+                    ['status' => 404]
+                );
+            }
+        }
+        
         $system_stats = [
             'total_visitors' => $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->prefix}rtr_prospects"),
             'visitors_with_campaigns' => $wpdb->get_var("SELECT COUNT(DISTINCT visitor_id) FROM {$wpdb->prefix}cpd_visitor_campaigns"),
@@ -313,8 +343,9 @@ class Jobs_Controller extends WP_REST_Controller {
         ];
         
         $this->log_job('nightly_job_start', sprintf(
-            'Starting nightly job in %s mode at %s. System state: %s. Parameters: %s',
+            'Starting nightly job in %s mode%s at %s. System state: %s. Parameters: %s',
             $mode,
+            $client_id ? " for client {$client_id}" : '',
             current_time('mysql'),
             json_encode($system_stats),
             json_encode($request->get_params())
@@ -323,7 +354,7 @@ class Jobs_Controller extends WP_REST_Controller {
         try {
             // Step 1: Match campaigns (Phase 3)
             $this->log_job('step_1_start', 'Starting campaign matching...');
-            $match_result = $this->match_campaigns_internal($mode);
+            $match_result = $this->match_campaigns_internal($mode, $client_id);
             $this->job_stats['campaigns_matched'] = $match_result['matched'] ?? 0;
             $this->log_job('step_1_complete', sprintf(
                 'Campaign matching complete. Matched: %d visitors to campaigns, Skipped: %d',
@@ -334,7 +365,7 @@ class Jobs_Controller extends WP_REST_Controller {
             // Step 2: Calculate scores (Scoring System)
             // FIXED: Pass mode to calculate_scores_internal
             $this->log_job('step_2_start', sprintf('Starting score calculation in %s mode...', $mode));
-            $score_result = $this->calculate_scores_internal($mode);
+            $score_result = $this->calculate_scores_internal($mode, $client_id);
             $this->job_stats['scores_calculated'] = $score_result['calculated'] ?? 0;
             $this->log_job('step_2_complete', sprintf(
                 'Score calculation complete. Calculated: %d scores out of %d visitors',
@@ -345,7 +376,7 @@ class Jobs_Controller extends WP_REST_Controller {
             // Step 3: Create/update prospects
             // FIXED: Pass mode to create_prospects_internal
             $this->log_job('step_3_start', sprintf('Starting prospect creation/update in %s mode...', $mode));
-            $prospect_result = $this->create_prospects_internal(null, $mode);
+            $prospect_result = $this->create_prospects_internal($client_id, $mode);
             $this->job_stats['prospects_created'] = $prospect_result['created'] ?? 0;
             $this->job_stats['prospects_updated'] = $prospect_result['updated'] ?? 0;
             $this->job_stats['prospects_skipped'] = $prospect_result['skipped'] ?? 0;
@@ -358,7 +389,7 @@ class Jobs_Controller extends WP_REST_Controller {
 
             // Step 4: Assign rooms
             $this->log_job('step_4_start', 'Starting room assignments...');
-            $room_result = $this->assign_rooms_internal();
+            $room_result = $this->assign_rooms_internal($client_id);
             $this->job_stats['room_transitions'] = $room_result['transitions'] ?? 0;
             $this->job_stats['room_transitions_delayed'] = $room_result['delayed'] ?? 0;
             $this->log_job('step_4_complete', sprintf(
@@ -387,10 +418,11 @@ class Jobs_Controller extends WP_REST_Controller {
             ));
 
             return new WP_REST_Response([
-                'success'  => true,
-                'duration' => $duration,
-                'stats'    => $this->job_stats,
-                'mode'     => $mode,
+                'success'   => true,
+                'duration'  => $duration,
+                'stats'     => $this->job_stats,
+                'mode'      => $mode,
+                'client_id' => $client_id,
             ], 200);
 
         } catch (\Exception $e) {
@@ -531,10 +563,11 @@ class Jobs_Controller extends WP_REST_Controller {
     /**
      * Internal campaign matching logic
      *
-     * @param string $mode Processing mode (incremental or full).
+     * @param string $mode Processing mode (incremental, full, or client).
+     * @param int|null $client_id Optional client filter for client mode.
      * @return array{matched: int, skipped: int, total: int} Results.
      */
-    private function match_campaigns_internal(string $mode = self::MODE_INCREMENTAL): array {
+    private function match_campaigns_internal(string $mode = self::MODE_INCREMENTAL, ?int $client_id = null): array {
         if (!$this->campaign_matcher) {
             $this->log_job('campaign_match_error', 'Campaign matcher not initialized', 'error');
             throw new \Exception('Campaign matcher not available');
@@ -545,6 +578,12 @@ class Jobs_Controller extends WP_REST_Controller {
 
         global $wpdb;
 
+        // Build client filter
+        $client_where = '';
+        if ($client_id) {
+            $client_where = $wpdb->prepare(' AND cs.client_id = %d', $client_id);
+        }
+
         // Get only PREMIUM CLIENT campaigns
         $premium_campaign_ids = $wpdb->get_col("
             SELECT cs.id 
@@ -554,6 +593,7 @@ class Jobs_Controller extends WP_REST_Controller {
             AND cl.rtr_enabled = 1
             AND (cs.start_date IS NULL OR cs.start_date <= CURDATE())
             AND (cs.end_date IS NULL OR cs.end_date >= CURDATE())
+            {$client_where}
         ");
 
         if (empty($premium_campaign_ids)) {
@@ -644,10 +684,11 @@ class Jobs_Controller extends WP_REST_Controller {
      * Internal score calculation logic
      * FIXED: Added mode parameter - full mode recalculates ALL visitors
      *
-     * @param string $mode Processing mode (incremental or full).
+     * @param string $mode Processing mode (incremental, full, or client).
+     * @param int|null $client_id Optional client filter for client mode.
      * @return array{calculated: int, total: int} Results.
      */
-    private function calculate_scores_internal(string $mode = self::MODE_INCREMENTAL): array {
+    private function calculate_scores_internal(string $mode = self::MODE_INCREMENTAL, ?int $client_id = null): array {
         global $wpdb;
 
         $calculated = 0;
@@ -666,11 +707,21 @@ class Jobs_Controller extends WP_REST_Controller {
             ];
         }
 
+        // Build client filter
+        $client_where = '';
+        if ($client_id) {
+            $client_where = $wpdb->prepare(' AND cs.client_id = %d', $client_id);
+        }
+
         // FIXED: Build WHERE clause based on mode
-        if ($mode === self::MODE_FULL) {
-            // Full mode: recalculate ALL visitors with campaign assignments
-            $where_conditions = "1=1"; // No filtering
-            $this->log_job('score_calculation_mode', 'FULL mode: Will recalculate ALL visitor scores');
+        if ($mode === self::MODE_FULL || $mode === self::MODE_CLIENT) {
+            // Full/Client mode: recalculate ALL visitors (for the client if specified)
+            $where_conditions = "1=1";
+            $this->log_job('score_calculation_mode', sprintf(
+                '%s mode: Will recalculate ALL visitor scores%s',
+                strtoupper($mode),
+                $client_id ? " for client {$client_id}" : ''
+            ));
         } else {
             // Incremental mode: Only recalculate visitors that need it
             $where_conditions = "(v.lead_score IS NULL 
@@ -690,6 +741,7 @@ class Jobs_Controller extends WP_REST_Controller {
             WHERE {$where_conditions}
             AND cl.subscription_tier = 'premium'
             AND cl.rtr_enabled = 1
+            {$client_where}
         ");
 
         $total = count($visitors);
@@ -970,13 +1022,19 @@ class Jobs_Controller extends WP_REST_Controller {
     /**
      * Internal room assignment logic
      *
+     * @param int|null $client_id Optional client filter for client mode.
      * @return array{transitions: int, delayed: int, total: int} Results.
      */
-    private function assign_rooms_internal(): array {
+    private function assign_rooms_internal(?int $client_id = null): array {
         global $wpdb;
-
         $transitions = 0;
         $delayed = 0;
+
+        // Build client filter
+        $client_where = '';
+        if ($client_id) {
+            $client_where = $wpdb->prepare(' AND cs.client_id = %d', $client_id);
+        }
 
         // Get all active prospects
         $prospects = $wpdb->get_results("
@@ -989,11 +1047,13 @@ class Jobs_Controller extends WP_REST_Controller {
             AND p.sales_handoff_at IS NULL
             AND cl.subscription_tier = 'premium'
             AND cl.rtr_enabled = 1
+            {$client_where}
         ");
 
         $this->log_job('room_assignment_start', sprintf(
-            'Starting room assignment for %d active prospects',
-            count($prospects)
+            'Starting room assignment for %d active prospects%s',
+            count($prospects),
+            $client_id ? " (client {$client_id})" : ''
         ));
 
         foreach ($prospects as $prospect) {
@@ -1341,6 +1401,23 @@ class Jobs_Controller extends WP_REST_Controller {
             $prefix = self::LOG_PREFIX_JOB . ' ' . strtoupper($level) . ']';
             //error_log("{$prefix} {$action_type}: {$description}");
         }
+    }
+
+    /**
+     * Check API key OR admin permission
+     * Allows both API key auth (for Make.com) and admin auth (for UI)
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return bool|WP_Error True if authenticated, WP_Error otherwise.
+     */
+    public function check_api_key_or_admin($request): bool|WP_Error {
+        // First check if user is admin
+        if (current_user_can('manage_options')) {
+            return true;
+        }
+        
+        // Fall back to API key check
+        return $this->check_api_key($request);
     }
 
     /**

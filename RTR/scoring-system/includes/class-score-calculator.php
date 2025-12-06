@@ -111,22 +111,53 @@ class RTR_Score_Calculator {
         );
 
         $details = array();
+        $disqualified = false;
 
-        // Calculate with detailed breakdown if requested
+        // Calculate problem score first - check for disqualification
         if ($return_breakdown) {
             $problem_result = $this->calculate_problem_score($visitor, $rules['problem'] ?? array(), $campaign_id, true);
+            $breakdown['problem'] = $problem_result['score'];
+            $details['problem'] = $problem_result['details'];
+            $disqualified = !empty($problem_result['disqualified']);
+        } else {
+            $problem_result = $this->calculate_problem_score($visitor, $rules['problem'] ?? array(), $campaign_id, true);
+            $breakdown['problem'] = $problem_result['score'];
+            $disqualified = !empty($problem_result['disqualified']);
+        }
+
+        // If disqualified, skip remaining scoring and mark visitor
+        if ($disqualified) {
+            $total_score = $breakdown['problem']; // Will be negative
+            $current_room = 'disqualified';
+            
+            // Update visitor with disqualified status
+            $this->update_visitor_score($visitor_id, $total_score, $current_room, true);
+
+            $result = array(
+                'total_score' => $total_score,
+                'breakdown' => $breakdown,
+                'current_room' => $current_room,
+                'disqualified' => true,
+            );
+
+            if ($return_breakdown && !empty($details)) {
+                $result['details'] = $details;
+            }
+
+            return $result;
+        }
+
+        // Continue with solution and offer scoring for non-disqualified visitors
+        if ($return_breakdown) {
             $solution_result = $this->calculate_solution_score($visitor, $rules['solution'] ?? array(), $campaign_id, $email_stats, true);
             $offer_result = $this->calculate_offer_score($visitor, $rules['offer'] ?? array(), $campaign_id, true);
             
-            $breakdown['problem'] = $problem_result['score'];
             $breakdown['solution'] = $solution_result['score'];
             $breakdown['offer'] = $offer_result['score'];
             
-            $details['problem'] = $problem_result['details'];
             $details['solution'] = $solution_result['details'];
             $details['offer'] = $offer_result['details'];
         } else {
-            $breakdown['problem'] = $this->calculate_problem_score($visitor, $rules['problem'] ?? array(), $campaign_id);
             $breakdown['solution'] = $this->calculate_solution_score($visitor, $rules['solution'] ?? array(), $campaign_id, $email_stats);
             $breakdown['offer'] = $this->calculate_offer_score($visitor, $rules['offer'] ?? array(), $campaign_id);
         }
@@ -140,12 +171,13 @@ class RTR_Score_Calculator {
         $current_room = $this->determine_room($total_score, $client_id);
         
         // Update score - never archive, just store the threshold status
-        $this->update_visitor_score($visitor_id, $total_score, $current_room);
+        $this->update_visitor_score($visitor_id, $total_score, $current_room, false);
 
         $result = array(
             'total_score' => $total_score,
             'breakdown' => $breakdown,
             'current_room' => $current_room,
+            'disqualified' => false,
         );
 
         // Add details if requested
@@ -368,11 +400,35 @@ class RTR_Score_Calculator {
             'revenue' => 0,
             'company_size' => 0,
             'industry_alignment' => 0,
+            'industry_exclusion' => 0,
             'target_states' => 0,
             'visited_target_pages' => 0,
             'multiple_visits' => 0,
-            'role_match' => 0
+            'role_match' => 0,
+            'disqualified' => false,
+            'disqualified_reason' => ''
         );
+        
+        // INDUSTRY EXCLUSION CHECK - Must be first, skips all other scoring if matched
+        if (!empty($rules['industry_alignment']['enabled']) && !empty($rules['industry_alignment']['excluded_values'])) {
+            if ($this->check_industry_match($visitor->industry ?? '', $rules['industry_alignment']['excluded_values'])) {
+                $exclusion_points = intval($rules['industry_alignment']['exclusion_points'] ?? -200);
+                $score = $exclusion_points;
+                
+                if ($return_details) {
+                    $details['industry_exclusion'] = $exclusion_points;
+                    $details['disqualified'] = true;
+                    $details['disqualified_reason'] = 'industry_excluded';
+                    return array(
+                        'score' => $score,
+                        'details' => $details,
+                        'disqualified' => true
+                    );
+                }
+                
+                return $score;
+            }
+        }
         
         // Revenue match
         if (!empty($rules['revenue']['enabled']) && !empty($rules['revenue']['values'])) {
@@ -396,7 +452,7 @@ class RTR_Score_Calculator {
             }
         }
         
-        // Industry alignment
+        // Industry alignment (positive match)
         if (!empty($rules['industry_alignment']['enabled']) && !empty($rules['industry_alignment']['values'])) {
             if ($this->check_industry_match($visitor->industry ?? '', $rules['industry_alignment']['values'])) {
                 $points = intval($rules['industry_alignment']['points'] ?? 0);
@@ -418,7 +474,7 @@ class RTR_Score_Calculator {
             }
         }
         
-        // FIX #1: Visited target pages - use content_links table
+        // Visited target pages - use content_links table
         if (!empty($rules['visited_target_pages']['enabled']) && $campaign_id) {
             $points = $this->calculate_content_link_score(
                 $visitor->recent_page_urls ?? '',
@@ -458,7 +514,8 @@ class RTR_Score_Calculator {
         if ($return_details) {
             return array(
                 'score' => $score,
-                'details' => $details
+                'details' => $details,
+                'disqualified' => false
             );
         }
         
@@ -1227,17 +1284,24 @@ class RTR_Score_Calculator {
     
     /**
      * Update visitor score in database
+     * 
+     * @param int $visitor_id Visitor ID
+     * @param int $score Lead score
+     * @param string $current_room Current room assignment
+     * @param bool $disqualified Whether visitor is disqualified
+     * @return bool Success
      */
-    private function update_visitor_score($visitor_id, $score, $current_room) {
+    private function update_visitor_score($visitor_id, $score, $current_room, $disqualified = false) {
         $result = $this->wpdb->update(
             $this->tables['visitors'],
             array(
                 'lead_score' => $score,
                 'current_room' => $current_room,
+                'is_disqualified' => $disqualified ? 1 : 0,
                 'score_calculated_at' => current_time('mysql')
             ),
             array('id' => $visitor_id),
-            array('%d', '%s', '%s'),
+            array('%d', '%s', '%d', '%s'),
             array('%d')
         );
         

@@ -267,13 +267,12 @@ class ScoringRulesManager {
         `;
     }
     
-    /**
-     * Render industry rule with modal selector
-     */
     renderIndustryRule(ruleKey, label, rule, room) {
         const enabled = rule.enabled !== false;
         const points = rule.points || 0;
         const values = rule.values || [];
+        const excludedValues = rule.excluded_values || [];
+        const exclusionPoints = rule.exclusion_points ?? -200;
         
         return `
             <div class="rule-card ${!enabled ? 'disabled' : ''}" data-rule="${ruleKey}">
@@ -294,10 +293,10 @@ class ScoringRulesManager {
                         </label>
                     </div>
                 </div>
-                <div class="rule-body">
+                <div class="rule-body rule-body-stacked">
                     <div class="rule-config">
                         <div class="config-group">
-                            <label>Points</label>
+                            <label>Points for Match</label>
                             <input type="number" 
                                    data-room="${room}" 
                                    data-rule="${ruleKey}" 
@@ -307,24 +306,72 @@ class ScoringRulesManager {
                                    max="100" />
                         </div>
                     </div>
-                    <div class="rule-values">
+                    
+                    <!-- Match Industries Section -->
+                    <div class="rule-values industry-match-section">
                         <div class="values-header">
-                            <h5>Selected Industries</h5>
+                            <h5><i class="fas fa-check-circle" style="color: #28a745;"></i> Match Industries</h5>
                             <button type="button" 
                                     class="btn-industry-selector" 
                                     data-room="${room}" 
-                                    data-rule="${ruleKey}">
-                                <i class="fas fa-industry"></i>
-                                Select Industries
+                                    data-rule="${ruleKey}"
+                                    data-mode="match">
+                                <i class="fas fa-plus"></i>
+                                Add Industries
                             </button>
                         </div>
-                        <div class="values-list" data-room="${room}" data-rule="${ruleKey}">
+                        <div class="values-list" data-room="${room}" data-rule="${ruleKey}" data-mode="match">
                             ${values.length > 0 ? values.map(v => `
                                 <div class="value-chip">
                                     <span>${v.replace('|', ' → ')}</span>
-                                    <button type="button" data-value="${v}">&times;</button>
+                                    <button type="button" data-value="${v}" data-mode="match">&times;</button>
                                 </div>
-                            `).join('') : '<div class="empty-values">No industries selected</div>'}
+                            `).join('') : '<div class="empty-values">No industries selected - all industries will qualify</div>'}
+                        </div>
+                    </div>
+                    
+                    <!-- Exclude Industries Section (Collapsible) -->
+                    <div class="rule-values industry-exclude-section">
+                        <div class="exclusion-header" data-room="${room}" data-rule="${ruleKey}">
+                            <div class="exclusion-toggle">
+                                <i class="fas fa-chevron-${excludedValues.length > 0 ? 'down' : 'right'} exclusion-chevron"></i>
+                                <h5><i class="fas fa-ban" style="color: #dc3545;"></i> Exclude Industries</h5>
+                                <span class="exclusion-count">${excludedValues.length > 0 ? `(${excludedValues.length})` : ''}</span>
+                            </div>
+                            <span class="exclusion-help">Visitors from these industries will be disqualified</span>
+                        </div>
+                        <div class="exclusion-content ${excludedValues.length > 0 ? 'expanded' : 'collapsed'}" data-room="${room}" data-rule="${ruleKey}">
+                            <div class="exclusion-config">
+                                <div class="config-group">
+                                    <label>Exclusion Penalty</label>
+                                    <input type="number" 
+                                           data-room="${room}" 
+                                           data-rule="${ruleKey}" 
+                                           data-field="exclusion_points" 
+                                           value="${exclusionPoints}" 
+                                           max="0" 
+                                           step="10" />
+                                    <span class="help-text">Negative points applied when excluded industry matches</span>
+                                </div>
+                            </div>
+                            <div class="exclusion-values-header">
+                                <button type="button" 
+                                        class="btn-industry-selector btn-exclude" 
+                                        data-room="${room}" 
+                                        data-rule="${ruleKey}"
+                                        data-mode="exclude">
+                                    <i class="fas fa-plus"></i>
+                                    Add Excluded Industries
+                                </button>
+                            </div>
+                            <div class="values-list excluded-values-list" data-room="${room}" data-rule="${ruleKey}" data-mode="exclude">
+                                ${excludedValues.length > 0 ? excludedValues.map(v => `
+                                    <div class="value-chip excluded">
+                                        <span>${v.replace('|', ' → ')}</span>
+                                        <button type="button" data-value="${v}" data-mode="exclude">&times;</button>
+                                    </div>
+                                `).join('') : '<div class="empty-values">No industries excluded</div>'}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -618,130 +665,135 @@ class ScoringRulesManager {
         `;
     }
     
-    /**
-     * Get default rule structure
+/**
+     * Get default rule configuration
      */
-    getDefaultRule(ruleKey, room = 'problem') {
+    getDefaultRule(ruleKey) {
         const defaults = {
-            problem: {
-                revenue: { enabled: true, points: 10, values: [] },
-                company_size: { enabled: true, points: 10, values: [] },
-                industry_alignment: { enabled: true, points: 15, values: [] },
-                target_states: { enabled: true, points: 5, values: [] },
-                visited_target_pages: { enabled: false, points: 10, max_points: 30 },
-                multiple_visits: { enabled: true, points: 5, minimum_visits: 2 },
-                role_match: { enabled: false, points: 5, match_type: 'contains', target_roles: {} },
-                minimum_threshold: { enabled: true, required_score: 20 }
-            },
-            solution: {
-                email_open: { enabled: true, points: 2 },
-                email_click: { enabled: true, points: 5 },
-                email_multiple_click: { enabled: true, points: 8, minimum_clicks: 2 },
-                page_visit: { enabled: true, points_per_visit: 3, max_points: 15 },
-                key_page_visit: { enabled: true, points: 10, key_pages: [] },
-                ad_engagement: { enabled: true, points: 5 }
-            },
-            offer: {
-                demo_request: { enabled: true, points: 25 },
-                contact_form: { enabled: true, points: 20 },
-                pricing_page: { enabled: true, points: 15 },
-                pricing_question: { enabled: true, points: 20 },
-                partner_referral: { enabled: true, points: 15 },
-                webinar_attendance: { enabled: false, points: 0 }
-            }
+            'revenue': { enabled: false, points: 0, values: [] },
+            'company_size': { enabled: false, points: 0, values: [] },
+            'industry_alignment': { enabled: false, points: 0, values: [], excluded_values: [], exclusion_points: -200 },
+            'target_states': { enabled: false, points: 0, values: [] },
+            'visited_target_pages': { enabled: false, points: 0 },
+            'multiple_visits': { enabled: false, points: 0, minimum_visits: 2 },
+            'role_match': { enabled: false, points: 0, target_roles: {}, match_type: 'contains' },
+            'minimum_threshold': { enabled: true, points: 0 },
+            'email_open': { enabled: false, points: 0 },
+            'email_click': { enabled: false, points: 0 },
+            'email_multiple_click': { enabled: false, points: 0, minimum_clicks: 2 },
+            'page_visit': { enabled: false, points: 0 },
+            'key_page_visit': { enabled: false, points: 0 },
+            'ad_engagement': { enabled: false, points: 0, source_patterns: [] },
+            'demo_request': { enabled: false, points: 0, detection_method: 'url_pattern', patterns: ['/demo', '/request'] },
+            'contact_form': { enabled: false, points: 0, detection_method: 'utm_parameter' },
+            'pricing_page': { enabled: false, points: 0 },
+            'pricing_question': { enabled: false, points: 0, detection_method: 'utm_parameter' },
+            'partner_referral': { enabled: false, points: 0 },
+            'webinar_attendance': { enabled: false, points: 0 }
         };
         
-        return defaults[room][ruleKey] || { enabled: false, points: 0 };
+        return defaults[ruleKey] || { enabled: false, points: 0 };
     }
     
     /**
-     * Attach rule-specific listeners
+     * Attach event listeners to rule inputs
      */
     attachRuleListeners(room) {
         const container = document.getElementById(`${room}-rules`);
         
         // Toggle switches
-        container.querySelectorAll('input[type="checkbox"][data-field="enabled"]').forEach(toggle => {
-            toggle.addEventListener('change', (e) => {
-                const ruleKey = e.target.dataset.rule;
+        container.querySelectorAll('input[type="checkbox"][data-field="enabled"]').forEach(input => {
+            input.addEventListener('change', (e) => {
+                const { room, rule } = e.target.dataset;
+                if (!this.rules[room][rule]) {
+                    this.rules[room][rule] = {};
+                }
+                this.rules[room][rule].enabled = e.target.checked;
+                
+                // Update card disabled state
                 const card = e.target.closest('.rule-card');
-                card.classList.toggle('disabled', !e.target.checked);
-                this.updateRuleField(room, ruleKey, 'enabled', e.target.checked);
+                if (card) {
+                    card.classList.toggle('disabled', !e.target.checked);
+                }
             });
         });
         
-        // Number inputs
+        // Number inputs (points, thresholds, etc)
         container.querySelectorAll('input[type="number"]').forEach(input => {
             input.addEventListener('change', (e) => {
-                const ruleKey = e.target.dataset.rule;
-                const field = e.target.dataset.field;
-                this.updateRuleField(room, ruleKey, field, parseInt(e.target.value));
-                
-                // Update points badge if it's the points field
-                if (field === 'points') {
-                    const card = e.target.closest('.rule-card');
-                    const badge = card.querySelector('.rule-points');
-                    if (badge) {
-                        badge.textContent = `+${e.target.value} points`;
-                    }
+                const { room, rule, field } = e.target.dataset;
+                if (!this.rules[room][rule]) {
+                    this.rules[room][rule] = {};
                 }
+                this.rules[room][rule][field] = parseInt(e.target.value) || 0;
             });
         });
         
-        // Select inputs
-        container.querySelectorAll('select[data-field]').forEach(select => {
+        // Select dropdowns
+        container.querySelectorAll('select').forEach(select => {
             select.addEventListener('change', (e) => {
-                const ruleKey = e.target.dataset.rule;
-                const field = e.target.dataset.field;
-                this.updateRuleField(room, ruleKey, field, e.target.value);
-            });
-        });
-        
-        // Add value buttons
-        container.querySelectorAll('[data-add-btn]').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const ruleKey = e.currentTarget.dataset.rule;
-                const input = container.querySelector(`[data-room="${room}"][data-rule="${ruleKey}"][data-add-value]`);
-                const value = input.value.trim();
-                
-                if (value) {
-                    this.addValue(room, ruleKey, value);
-                    input.value = '';
-                    if (input.tagName === 'SELECT') {
-                        input.selectedIndex = 0;
-                    }
+                const { room, rule, field } = e.target.dataset;
+                if (!this.rules[room][rule]) {
+                    this.rules[room][rule] = {};
                 }
+                this.rules[room][rule][field] = e.target.value;
             });
         });
         
-        // Remove value buttons
+        // Industry selector buttons (both match and exclude)
+        container.querySelectorAll('.btn-industry-selector').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const room = e.currentTarget.dataset.room;
+                const ruleKey = e.currentTarget.dataset.rule;
+                const mode = e.currentTarget.dataset.mode || 'match';
+                this.openIndustryModal(room, ruleKey, mode);
+            });
+        });
+        
+        // Value selector buttons (for other rules)
+        container.querySelectorAll('.btn-value-selector').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const { room, rule, label, values } = e.currentTarget.dataset;
+                const availableValues = JSON.parse(values);
+                this.openValueSelectorModal(room, rule, label, availableValues);
+            });
+        });
+        
+        // Value chip remove buttons (both match and exclude)
         container.querySelectorAll('.value-chip button').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const value = e.currentTarget.dataset.value;
+                const mode = e.currentTarget.dataset.mode || 'match';
                 const valuesList = e.currentTarget.closest('.values-list');
+                const room = valuesList.dataset.room;
                 const ruleKey = valuesList.dataset.rule;
-                this.removeValue(room, ruleKey, value);
+                
+                this.removeValue(room, ruleKey, value, mode);
             });
         });
         
-        // Industry selector buttons
-        container.querySelectorAll('.btn-industry-selector').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const ruleKey = e.currentTarget.dataset.rule;
-                this.openIndustryModal(room, ruleKey);
+        // Exclusion section toggle
+        container.querySelectorAll('.exclusion-header').forEach(header => {
+            header.addEventListener('click', (e) => {
+                // Don't toggle if clicking on a button
+                if (e.target.closest('button')) return;
+                
+                const room = header.dataset.room;
+                const ruleKey = header.dataset.rule;
+                const content = container.querySelector(`.exclusion-content[data-room="${room}"][data-rule="${ruleKey}"]`);
+                const chevron = header.querySelector('.exclusion-chevron');
+                
+                if (content) {
+                    content.classList.toggle('collapsed');
+                    content.classList.toggle('expanded');
+                    
+                    if (chevron) {
+                        chevron.classList.toggle('fa-chevron-right');
+                        chevron.classList.toggle('fa-chevron-down');
+                    }
+                }
             });
         });
-
-        // Value selector buttons (Revenue, Company Size, States)
-        container.querySelectorAll('.btn-value-selector').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const ruleKey = e.currentTarget.dataset.rule;
-                const label = e.currentTarget.dataset.label;
-                const availableValues = this.getAvailableValuesForRule(ruleKey);
-                this.openValueSelectorModal(room, ruleKey, label, availableValues);
-            });
-        });
-
     }
 
     /**
@@ -817,19 +869,18 @@ class ScoringRulesManager {
     /**
      * Remove value from rule
      */
-    removeValue(room, ruleKey, value) {
+    removeValue(room, ruleKey, value, mode = 'match') {
         if (!this.rules[room][ruleKey]) return;
         
-        // Determine the correct field name
-        let field = 'values';
-        if (ruleKey === 'key_page_visit') {
-            field = 'key_pages';
+        if (mode === 'exclude') {
+            const excludedValues = this.rules[room][ruleKey].excluded_values || [];
+            this.rules[room][ruleKey].excluded_values = excludedValues.filter(v => v !== value);
+        } else {
+            const values = this.rules[room][ruleKey].values || [];
+            this.rules[room][ruleKey].values = values.filter(v => v !== value);
         }
         
-        if (this.rules[room][ruleKey][field]) {
-            this.rules[room][ruleKey][field] = this.rules[room][ruleKey][field].filter(v => v !== value);
-            this.renderRoomRules(room);
-        }
+        this.renderRoomRules(room);
     }
     
     /**
@@ -872,15 +923,20 @@ class ScoringRulesManager {
             this.filterIndustries(e.target.value);
         });
         
-        // Category checkboxes
+        // Category checkboxes - only affect non-disabled subcategories
         this.industryModal.querySelectorAll('.category-checkbox input').forEach(cb => {
             cb.addEventListener('change', (e) => {
                 const category = e.target.dataset.category;
                 const checked = e.target.checked;
-                this.industryModal.querySelectorAll(`.subcategory-checkbox input[data-category="${category}"]`).forEach(sub => {
+                this.industryModal.querySelectorAll(`.subcategory-checkbox input[data-category="${category}"]:not(:disabled)`).forEach(sub => {
                     sub.checked = checked;
                 });
             });
+        });
+        
+        // Close on overlay click
+        this.industryModal.querySelector('.modal-overlay')?.addEventListener('click', () => {
+            this.closeIndustryModal();
         });
     }
 
@@ -1028,21 +1084,59 @@ class ScoringRulesManager {
     /**
      * Open industry modal
      */
-    openIndustryModal(room, ruleKey) {
-        this.currentIndustryTarget = { room, ruleKey };
+    openIndustryModal(room, ruleKey, mode = 'match') {
+        this.currentIndustryTarget = { room, ruleKey, mode };
         
-        // Pre-select current values
-        const currentValues = this.rules[room][ruleKey]?.values || [];
+        // Update modal title based on mode
+        const modalTitle = this.industryModal.querySelector('.modal-header h3');
+        if (modalTitle) {
+            modalTitle.textContent = mode === 'exclude' ? 'Select Industries to Exclude' : 'Select Industries to Match';
+        }
+        
+        // Add mode class to modal for styling
+        this.industryModal.classList.remove('mode-match', 'mode-exclude');
+        this.industryModal.classList.add(`mode-${mode}`);
+        
+        // Get current values for the mode being edited
+        const currentValues = mode === 'exclude' 
+            ? (this.rules[room][ruleKey]?.excluded_values || [])
+            : (this.rules[room][ruleKey]?.values || []);
+        
+        // Get the OTHER list's values to disable them
+        const otherValues = mode === 'exclude'
+            ? (this.rules[room][ruleKey]?.values || [])
+            : (this.rules[room][ruleKey]?.excluded_values || []);
+        
+        // Pre-select current values and disable items in the other list
         this.industryModal.querySelectorAll('.subcategory-checkbox input').forEach(cb => {
-            cb.checked = currentValues.includes(cb.dataset.value);
+            const value = cb.dataset.value;
+            const isInOtherList = otherValues.includes(value);
+            const isSelected = currentValues.includes(value);
+            
+            cb.checked = isSelected;
+            cb.disabled = isInOtherList;
+            
+            // Add visual indicator for disabled items
+            const label = cb.closest('.subcategory-checkbox');
+            if (label) {
+                label.classList.toggle('in-other-list', isInOtherList);
+                if (isInOtherList) {
+                    label.title = mode === 'exclude' 
+                        ? 'This industry is in the Match list' 
+                        : 'This industry is in the Exclude list';
+                } else {
+                    label.title = '';
+                }
+            }
         });
         
         // Update category checkboxes
         this.industryModal.querySelectorAll('.category-checkbox input').forEach(cb => {
             const category = cb.dataset.category;
-            const subcategories = this.industryModal.querySelectorAll(`.subcategory-checkbox input[data-category="${category}"]`);
-            const allChecked = Array.from(subcategories).every(sub => sub.checked);
-            cb.checked = allChecked;
+            const subcategories = this.industryModal.querySelectorAll(`.subcategory-checkbox input[data-category="${category}"]:not(:disabled)`);
+            const checkedSubs = Array.from(subcategories).filter(sub => sub.checked);
+            cb.checked = subcategories.length > 0 && checkedSubs.length === subcategories.length;
+            cb.indeterminate = checkedSubs.length > 0 && checkedSubs.length < subcategories.length;
         });
         
         this.industryModal.style.display = 'flex';
@@ -1064,17 +1158,22 @@ class ScoringRulesManager {
     saveIndustrySelection() {
         if (!this.currentIndustryTarget) return;
         
-        const { room, ruleKey } = this.currentIndustryTarget;
+        const { room, ruleKey, mode } = this.currentIndustryTarget;
         const selectedValues = [];
         
-        this.industryModal.querySelectorAll('.subcategory-checkbox input:checked').forEach(cb => {
+        this.industryModal.querySelectorAll('.subcategory-checkbox input:checked:not(:disabled)').forEach(cb => {
             selectedValues.push(cb.dataset.value);
         });
         
         if (!this.rules[room][ruleKey]) {
             this.rules[room][ruleKey] = {};
         }
-        this.rules[room][ruleKey].values = selectedValues;
+        
+        if (mode === 'exclude') {
+            this.rules[room][ruleKey].excluded_values = selectedValues;
+        } else {
+            this.rules[room][ruleKey].values = selectedValues;
+        }
         
         this.renderRoomRules(room);
         this.closeIndustryModal();

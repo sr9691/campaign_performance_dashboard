@@ -244,23 +244,23 @@
 
 .rtr-email-opened,
 .rtr-email-opened i {
-    color: #10b981;
+    color: #8b5cf6;
 }
 
 .rtr-email-ready,
 .rtr-email-ready i {
-    color: #10b981 !important;
+    color: #f59e0b !important;
 }
 
 .rtr-email-generating,
 .rtr-email-generating i {
-    color: #10b981 !important;
+    color: #3b82f6 !important;
     animation: spin 1s linear infinite;
 }
 
 .rtr-email-btn[data-email-state="ready"],
 .rtr-email-btn[data-email-state="ready"] i {
-    color: #10b981 !important;
+    color: #f59e0b !important;
 }
 
 .rtr-email-disabled {

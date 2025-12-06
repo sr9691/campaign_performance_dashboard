@@ -920,6 +920,228 @@
 }
 
 /* ===========================================
+   Industry Exclusion Section
+   =========================================== */
+
+.rule-body-stacked {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.industry-match-section {
+    padding: 16px;
+    background: #f8fff8;
+    border: 1px solid #c3e6c3;
+    border-radius: 8px;
+}
+
+.industry-match-section .values-header h5 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.industry-exclude-section {
+    border: 1px solid #f5c6cb;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.exclusion-header {
+    padding: 12px 16px;
+    background: #fff5f5;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: background 0.2s ease;
+}
+
+.exclusion-header:hover {
+    background: #ffecec;
+}
+
+.exclusion-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.exclusion-toggle h5 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #721c24;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.exclusion-chevron {
+    color: #721c24;
+    font-size: 12px;
+    transition: transform 0.2s ease;
+}
+
+.exclusion-count {
+    font-size: 12px;
+    color: #856404;
+    background: #fff3cd;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+.exclusion-help {
+    font-size: 11px;
+    color: #999;
+    margin-left: 22px;
+}
+
+.exclusion-content {
+    padding: 16px;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    transition: all 0.3s ease;
+}
+
+.exclusion-content.collapsed {
+    display: none;
+}
+
+.exclusion-content.expanded {
+    display: flex;
+}
+
+.exclusion-config {
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.exclusion-config .config-group label {
+    color: #721c24;
+}
+
+.exclusion-config input[type="number"] {
+    border-color: #f5c6cb;
+}
+
+.exclusion-config input[type="number"]:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1);
+}
+
+.exclusion-values-header {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.btn-industry-selector.btn-exclude {
+    background: #fff5f5;
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.btn-industry-selector.btn-exclude:hover {
+    background: #dc3545;
+    color: white;
+}
+
+.excluded-values-list {
+    min-height: 40px;
+}
+
+.value-chip.excluded {
+    background: #fff5f5;
+    border-color: #f5c6cb;
+    color: #721c24;
+}
+
+.value-chip.excluded button:hover {
+    color: #dc3545;
+}
+
+/* Industry Modal - Mode Styling */
+.industry-modal.mode-exclude .modal-header {
+    background: #fff5f5;
+    border-bottom-color: #f5c6cb;
+}
+
+.industry-modal.mode-exclude .modal-header h3 {
+    color: #721c24;
+}
+
+.industry-modal.mode-exclude #industry-save-btn {
+    background: #dc3545;
+    border-color: #dc3545;
+}
+
+.industry-modal.mode-exclude #industry-save-btn:hover {
+    background: #c82333;
+}
+
+/* Disabled items in industry modal (already in other list) */
+.subcategory-checkbox.in-other-list {
+    opacity: 0.5;
+    cursor: not-allowed;
+    position: relative;
+}
+
+.subcategory-checkbox.in-other-list::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    cursor: not-allowed;
+}
+
+.subcategory-checkbox.in-other-list span {
+    text-decoration: line-through;
+}
+
+.subcategory-checkbox.in-other-list input {
+    cursor: not-allowed;
+}
+
+/* Selected Industries section in modal */
+.industry-modal .modal-body {
+    display: flex;
+    flex-direction: column;
+}
+
+.selected-industries-preview {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+}
+
+.selected-industries-preview h5 {
+    margin: 0 0 8px 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+}
+
+.selected-industries-preview .values-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.selected-industries-preview .value-chip {
+    font-size: 12px;
+    padding: 4px 10px;
+}
+
+/* ===========================================
    Responsive Design
    =========================================== */
 

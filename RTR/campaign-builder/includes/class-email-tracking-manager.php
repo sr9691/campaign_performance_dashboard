@@ -223,7 +223,7 @@ class CPD_Email_Tracking_Manager {
      * @param string $tracking_token Tracking token from pixel
      * @return bool True on success, false on failure
      */
-    public function mark_as_opened( $tracking_token ) {
+    public function mark_as_opened( $tracking_token, $recipient_ip = null ) {
         // Find the tracking record
         $tracking = $this->wpdb->get_row(
             $this->wpdb->prepare(
@@ -242,6 +242,11 @@ class CPD_Email_Tracking_Manager {
 
         // Update opened_at every time (tracks most recent open)
         $update_data = array( 'opened_at' => current_time( 'mysql' ) );
+        
+        // Store recipient IP if provided
+        if ( ! empty( $recipient_ip ) ) {
+            $update_data['recipient_ip'] = $recipient_ip;
+        }
         
         // Only change status if not already opened
         if ( $tracking->status !== 'opened' ) {
@@ -266,9 +271,10 @@ class CPD_Email_Tracking_Manager {
         }
 
         error_log( sprintf(
-            '[DirectReach] Updated tracking record %d (opened: %s)',
+            '[DirectReach] Updated tracking record %d (opened: %s, recipient_ip: %s)',
             $tracking->id,
-            $tracking->status === 'opened' ? 'already' : 'now'
+            $tracking->status === 'opened' ? 'already' : 'now',
+            $recipient_ip ?? 'not provided'
         ) );
 
         return true;

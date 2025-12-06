@@ -567,7 +567,7 @@ export default class ProspectManager {
             emailBtn.dataset.room = room;
             emailBtn.dataset.emailNumber = i;
             emailBtn.dataset.emailState = state;
-            emailBtn.title = `Email ${i}`;
+            emailBtn.title = this.getEmailButtonTooltip(state, i, emailData.timestamp);
 
             const isNextInSequence = this.isNextInSequence(emailStates, i);
             if (isNextInSequence && (state === 'ready' || state === 'pending')) {
@@ -585,11 +585,11 @@ export default class ProspectManager {
 
             switch (state) {
                 case 'sent':
-                    icon.classList.add('fa-check');
+                    icon.classList.add('fa-paper-plane');
                     emailBtn.classList.add('rtr-email-sent');
                     break;
                 case 'opened':
-                    icon.classList.add('fa-envelope-open');
+                    icon.classList.add('fa-envelope-open-text');
                     emailBtn.classList.add('rtr-email-opened');
                     break;
                 case 'generating':
@@ -598,8 +598,12 @@ export default class ProspectManager {
                     emailBtn.disabled = true;
                     break;
                 case 'ready':
-                    icon.classList.add('fa-envelope');
+                    icon.classList.add('fa-envelope-open');
                     emailBtn.classList.add('rtr-email-ready');
+                    break;
+                case 'failed':
+                    icon.classList.add('fa-exclamation-circle');
+                    emailBtn.classList.add('rtr-email-failed');
                     break;
                 default:
                     icon.classList.add('fa-envelope');
