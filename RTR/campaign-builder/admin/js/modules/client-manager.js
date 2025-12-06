@@ -235,9 +235,9 @@ export default class ClientManager extends EventEmitter {
                 <div class="client-card-body">
                     <div class="client-meta">
                         <button type="button" 
-                            class="badge badge-action run-nightly-job-btn" 
-                            title="Run Nightly Job for this Client" 
-                            aria-label="Run nightly job for this client">
+                                class="badge run-nightly-job-btn" 
+                                title="Run Nightly Job for this Client" 
+                                aria-label="Run nightly job for this client">
                             <i class="fas fa-sync-alt"></i>
                         </button>
                         <button type="button" 
