@@ -103,6 +103,19 @@ class CPD_AI_Email_Generator {
         // Load content links
         $content_links = $this->load_content_links( $campaign_id, $room_type );
 
+        // Filter out previously sent URLs
+        $sent_urls = array();
+        if ( ! empty( $prospect['urls_sent'] ) ) {
+            $sent_urls = json_decode( $prospect['urls_sent'], true ) ?: array();
+        }
+        
+        if ( ! empty( $sent_urls ) ) {
+            $content_links = array_filter( $content_links, function( $link ) use ( $sent_urls ) {
+                return ! in_array( $link['link_url'], $sent_urls, true );
+            });
+            $content_links = array_values( $content_links ); // Re-index array
+        }
+
         // Build generation payload
         $payload = $selected_template->build_generation_payload(
             $prospect,
