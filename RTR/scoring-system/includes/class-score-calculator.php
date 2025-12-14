@@ -1100,7 +1100,7 @@ class RTR_Score_Calculator {
         
         foreach ($target_values as $target) {
             $target = strtolower(trim($target));
-            if (stripos($industry, $target) !== false || stripos($target, $industry) !== false) {
+            if ($industry === $target) {
                 return true;
             }
         }
