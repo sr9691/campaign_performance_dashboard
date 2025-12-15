@@ -1100,8 +1100,21 @@ class RTR_Score_Calculator {
         
         foreach ($target_values as $target) {
             $target = strtolower(trim($target));
+            
+            // Exact match
             if ($industry === $target) {
                 return true;
+            }
+            
+            // Check if target contains pipe (Category|Subcategory format)
+            if (strpos($target, '|') !== false) {
+                $parts = explode('|', $target);
+                $subcategory = strtolower(trim(end($parts)));
+                
+                // Only match subcategory
+                if ($industry === $subcategory) {
+                    return true;
+                }
             }
         }
         
