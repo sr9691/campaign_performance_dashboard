@@ -23,6 +23,7 @@ if (!defined('ABSPATH')) {
 function rtr_get_industry_taxonomy() {
     return [
         'Agriculture' => [
+            'Agriculture',
             'Dairy',
             'Farming',
             'Fishery',
@@ -30,10 +31,12 @@ function rtr_get_industry_taxonomy() {
         ],
         'Automotive' => [],
         'Construction' => [
+            'Construction',
             'Architecture & Planning',
             'Civil Engineering'
         ],
         'Creative Arts and Entertainment' => [
+            'Creative Arts and Entertainment',
             'Animation',
             'Computer Games',
             'Design',
@@ -47,16 +50,19 @@ function rtr_get_industry_taxonomy() {
             'Photography'
         ],
         'Education' => [
+            'Education',
             'Education Management',
             'E-Learning',
             'Higher Education',
             'Primary/Secondary Education'
         ],
         'Energy' => [
+            'Energy',
             'Oil & Energy',
             'Renewables & Environment'
         ],
         'Finance and Banking' => [
+            'Finance and Banking',
             'Accounting',
             'Banking',
             'Capital Markets',
@@ -73,6 +79,7 @@ function rtr_get_industry_taxonomy() {
             'Wine & Spirits'
         ],
         'Government and Public Administration' => [
+            'Government and Public Administration',
             'Defense & Space',
             'Government Administration',
             'Government Relations',
@@ -86,6 +93,7 @@ function rtr_get_industry_taxonomy() {
             'Public Safety'
         ],
         'Health and Pharmaceuticals' => [
+            'Health and Pharmaceuticals',
             'Alternative Medicine',
             'Biotechnology',
             'Health, Wellness & Fitness',
@@ -98,6 +106,7 @@ function rtr_get_industry_taxonomy() {
             'Veterinary'
         ],
         'Information Technology' => [
+            'Information Technology',
             'Computer & Network Security',
             'Computer Hardware',
             'Computer Networking',
@@ -138,6 +147,7 @@ function rtr_get_industry_taxonomy() {
             'Public Relations and Communications'
         ],
         'Media and Publishing' => [
+            'Media and Publishing',
             'Broadcast Media',
             'Media Production',
             'Newspapers',
@@ -145,6 +155,7 @@ function rtr_get_industry_taxonomy() {
             'Writing & Editing'
         ],
         'Non-Profit and Social Services' => [
+            'Non-Profit and Social Services',
             'Civic & Social Organization',
             'Fund-Raising',
             'Fundraising',
@@ -159,6 +170,7 @@ function rtr_get_industry_taxonomy() {
             'Religious Institutions'
         ],
         'Professional and Business Services' => [
+            'Professional and Business Services',
             'Alternative Dispute Resolution',
             'Consumer Services',
             'Environmental Services',
@@ -203,6 +215,7 @@ function rtr_get_industry_taxonomy() {
             'Tourism and Hospitality'
         ],
         'Transportation and Logistics' => [
+            'Transportation and Logistics',
             'Aviation & Aerospace',
             'Import & Export',
             'Logistics & Supply Chain',
